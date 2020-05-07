@@ -7,7 +7,12 @@ use crate::common::PixelSize;
 use crate::style::Color;
 
 mod mat4;
+mod shader;
+mod vert_array;
+
 pub(crate) use mat4::Mat4;
+pub(crate) use shader::{ActiveShaderProgram, ShaderProgram};
+pub(crate) use vert_array::{ElemArr, Element};
 
 // Initialize OpenGL
 pub(crate) fn gl_init(window: &mut Window) {

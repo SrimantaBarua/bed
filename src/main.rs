@@ -3,14 +3,17 @@
 
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::size2;
+use euclid::{point2, size2, Rect};
 use glfw::WindowEvent;
 
 mod common;
 mod opengl;
 mod painter;
+mod quad;
 mod style;
 mod window;
+
+use style::Color;
 
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
@@ -27,6 +30,15 @@ fn main() {
             }
         }
         painter.clear();
+        painter.rect(
+            Rect::new(point2(10, 10), size2(200, 200)),
+            Color::parse("#2288aa").unwrap(),
+        );
+        painter.rect(
+            Rect::new(point2(100, 100), size2(200, 200)),
+            Color::parse("#ff332288").unwrap(),
+        );
+        painter.flush();
         window.swap_buffers();
         glfw.poll_events();
     }

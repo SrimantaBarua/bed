@@ -23,7 +23,7 @@ impl Mat4 {
     }
 
     /// Get pointer
-    fn as_ptr(&self) -> *const f32 {
+    pub(crate) fn as_ptr(&self) -> *const f32 {
         self.0.as_ptr()
     }
 }
