@@ -76,7 +76,7 @@ impl TextStyle {
 }
 
 // Text size in points
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub(crate) struct TextSize(u16);
 
 impl TextSize {

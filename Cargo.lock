@@ -44,11 +44,12 @@ dependencies = [
  "clap",
  "com-wrapper",
  "directwrite",
- "euclid",
+ "euclid 0.20.11",
  "fnv",
  "freetype",
  "gl",
  "glfw",
+ "guillotiere",
  "harfbuzz-sys",
  "servo-fontconfig",
  "winapi",
@@ -224,11 +225,32 @@ dependencies = [
 
 [[package]]
 name = "euclid"
+version = "0.19.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "596b99621b9477e7a5f94d2d8dd13a9c5c302ac358b822c67a42b6f1054450e1"
+dependencies = [
+ "euclid_macros",
+ "num-traits",
+]
+
+[[package]]
+name = "euclid"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "667703ececa1ac04d1d40ae0c0fd6401b91d8caccfda3a65458ca8ee5dfedf1c"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "euclid_macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdcb84c18ea5037a1c5a23039b4ff29403abce2e0d6b1daa11cf0bde2b30be15"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -315,6 +337,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b567b13b593ec58ea912b2658ee6230ffe20a069fa5b771800acc69bb3a157e"
 dependencies = [
  "cmake",
+]
+
+[[package]]
+name = "guillotiere"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "487a6681128d476cdee36c51c44138268ce43c854bc15390fe31a984e02aefa4"
+dependencies = [
+ "euclid 0.19.9",
+ "svg_fmt",
 ]
 
 [[package]]
@@ -491,6 +523,12 @@ name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
+
+[[package]]
+name = "svg_fmt"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20e5f95e89d737f30cd1f98a9af9a85c2a1cc162cfedfba5a0c54cf92d7206fc"
 
 [[package]]
 name = "syn"

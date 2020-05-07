@@ -19,8 +19,8 @@ use style::Color;
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
     let size = size2(800, 600);
-    let (mut window, _, events) = window::Window::new(&mut glfw, size, "bed");
-    let mut painter = painter::Painter::new(size, window.viewable_rect());
+    let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
+    let mut painter = painter::Painter::new(size, window.viewable_rect(), dpi);
     while !window.should_close() {
         for (_, event) in glfw::flush_messages(&events) {
             match event {

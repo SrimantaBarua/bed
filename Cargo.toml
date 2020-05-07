@@ -4,21 +4,23 @@ version = "0.0.1"
 authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
 edition = "2018"
 
+
 [dependencies]
-glfw  = "0.37"
 clap = "2.33"
-gl = "0.14"
 euclid = "0.20.7"
-harfbuzz-sys = "0.3.4"
-freetype = "0.4.1"
 fnv = "1.0.6"
+freetype = "0.4.1"
+gl = "0.14"
+glfw  = "0.37"
+guillotiere = "0.4.3"
+harfbuzz-sys = "0.3.4"
 
 [target.'cfg(unix)'.dependencies]
 servo-fontconfig = "0.4"
 
 [target.'cfg(windows)'.dependencies]
-directwrite = "0.3.0-alpha4"
 com-wrapper = "0.1.0"
+directwrite = "0.3.0-alpha4"
 winapi = "0.3.8"
 
 

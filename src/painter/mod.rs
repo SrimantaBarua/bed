@@ -4,14 +4,19 @@ use std::ffi::CStr;
 
 use euclid::{Rect, Size2D};
 
-use crate::common::PixelSize;
+use crate::common::{PixelSize, DPI};
 use crate::opengl::{gl_clear, gl_clear_color, gl_viewport, ElemArr, Mat4, ShaderProgram};
 use crate::quad::{ColorQuad, TexColorQuad};
 use crate::style::Color;
 
+mod glyphrender;
+
+use glyphrender::GlyphRenderer;
+
 // Struct which handles drawing UI elements
 pub(crate) struct Painter {
     projection: Mat4,
+    glyph_render: GlyphRenderer,
     // Vertex buffers
     cq_arr: ElemArr<ColorQuad>,
     tcq_arr: ElemArr<TexColorQuad>,
@@ -21,21 +26,27 @@ pub(crate) struct Painter {
 }
 
 impl Painter {
-    pub(crate) fn new(winsz: Size2D<u32, PixelSize>, view_rect: Rect<u32, PixelSize>) -> Painter {
+    pub(crate) fn new(
+        winsz: Size2D<u32, PixelSize>,
+        view_rect: Rect<u32, PixelSize>,
+        dpi: Size2D<u32, DPI>,
+    ) -> Painter {
         gl_viewport(view_rect.cast());
         let projection = Mat4::projection(winsz);
         let cq_arr = ElemArr::new(8);
         let tcq_arr = ElemArr::new(128);
+        let glyph_render = GlyphRenderer::new(dpi);
         // Compile shader(s)
-        let cqvsrc = include_str!("../shader_src/colored_quad.vert");
-        let cqfsrc = include_str!("../shader_src/colored_quad.frag");
+        let cqvsrc = include_str!("shader_src/colored_quad.vert");
+        let cqfsrc = include_str!("shader_src/colored_quad.frag");
         let cq_shader = ShaderProgram::new(cqvsrc, cqfsrc).unwrap();
-        let tcqvsrc = include_str!("../shader_src/tex_color_quad.vert");
-        let tcqfsrc = include_str!("../shader_src/tex_color_quad.frag");
+        let tcqvsrc = include_str!("shader_src/tex_color_quad.vert");
+        let tcqfsrc = include_str!("shader_src/tex_color_quad.frag");
         let tcq_shader = ShaderProgram::new(cqvsrc, cqfsrc).unwrap();
         // Return painter
         Painter {
             projection,
+            glyph_render,
             cq_arr,
             tcq_arr,
             cq_shader,

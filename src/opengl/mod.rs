@@ -8,10 +8,12 @@ use crate::style::Color;
 
 mod mat4;
 mod shader;
+mod texture;
 mod vert_array;
 
 pub(crate) use mat4::Mat4;
 pub(crate) use shader::{ActiveShaderProgram, ShaderProgram};
+pub(crate) use texture::{GlTexture, TexFormat, TexRGB, TexRed, TexUnit};
 pub(crate) use vert_array::{ElemArr, Element};
 
 // Initialize OpenGL
