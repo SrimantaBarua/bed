@@ -1,0 +1,11 @@
+[package]
+name = "bed"
+version = "0.0.1"
+authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+glfw  = "0.37"
+clap = "2.33"
+gl = "0.14"
+euclid = "0.20.7"
