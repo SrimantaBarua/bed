@@ -6,6 +6,9 @@ use glfw::Window;
 use crate::common::PixelSize;
 use crate::style::Color;
 
+mod mat4;
+pub(crate) use mat4::Mat4;
+
 // Initialize OpenGL
 pub(crate) fn gl_init(window: &mut Window) {
     gl::load_with(|s| window.get_proc_address(s));

@@ -4,24 +4,29 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use euclid::size2;
+use glfw::WindowEvent;
 
 mod common;
 mod opengl;
+mod painter;
 mod style;
 mod window;
 
-use opengl::{gl_clear, gl_clear_color, gl_viewport};
-
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
-    let (mut window, _, events) = window::Window::new(&mut glfw, size2(800, 600), "bed");
-    gl_viewport(window.viewable_rect().cast());
-    gl_clear_color(style::Color::parse("#ffffff").unwrap());
+    let size = size2(800, 600);
+    let (mut window, _, events) = window::Window::new(&mut glfw, size, "bed");
+    let mut painter = painter::Painter::new(size, window.viewable_rect());
     while !window.should_close() {
-        for _event in glfw::flush_messages(&events) {
-            // TODO
+        for (_, event) in glfw::flush_messages(&events) {
+            match event {
+                WindowEvent::FramebufferSize(w, h) => {
+                    painter.resize(size2(w, h).cast(), window.viewable_rect())
+                }
+                _ => {}
+            }
         }
-        gl_clear();
+        painter.clear();
         window.swap_buffers();
         glfw.poll_events();
     }
