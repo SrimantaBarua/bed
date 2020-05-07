@@ -6,30 +6,40 @@ use euclid::{Rect, Size2D};
 
 use crate::common::PixelSize;
 use crate::opengl::{gl_clear, gl_clear_color, gl_viewport, ElemArr, Mat4, ShaderProgram};
-use crate::quad::ColorQuad;
+use crate::quad::{ColorQuad, TexColorQuad};
 use crate::style::Color;
 
 // Struct which handles drawing UI elements
 pub(crate) struct Painter {
     projection: Mat4,
-    color_quad_arr: ElemArr<ColorQuad>,
-    color_quad_shader: ShaderProgram,
+    // Vertex buffers
+    cq_arr: ElemArr<ColorQuad>,
+    tcq_arr: ElemArr<TexColorQuad>,
+    // Shaders
+    cq_shader: ShaderProgram,
+    tcq_shader: ShaderProgram,
 }
 
 impl Painter {
     pub(crate) fn new(winsz: Size2D<u32, PixelSize>, view_rect: Rect<u32, PixelSize>) -> Painter {
         gl_viewport(view_rect.cast());
         let projection = Mat4::projection(winsz);
-        let color_quad_arr = ElemArr::new(8);
+        let cq_arr = ElemArr::new(8);
+        let tcq_arr = ElemArr::new(128);
         // Compile shader(s)
         let cqvsrc = include_str!("../shader_src/colored_quad.vert");
         let cqfsrc = include_str!("../shader_src/colored_quad.frag");
-        let color_quad_shader = ShaderProgram::new(cqvsrc, cqfsrc).unwrap();
+        let cq_shader = ShaderProgram::new(cqvsrc, cqfsrc).unwrap();
+        let tcqvsrc = include_str!("../shader_src/tex_color_quad.vert");
+        let tcqfsrc = include_str!("../shader_src/tex_color_quad.frag");
+        let tcq_shader = ShaderProgram::new(cqvsrc, cqfsrc).unwrap();
         // Return painter
         Painter {
             projection,
-            color_quad_arr,
-            color_quad_shader,
+            cq_arr,
+            tcq_arr,
+            cq_shader,
+            tcq_shader,
         }
     }
 
@@ -38,7 +48,7 @@ impl Painter {
         let projection = CStr::from_bytes_with_nul(b"projection\0").unwrap();
         self.projection = Mat4::projection(winsz);
         {
-            let mut ash = self.color_quad_shader.use_program();
+            let mut ash = self.cq_shader.use_program();
             ash.uniform_mat4f(projection, &self.projection);
         }
     }
@@ -49,13 +59,13 @@ impl Painter {
     }
 
     pub(crate) fn rect(&mut self, rect: Rect<u32, PixelSize>, color: Color) {
-        self.color_quad_arr.push(ColorQuad::new(rect.cast(), color));
+        self.cq_arr.push(ColorQuad::new(rect.cast(), color));
     }
 
     pub(crate) fn flush(&mut self) {
         {
-            let ash = self.color_quad_shader.use_program();
-            self.color_quad_arr.flush(&ash);
+            let ash = self.cq_shader.use_program();
+            self.cq_arr.flush(&ash);
         }
     }
 }
