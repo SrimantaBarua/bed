@@ -1,14 +1,14 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::sync::mpsc::Receiver;
-use std::time::Duration;
 
-use euclid::{size2, Size2D};
+use euclid::{point2, size2, Rect, Size2D};
 use glfw::{
     Context, Glfw, OpenGlProfileHint, Window as GlfwWindow, WindowEvent, WindowHint, WindowMode,
 };
 
 use crate::common::{PixelSize, DPI};
+use crate::opengl::gl_init;
 
 // Wrapper around GLFW window
 pub(crate) struct Window {
@@ -49,6 +49,8 @@ impl Window {
         window.set_refresh_polling(true);
         window.set_framebuffer_size_polling(true);
         window.set_mouse_button_polling(true);
+        // Initialize OpenGL
+        gl_init(&mut window);
         // Return wrapper
         (Window { window }, dpi, events)
     }
@@ -58,8 +60,24 @@ impl Window {
         self.window.should_close()
     }
 
-    // Refresh window contents
-    pub(crate) fn refresh(&mut self, _duration: Duration) {
+    // Get actual viewable rectable. Cleaning up Windows' mess
+    #[cfg(target_os = "windows")]
+    pub(crate) fn viewable_rect(&mut self) -> Rect<u32, PixelSize> {
+        let (w, h) = self.window.get_framebuffer_size();
+        let rect = Rect::new(point2(0, 0), size2(w, h));
+        let (l, t, r, b) = self.window.get_frame_size();
+        let off = SideOffsets2D::new(t, r, b, l);
+        rect.inner_rect(off).cast()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub(crate) fn viewable_rect(&mut self) -> Rect<u32, PixelSize> {
+        let (w, h) = self.window.get_framebuffer_size();
+        Rect::new(point2(0, 0), size2(w, h)).cast()
+    }
+
+    // Swap window buffers
+    pub(crate) fn swap_buffers(&mut self) {
         self.window.swap_buffers();
     }
 }
