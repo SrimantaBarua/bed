@@ -7,6 +7,7 @@ use euclid::{point2, size2, Rect};
 use glfw::WindowEvent;
 
 mod common;
+mod font;
 mod opengl;
 mod painter;
 mod quad;
