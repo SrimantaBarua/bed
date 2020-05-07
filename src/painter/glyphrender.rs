@@ -92,32 +92,7 @@ impl GlyphRenderer {
         }
     }
 
-    // Activate renderer
-    pub(super) fn activate<'a, 'b>(
-        &'a mut self,
-        vert_buf: &'b mut ElemArr<TexColorQuad>,
-    ) -> ActiveGlyphRenderer<'a, 'b> {
-        ActiveGlyphRenderer {
-            atlas: &mut self.atlas,
-            glyph_map: &mut self.glyph_map,
-            dpi: self.dpi,
-            allocator: &mut self.allocator,
-            vert_buf: vert_buf,
-        }
-    }
-}
-
-/// Handle to a glyph renderer with an activated texture
-pub(super) struct ActiveGlyphRenderer<'a, 'b> {
-    atlas: &'a mut GlTexture<TexRed>,
-    glyph_map: &'a mut FnvHashMap<GlyphKey, Option<RenderedGlyph>>,
-    dpi: Size2D<u32, DPI>,
-    allocator: &'a mut AtlasAllocator,
-    vert_buf: &'b mut ElemArr<TexColorQuad>,
-}
-
-impl<'a, 'b> ActiveGlyphRenderer<'a, 'b> {
-    /// Render a glyph at given coordinate
+    // Render a glyph at given coordinate
     pub(super) fn render_glyph(
         &mut self,
         pos: Point2D<i32, PixelSize>, // Baseline
@@ -127,6 +102,7 @@ impl<'a, 'b> ActiveGlyphRenderer<'a, 'b> {
         color: Color,
         style: TextStyle,
         raster: &mut RasterFace,
+        vert_buf: &mut ElemArr<TexColorQuad>,
     ) -> Option<()> {
         let key = GlyphKey {
             gid: gid,
@@ -140,7 +116,7 @@ impl<'a, 'b> ActiveGlyphRenderer<'a, 'b> {
             if let Some(rast_glyph) = raster.raster(gid, size, self.dpi) {
                 // TODO: Free LRU if allocation fails, and flush text
                 // In that case, use bg shader to flush bg quads before flushing text
-                // It's better to do that inside TextView. So, indicate the need to flush, using
+                // It's better to do that inside Painter. So, indicate the need to flush, using
                 // the return value from this function
                 let alloc = self
                     .allocator
@@ -161,13 +137,8 @@ impl<'a, 'b> ActiveGlyphRenderer<'a, 'b> {
         };
         if let Some(rg) = optrg {
             let tcq = rg.to_tex_color_quad(pos, &self.atlas, color);
-            self.vert_buf.push(tcq);
+            vert_buf.push(tcq);
         }
         Some(())
-    }
-
-    // Flush contents of textured quad buffer
-    pub(super) fn flush(&mut self, active_shader: &ActiveShaderProgram) {
-        self.vert_buf.flush(active_shader)
     }
 }

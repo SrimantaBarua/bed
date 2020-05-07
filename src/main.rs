@@ -21,6 +21,12 @@ fn main() {
     let size = size2(800, 600);
     let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
     let mut painter = painter::Painter::new(size, window.viewable_rect(), dpi);
+
+    let mut font_core = font::FontCore::new().unwrap();
+    let key = font_core.find("monospace").unwrap();
+    let (buf, font) = font_core.get(key, style::TextStyle::default()).unwrap();
+    font.shaper.set_scale(style::TextSize::from_f32(10.0), dpi);
+
     while !window.should_close() {
         for (_, event) in glfw::flush_messages(&events) {
             match event {
@@ -31,6 +37,25 @@ fn main() {
             }
         }
         painter.clear();
+
+        buf.clear_contents();
+        buf.add_utf8("Hello, world!");
+        buf.guess_segment_properties();
+
+        let mut pos = point2(20, 30);
+        for gi in font::harfbuzz::shape(&font.shaper, buf) {
+            painter.glyph(
+                pos,
+                key,
+                gi.gid,
+                style::TextSize::from_f32(10.0),
+                Color::new(0xff, 0xff, 0xff, 0xff),
+                style::TextStyle::default(),
+                &mut font.raster,
+            );
+            pos.x += gi.advance.width;
+        }
+
         painter.rect(
             Rect::new(point2(10, 10), size2(200, 200)),
             Color::parse("#2288aa").unwrap(),

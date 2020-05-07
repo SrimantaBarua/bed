@@ -2,12 +2,13 @@
 
 use std::ffi::CStr;
 
-use euclid::{Rect, Size2D};
+use euclid::{Point2D, Rect, Size2D};
 
 use crate::common::{PixelSize, DPI};
+use crate::font::{FaceKey, RasterFace};
 use crate::opengl::{gl_clear, gl_clear_color, gl_viewport, ElemArr, Mat4, ShaderProgram};
 use crate::quad::{ColorQuad, TexColorQuad};
-use crate::style::Color;
+use crate::style::{Color, TextSize, TextStyle};
 
 mod glyphrender;
 
@@ -42,7 +43,7 @@ impl Painter {
         let cq_shader = ShaderProgram::new(cqvsrc, cqfsrc).unwrap();
         let tcqvsrc = include_str!("shader_src/tex_color_quad.vert");
         let tcqfsrc = include_str!("shader_src/tex_color_quad.frag");
-        let tcq_shader = ShaderProgram::new(cqvsrc, cqfsrc).unwrap();
+        let tcq_shader = ShaderProgram::new(tcqvsrc, tcqfsrc).unwrap();
         // Return painter
         Painter {
             projection,
@@ -62,6 +63,10 @@ impl Painter {
             let mut ash = self.cq_shader.use_program();
             ash.uniform_mat4f(projection, &self.projection);
         }
+        {
+            let mut ash = self.tcq_shader.use_program();
+            ash.uniform_mat4f(projection, &self.projection);
+        }
     }
 
     pub(crate) fn clear(&mut self) {
@@ -73,10 +78,36 @@ impl Painter {
         self.cq_arr.push(ColorQuad::new(rect.cast(), color));
     }
 
+    pub(crate) fn glyph(
+        &mut self,
+        pos: Point2D<i32, PixelSize>,
+        face: FaceKey,
+        gid: u32,
+        size: TextSize,
+        color: Color,
+        style: TextStyle,
+        raster: &mut RasterFace,
+    ) {
+        self.glyph_render.render_glyph(
+            pos,
+            face,
+            gid,
+            size,
+            color,
+            style,
+            raster,
+            &mut self.tcq_arr,
+        );
+    }
+
     pub(crate) fn flush(&mut self) {
         {
             let ash = self.cq_shader.use_program();
             self.cq_arr.flush(&ash);
+        }
+        {
+            let ash = self.tcq_shader.use_program();
+            self.tcq_arr.flush(&ash);
         }
     }
 }
