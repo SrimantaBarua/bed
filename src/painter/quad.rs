@@ -77,3 +77,40 @@ impl TexColorQuad {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use euclid::{point2, size2};
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_colored_quad() {
+        let quad = ColorQuad::new(
+            Rect::new(point2(10.0, 10.0), size2(30.0, 30.0)),
+            Color::new(0xff, 0xff, 0xff, 0xff),
+        );
+        assert_eq!(quad.data(), [
+            10.0, 10.0, 1.0, 1.0, 1.0, 1.0,
+            10.0, 40.0, 1.0, 1.0, 1.0, 1.0,
+            40.0, 10.0, 1.0, 1.0, 1.0, 1.0,
+            40.0, 40.0, 1.0, 1.0, 1.0, 1.0,
+        ]);
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_tex_color_quad() {
+        let quad = TexColorQuad::new(
+            Rect::new(point2(10.0, 10.0), size2(30.0, 30.0)),
+            Rect::new(point2(0.25, 0.25), size2(0.5, 0.5)),
+            Color::new(0xff, 0xff, 0xff, 0xff),
+        );
+        assert_eq!(quad.data(), [
+            10.0, 10.0, 0.25, 0.25, 1.0, 1.0, 1.0, 1.0,
+            10.0, 40.0, 0.25, 0.75, 1.0, 1.0, 1.0, 1.0,
+            40.0, 10.0, 0.75, 0.25, 1.0, 1.0, 1.0, 1.0,
+            40.0, 40.0, 0.75, 0.75, 1.0, 1.0, 1.0, 1.0,
+        ]);
+    }
+}
