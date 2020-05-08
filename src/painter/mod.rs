@@ -7,12 +7,13 @@ use euclid::{Point2D, Rect, Size2D};
 use crate::common::{PixelSize, DPI};
 use crate::font::{FaceKey, RasterFace};
 use crate::opengl::{gl_clear, gl_clear_color, gl_viewport, ElemArr, Mat4, ShaderProgram};
-use crate::quad::{ColorQuad, TexColorQuad};
 use crate::style::{Color, TextSize, TextStyle};
 
 mod glyphrender;
+mod quad;
 
 use glyphrender::GlyphRenderer;
+use quad::{ColorQuad, TexColorQuad};
 
 // Struct which handles drawing UI elements
 pub(crate) struct Painter {

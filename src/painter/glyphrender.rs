@@ -6,9 +6,10 @@ use guillotiere::{AllocId, AllocatorOptions, AtlasAllocator};
 
 use crate::common::{PixelSize, DPI};
 use crate::font::{FaceKey, RasterFace};
-use crate::opengl::{ActiveShaderProgram, ElemArr, GlTexture, TexRed, TexUnit};
-use crate::quad::TexColorQuad;
+use crate::opengl::{ElemArr, GlTexture, TexRed, TexUnit};
 use crate::style::{Color, TextSize, TextStyle};
+
+use super::quad::TexColorQuad;
 
 const GL_TEX_SIZE: u32 = 4096;
 

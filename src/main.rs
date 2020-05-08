@@ -3,14 +3,13 @@
 
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::{point2, size2, Rect};
+use euclid::size2;
 use glfw::WindowEvent;
 
 mod common;
 mod font;
 mod opengl;
 mod painter;
-mod quad;
 mod style;
 mod textview;
 mod window;
