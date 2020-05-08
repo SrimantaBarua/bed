@@ -199,3 +199,63 @@ impl Node {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use euclid::point2;
+
+    #[test]
+    fn single_view() {
+        let mut t = TextViewTree::new(Rect::new(point2(0, 0), size2(5, 5)));
+        assert!(t.root.is_leaf());
+        assert_eq!(t.root.rect, Rect::new(point2(0, 0), size2(5, 5)));
+        // resize
+        t.set_rect(Rect::new(point2(2, 2), size2(3, 3)));
+        assert_eq!(t.root.rect, Rect::new(point2(2, 2), size2(3, 3)));
+    }
+
+    #[test]
+    fn vsplit() {
+        let mut t = TextViewTree::new(Rect::new(point2(0, 0), size2(6, 6)));
+        t.split_v();
+        assert!(!t.root.is_leaf());
+        assert_eq!(t.root.active, 0);
+        assert_eq!(t.root.rect, Rect::new(point2(0, 0), size2(6, 6)));
+        assert!(t.root.children[0].is_leaf());
+        assert!(t.root.children[1].is_leaf());
+        assert_eq!(t.root.children[0].rect, Rect::new(point2(0, 0), size2(3, 6)));
+        assert_eq!(t.root.children[1].rect, Rect::new(point2(4, 0), size2(2, 6)));
+        // resize
+        t.set_rect(Rect::new(point2(2, 2), size2(5, 5)));
+        assert!(!t.root.is_leaf());
+        assert_eq!(t.root.active, 0);
+        assert_eq!(t.root.rect, Rect::new(point2(2, 2), size2(5, 5)));
+        assert!(t.root.children[0].is_leaf());
+        assert!(t.root.children[1].is_leaf());
+        assert_eq!(t.root.children[0].rect, Rect::new(point2(2, 2), size2(2, 5)));
+        assert_eq!(t.root.children[1].rect, Rect::new(point2(5, 2), size2(2, 5)));
+    }
+
+    #[test]
+    fn hsplit() {
+        let mut t = TextViewTree::new(Rect::new(point2(0, 0), size2(6, 6)));
+        t.split_h();
+        assert!(!t.root.is_leaf());
+        assert_eq!(t.root.active, 0);
+        assert_eq!(t.root.rect, Rect::new(point2(0, 0), size2(6, 6)));
+        assert!(t.root.children[0].is_leaf());
+        assert!(t.root.children[1].is_leaf());
+        assert_eq!(t.root.children[0].rect, Rect::new(point2(0, 0), size2(6, 3)));
+        assert_eq!(t.root.children[1].rect, Rect::new(point2(0, 4), size2(6, 2)));
+        // resize
+        t.set_rect(Rect::new(point2(2, 2), size2(5, 5)));
+        assert!(!t.root.is_leaf());
+        assert_eq!(t.root.active, 0);
+        assert_eq!(t.root.rect, Rect::new(point2(2, 2), size2(5, 5)));
+        assert!(t.root.children[0].is_leaf());
+        assert!(t.root.children[1].is_leaf());
+        assert_eq!(t.root.children[0].rect, Rect::new(point2(2, 2), size2(5, 2)));
+        assert_eq!(t.root.children[1].rect, Rect::new(point2(2, 5), size2(5, 2)));
+    }
+}
