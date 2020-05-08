@@ -14,6 +14,7 @@ gl = "0.14"
 glfw  = "0.37"
 guillotiere = "0.4.3"
 harfbuzz-sys = "0.3.4"
+ropey = "1.1"
 
 [target.'cfg(unix)'.dependencies]
 servo-fontconfig = "0.4"

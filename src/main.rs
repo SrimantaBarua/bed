@@ -6,6 +6,7 @@
 use euclid::size2;
 use glfw::WindowEvent;
 
+mod buffer;
 mod common;
 mod font;
 mod opengl;

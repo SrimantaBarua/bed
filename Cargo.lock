@@ -51,6 +51,7 @@ dependencies = [
  "glfw",
  "guillotiere",
  "harfbuzz-sys",
+ "ropey",
  "servo-fontconfig",
  "winapi",
 ]
@@ -412,6 +413,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybe-uninit"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
+
+[[package]]
 name = "memmap"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -473,6 +480,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ropey"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba326a8508a4add47e7b260333aa2d896213a5f3572fde11ed6e9130241b7f71"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "semver"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -516,6 +532,15 @@ checksum = "2c4ccb6d0d32d277d3ef7dea86203d8210945eb7a45fba89dd445b3595dd0dfc"
 dependencies = [
  "cmake",
  "pkg-config",
+]
+
+[[package]]
+name = "smallvec"
+version = "0.6.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7b0758c52e15a8b5e3691eae6cc559f08eee9406e548a4477ba4e67770a82b6"
+dependencies = [
+ "maybe-uninit",
 ]
 
 [[package]]
