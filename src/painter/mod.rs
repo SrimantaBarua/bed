@@ -70,7 +70,7 @@ impl Painter {
     }
 
     pub(crate) fn clear(&mut self) {
-        gl_clear_color(Color::new(0xff, 0xff, 0xff, 0xff));
+        gl_clear_color(Color::new(0, 0, 0, 0xff));
         gl_clear();
     }
 

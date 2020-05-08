@@ -8,9 +8,9 @@ use directwrite::enums::{FontStretch, FontStyle, FontWeight};
 use directwrite::factory::Factory;
 use directwrite::font::Font;
 use directwrite::font_collection::FontCollection;
+use fnv::FnvHashSet;
 use winapi::um::dwrite::IDWriteLocalFontFileLoader;
 use winapi::Interface;
-use fnv::FnvHashSet;
 
 use crate::style::{TextSlant, TextWeight};
 
