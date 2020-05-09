@@ -13,6 +13,8 @@ use crate::style::Color;
 use super::TextPane;
 
 pub(crate) struct TextTree {
+    bg_color: Color,
+    rect: Rect<u32, PixelSize>,
     border_width: u32,
     root: Node,
 }
@@ -24,27 +26,31 @@ impl TextTree {
         view_id: BufferViewID,
     ) -> TextTree {
         TextTree {
+            bg_color: Color::new(0, 0, 0, 0xff),
+            rect: rect,
             border_width: 1,
-            root: Node::new_leaf(rect, buf, view_id),
+            root: Node::new_leaf(buf, view_id),
         }
     }
 
     pub(crate) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
+        self.rect = rect;
         self.root.set_rect(rect, self.border_width);
     }
 
     pub(crate) fn draw(&self, painter: &mut Painter) {
+        painter.rect(self.rect, self.bg_color);
         self.root.draw(painter);
     }
 
     pub(crate) fn split_v(&mut self, view_id: BufferViewID) {
         self.root.split_v(view_id);
-        self.root.set_rect(self.root.rect, self.border_width);
+        self.root.set_rect(self.rect, self.border_width);
     }
 
     pub(crate) fn split_h(&mut self, view_id: BufferViewID) {
         self.root.split_h(view_id);
-        self.root.set_rect(self.root.rect, self.border_width);
+        self.root.set_rect(self.rect, self.border_width);
     }
 
     pub(crate) fn active(&self) -> &TextPane {
@@ -64,7 +70,6 @@ enum Split {
 }
 
 struct Node {
-    rect: Rect<u32, PixelSize>,
     split: Split,
     children: Vec<Node>,
     active: usize,
@@ -72,9 +77,8 @@ struct Node {
 }
 
 impl Node {
-    fn new_leaf(rect: Rect<u32, PixelSize>, buf: Rc<RefCell<Buffer>>, id: BufferViewID) -> Node {
+    fn new_leaf(buf: Rc<RefCell<Buffer>>, id: BufferViewID) -> Node {
         Node {
-            rect: rect,
             split: Split::None,
             children: Vec::new(),
             active: 0,
@@ -82,9 +86,8 @@ impl Node {
         }
     }
 
-    fn leaf_with(rect: Rect<u32, PixelSize>, view: TextPane) -> Node {
+    fn leaf_with(view: TextPane) -> Node {
         Node {
-            rect: rect,
             split: Split::None,
             children: Vec::new(),
             active: 0,
@@ -98,7 +101,7 @@ impl Node {
 
     fn draw(&self, painter: &mut Painter) {
         if self.is_leaf() {
-            painter.rect(self.rect, Color::new(0xff, 0xff, 0xff, 0xff));
+            self.opt_view.as_ref().unwrap().draw(painter);
         } else {
             for c in &self.children {
                 c.draw(painter);
@@ -110,9 +113,8 @@ impl Node {
         if self.is_leaf() {
             let view = self.opt_view.take().unwrap();
             self.active = 0;
-            self.children
-                .push(Node::leaf_with(self.rect, view.clone(view_id)));
-            self.children.push(Node::leaf_with(self.rect, view));
+            self.children.push(Node::leaf_with(view.clone(view_id)));
+            self.children.push(Node::leaf_with(view));
             self.split = Split::Horizontal;
         } else if self.split == Split::Horizontal {
             if self.children[self.active].is_leaf() {
@@ -121,8 +123,7 @@ impl Node {
                     .as_ref()
                     .unwrap()
                     .clone(view_id);
-                self.children
-                    .insert(self.active, Node::leaf_with(self.rect, view));
+                self.children.insert(self.active, Node::leaf_with(view));
             } else {
                 self.children[self.active].split_h(view_id);
             }
@@ -135,9 +136,8 @@ impl Node {
         if self.is_leaf() {
             let view = self.opt_view.take().unwrap();
             self.active = 0;
-            self.children
-                .push(Node::leaf_with(self.rect, view.clone(view_id)));
-            self.children.push(Node::leaf_with(self.rect, view));
+            self.children.push(Node::leaf_with(view.clone(view_id)));
+            self.children.push(Node::leaf_with(view));
             self.split = Split::Vertical;
         } else if self.split == Split::Vertical {
             if self.children[self.active].is_leaf() {
@@ -146,8 +146,7 @@ impl Node {
                     .as_ref()
                     .unwrap()
                     .clone(view_id);
-                self.children
-                    .insert(self.active, Node::leaf_with(self.rect, view));
+                self.children.insert(self.active, Node::leaf_with(view));
             } else {
                 self.children[self.active].split_v(view_id);
             }
@@ -157,8 +156,9 @@ impl Node {
     }
 
     fn set_rect(&mut self, rect: Rect<u32, PixelSize>, border_width: u32) {
-        self.rect = rect;
-        if !self.is_leaf() {
+        if self.is_leaf() {
+            self.opt_view.as_mut().unwrap().set_rect(rect);
+        } else {
             let num_c = self.children.len() as u32;
             let mut origin = rect.origin;
             if self.split == Split::Vertical {
