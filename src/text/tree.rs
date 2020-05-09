@@ -1,23 +1,31 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use euclid::{size2, Rect};
 
+use crate::buffer::{Buffer, BufferViewID};
 use crate::common::PixelSize;
 use crate::painter::Painter;
 use crate::style::Color;
 
-use super::TextView;
+use super::TextPane;
 
-pub(crate) struct TextViewTree {
+pub(crate) struct TextTree {
     border_width: u32,
     root: Node,
 }
 
-impl TextViewTree {
-    pub(crate) fn new(rect: Rect<u32, PixelSize>) -> TextViewTree {
-        TextViewTree {
+impl TextTree {
+    pub(crate) fn new(
+        rect: Rect<u32, PixelSize>,
+        buf: Rc<RefCell<Buffer>>,
+        view_id: BufferViewID,
+    ) -> TextTree {
+        TextTree {
             border_width: 1,
-            root: Node::new_leaf(rect),
+            root: Node::new_leaf(rect, buf, view_id),
         }
     }
 
@@ -29,21 +37,21 @@ impl TextViewTree {
         self.root.draw(painter);
     }
 
-    pub(crate) fn split_v(&mut self) {
-        self.root.split_v();
+    pub(crate) fn split_v(&mut self, view_id: BufferViewID) {
+        self.root.split_v(view_id);
         self.root.set_rect(self.root.rect, self.border_width);
     }
 
-    pub(crate) fn split_h(&mut self) {
-        self.root.split_h();
+    pub(crate) fn split_h(&mut self, view_id: BufferViewID) {
+        self.root.split_h(view_id);
         self.root.set_rect(self.root.rect, self.border_width);
     }
 
-    pub(crate) fn active(&self) -> &TextView {
+    pub(crate) fn active(&self) -> &TextPane {
         self.root.active()
     }
 
-    pub(crate) fn active_mut(&mut self) -> &mut TextView {
+    pub(crate) fn active_mut(&mut self) -> &mut TextPane {
         self.root.active_mut()
     }
 }
@@ -60,21 +68,21 @@ struct Node {
     split: Split,
     children: Vec<Node>,
     active: usize,
-    opt_view: Option<TextView>,
+    opt_view: Option<TextPane>,
 }
 
 impl Node {
-    fn new_leaf(rect: Rect<u32, PixelSize>) -> Node {
+    fn new_leaf(rect: Rect<u32, PixelSize>, buf: Rc<RefCell<Buffer>>, id: BufferViewID) -> Node {
         Node {
             rect: rect,
             split: Split::None,
             children: Vec::new(),
             active: 0,
-            opt_view: Some(TextView),
+            opt_view: Some(TextPane::new(buf, id)),
         }
     }
 
-    fn leaf_with(rect: Rect<u32, PixelSize>, view: TextView) -> Node {
+    fn leaf_with(rect: Rect<u32, PixelSize>, view: TextPane) -> Node {
         Node {
             rect: rect,
             split: Split::None,
@@ -98,11 +106,12 @@ impl Node {
         }
     }
 
-    fn split_h(&mut self) {
+    fn split_h(&mut self, view_id: BufferViewID) {
         if self.is_leaf() {
             let view = self.opt_view.take().unwrap();
             self.active = 0;
-            self.children.push(Node::leaf_with(self.rect, view.clone()));
+            self.children
+                .push(Node::leaf_with(self.rect, view.clone(view_id)));
             self.children.push(Node::leaf_with(self.rect, view));
             self.split = Split::Horizontal;
         } else if self.split == Split::Horizontal {
@@ -111,22 +120,23 @@ impl Node {
                     .opt_view
                     .as_ref()
                     .unwrap()
-                    .clone();
+                    .clone(view_id);
                 self.children
                     .insert(self.active, Node::leaf_with(self.rect, view));
             } else {
-                self.children[self.active].split_h();
+                self.children[self.active].split_h(view_id);
             }
         } else {
-            self.children[self.active].split_h();
+            self.children[self.active].split_h(view_id);
         }
     }
 
-    fn split_v(&mut self) {
+    fn split_v(&mut self, view_id: BufferViewID) {
         if self.is_leaf() {
             let view = self.opt_view.take().unwrap();
             self.active = 0;
-            self.children.push(Node::leaf_with(self.rect, view.clone()));
+            self.children
+                .push(Node::leaf_with(self.rect, view.clone(view_id)));
             self.children.push(Node::leaf_with(self.rect, view));
             self.split = Split::Vertical;
         } else if self.split == Split::Vertical {
@@ -135,14 +145,14 @@ impl Node {
                     .opt_view
                     .as_ref()
                     .unwrap()
-                    .clone();
+                    .clone(view_id);
                 self.children
                     .insert(self.active, Node::leaf_with(self.rect, view));
             } else {
-                self.children[self.active].split_v();
+                self.children[self.active].split_v(view_id);
             }
         } else {
-            self.children[self.active].split_v();
+            self.children[self.active].split_v(view_id);
         }
     }
 
@@ -183,7 +193,7 @@ impl Node {
         }
     }
 
-    fn active(&self) -> &TextView {
+    fn active(&self) -> &TextPane {
         if let Some(tv) = &self.opt_view {
             tv
         } else {
@@ -191,71 +201,11 @@ impl Node {
         }
     }
 
-    fn active_mut(&mut self) -> &mut TextView {
+    fn active_mut(&mut self) -> &mut TextPane {
         if let Some(tv) = &mut self.opt_view {
             tv
         } else {
             self.children[self.active].active_mut()
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use euclid::point2;
-
-    #[test]
-    fn single_view() {
-        let mut t = TextViewTree::new(Rect::new(point2(0, 0), size2(5, 5)));
-        assert!(t.root.is_leaf());
-        assert_eq!(t.root.rect, Rect::new(point2(0, 0), size2(5, 5)));
-        // resize
-        t.set_rect(Rect::new(point2(2, 2), size2(3, 3)));
-        assert_eq!(t.root.rect, Rect::new(point2(2, 2), size2(3, 3)));
-    }
-
-    #[test]
-    fn vsplit() {
-        let mut t = TextViewTree::new(Rect::new(point2(0, 0), size2(6, 6)));
-        t.split_v();
-        assert!(!t.root.is_leaf());
-        assert_eq!(t.root.active, 0);
-        assert_eq!(t.root.rect, Rect::new(point2(0, 0), size2(6, 6)));
-        assert!(t.root.children[0].is_leaf());
-        assert!(t.root.children[1].is_leaf());
-        assert_eq!(t.root.children[0].rect, Rect::new(point2(0, 0), size2(3, 6)));
-        assert_eq!(t.root.children[1].rect, Rect::new(point2(4, 0), size2(2, 6)));
-        // resize
-        t.set_rect(Rect::new(point2(2, 2), size2(5, 5)));
-        assert!(!t.root.is_leaf());
-        assert_eq!(t.root.active, 0);
-        assert_eq!(t.root.rect, Rect::new(point2(2, 2), size2(5, 5)));
-        assert!(t.root.children[0].is_leaf());
-        assert!(t.root.children[1].is_leaf());
-        assert_eq!(t.root.children[0].rect, Rect::new(point2(2, 2), size2(2, 5)));
-        assert_eq!(t.root.children[1].rect, Rect::new(point2(5, 2), size2(2, 5)));
-    }
-
-    #[test]
-    fn hsplit() {
-        let mut t = TextViewTree::new(Rect::new(point2(0, 0), size2(6, 6)));
-        t.split_h();
-        assert!(!t.root.is_leaf());
-        assert_eq!(t.root.active, 0);
-        assert_eq!(t.root.rect, Rect::new(point2(0, 0), size2(6, 6)));
-        assert!(t.root.children[0].is_leaf());
-        assert!(t.root.children[1].is_leaf());
-        assert_eq!(t.root.children[0].rect, Rect::new(point2(0, 0), size2(6, 3)));
-        assert_eq!(t.root.children[1].rect, Rect::new(point2(0, 4), size2(6, 2)));
-        // resize
-        t.set_rect(Rect::new(point2(2, 2), size2(5, 5)));
-        assert!(!t.root.is_leaf());
-        assert_eq!(t.root.active, 0);
-        assert_eq!(t.root.rect, Rect::new(point2(2, 2), size2(5, 5)));
-        assert!(t.root.children[0].is_leaf());
-        assert!(t.root.children[1].is_leaf());
-        assert_eq!(t.root.children[0].rect, Rect::new(point2(2, 2), size2(5, 2)));
-        assert_eq!(t.root.children[1].rect, Rect::new(point2(2, 5), size2(5, 2)));
     }
 }

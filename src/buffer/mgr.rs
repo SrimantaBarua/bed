@@ -7,15 +7,18 @@ use std::rc::{Rc, Weak};
 use fnv::FnvHashMap;
 
 use super::buffer::Buffer;
+use super::BufferViewID;
 
 pub(crate) struct BufferMgr {
     buffers: FnvHashMap<String, Weak<RefCell<Buffer>>>,
+    next_view_id: usize,
 }
 
 impl BufferMgr {
     pub(crate) fn new() -> BufferMgr {
         BufferMgr {
             buffers: FnvHashMap::default(),
+            next_view_id: 0,
         }
     }
 
@@ -39,5 +42,11 @@ impl BufferMgr {
                     buffer
                 })
             })
+    }
+
+    pub(crate) fn next_view_id(&mut self) -> BufferViewID {
+        let ret = BufferViewID(self.next_view_id);
+        self.next_view_id += 1;
+        ret
     }
 }

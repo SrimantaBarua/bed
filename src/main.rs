@@ -12,7 +12,7 @@ mod font;
 mod opengl;
 mod painter;
 mod style;
-mod textview;
+mod text;
 mod window;
 
 fn main() {
@@ -21,9 +21,14 @@ fn main() {
     let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
     let viewable_rect = window.viewable_rect();
     let mut painter = painter::Painter::new(size, viewable_rect, dpi);
-    let mut textview_tree = textview::TextViewTree::new(viewable_rect);
-    textview_tree.split_h();
-    textview_tree.split_v();
+
+    let mut buffer_mgr = buffer::BufferMgr::new();
+    let buf = buffer_mgr.empty();
+    let view_id = buffer_mgr.next_view_id();
+
+    let mut textview_tree = text::TextTree::new(viewable_rect, buf, view_id);
+    textview_tree.split_h(buffer_mgr.next_view_id());
+    textview_tree.split_v(buffer_mgr.next_view_id());
 
     /*
     let mut font_core = font::FontCore::new().unwrap();
