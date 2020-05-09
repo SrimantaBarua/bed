@@ -29,7 +29,7 @@ impl TextTree {
             bg_color: Color::new(0, 0, 0, 0xff),
             rect: rect,
             border_width: 1,
-            root: Node::new_leaf(buf, view_id),
+            root: Node::new_leaf(rect, buf, view_id),
         }
     }
 
@@ -77,12 +77,12 @@ struct Node {
 }
 
 impl Node {
-    fn new_leaf(buf: Rc<RefCell<Buffer>>, id: BufferViewID) -> Node {
+    fn new_leaf(rect: Rect<u32, PixelSize>, buf: Rc<RefCell<Buffer>>, id: BufferViewID) -> Node {
         Node {
             split: Split::None,
             children: Vec::new(),
             active: 0,
-            opt_view: Some(TextPane::new(buf, id)),
+            opt_view: Some(TextPane::new(rect, buf, id)),
         }
     }
 

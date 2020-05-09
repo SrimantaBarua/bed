@@ -2,8 +2,9 @@
 
 mod buffer;
 mod mgr;
+mod view;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, Hash, PartialEq)]
 pub(crate) struct BufferViewID(usize);
 
 impl BufferViewID {
