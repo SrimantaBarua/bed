@@ -43,8 +43,11 @@ fn main() {
     let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
     let viewable_rect = window.viewable_rect();
     let mut painter = painter::Painter::new(size, viewable_rect, dpi);
-    let font_core = Rc::new(RefCell::new(font::FontCore::new().unwrap()));
-    let mut buffer_mgr = buffer::BufferMgr::new(font_core, dpi);
+    let mut font_core = font::FontCore::new().unwrap();
+    let face_key = font_core.find("monospace").unwrap();
+    let text_size = style::TextSize::from_f32(10.0);
+    let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
+    let mut buffer_mgr = buffer::BufferMgr::new(text_shaper, face_key, text_size, dpi);
     let buf = match args.value_of("FILE") {
         Some(path) => buffer_mgr
             .from_file(&abspath(path))

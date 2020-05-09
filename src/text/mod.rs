@@ -5,6 +5,9 @@ use std::cmp::min;
 use crate::font::{harfbuzz::GlyphInfo, FaceKey};
 use crate::style::{Color, TextSize, TextStyle};
 
+mod shaper;
+pub(crate) use shaper::TextShaper;
+
 pub(crate) struct ShapedTextSpan {
     pub(crate) face: FaceKey,
     pub(crate) style: TextStyle,
@@ -57,5 +60,13 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
 }
 
 pub(crate) struct ShapedTextLine {
+    pub(crate) metrics: ShapedTextLineMetrics,
     pub(crate) spans: Vec<ShapedTextSpan>,
+}
+
+pub(crate) struct ShapedTextLineMetrics {
+    pub(crate) ascender: i32,
+    pub(crate) descender: i32,
+    pub(crate) underline_position: i32,
+    pub(crate) underline_thickness: i32,
 }
