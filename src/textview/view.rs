@@ -35,7 +35,7 @@ impl TextView {
     fn draw(&self, painter: &mut Painter) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
-            buffer.draw_view(&self.id);
+            buffer.draw_view(&self.id, painter);
         }
     }
 }

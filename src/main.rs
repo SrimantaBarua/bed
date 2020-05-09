@@ -15,6 +15,7 @@ mod font;
 mod opengl;
 mod painter;
 mod style;
+mod text;
 mod textview;
 mod window;
 
@@ -43,7 +44,7 @@ fn main() {
     let viewable_rect = window.viewable_rect();
     let mut painter = painter::Painter::new(size, viewable_rect, dpi);
     let font_core = Rc::new(RefCell::new(font::FontCore::new().unwrap()));
-    let mut buffer_mgr = buffer::BufferMgr::new(font_core);
+    let mut buffer_mgr = buffer::BufferMgr::new(font_core, dpi);
     let buf = match args.value_of("FILE") {
         Some(path) => buffer_mgr
             .from_file(&abspath(path))
@@ -55,12 +56,6 @@ fn main() {
     let mut textview_tree = textview::TextTree::new(viewable_rect, buf, view_id);
     textview_tree.split_h(buffer_mgr.next_view_id());
     textview_tree.split_v(buffer_mgr.next_view_id());
-
-    /*
-    let key = font_core.find("monospace").unwrap();
-    let (buf, font) = font_core.get(key, style::TextStyle::default()).unwrap();
-    font.shaper.set_scale(style::TextSize::from_f32(10.0), dpi);
-    */
 
     while !window.should_close() {
         for (_, event) in glfw::flush_messages(&events) {
@@ -74,38 +69,7 @@ fn main() {
             }
         }
         painter.clear();
-
-        /*
-        buf.clear_contents();
-        buf.add_utf8("Hello, world!");
-        buf.guess_segment_properties();
-
-        let mut pos = point2(20, 30);
-        for gi in font::harfbuzz::shape(&font.shaper, buf) {
-            painter.glyph(
-                pos,
-                key,
-                gi.gid,
-                style::TextSize::from_f32(10.0),
-                Color::new(0xff, 0xff, 0xff, 0xff),
-                style::TextStyle::default(),
-                &mut font.raster,
-            );
-            pos.x += gi.advance.width;
-        }
-
-        painter.rect(
-            Rect::new(point2(10, 10), size2(200, 200)),
-            Color::parse("#2288aa").unwrap(),
-        );
-        painter.rect(
-            Rect::new(point2(100, 100), size2(200, 200)),
-            Color::parse("#ff332288").unwrap(),
-        );
-        */
-
         textview_tree.draw(&mut painter);
-
         painter.flush();
         window.swap_buffers();
         glfw.poll_events();
