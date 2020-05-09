@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::ops::Drop;
 use std::rc::Rc;
 
-use euclid::{point2, size2, Rect};
+use euclid::Rect;
 
 use crate::buffer::{Buffer, BufferViewID};
 use crate::common::PixelSize;
@@ -15,9 +15,6 @@ pub(crate) struct TextView {
     buffer: Rc<RefCell<Buffer>>,
     id: BufferViewID,
 }
-
-// TODO: Optimization: Track "active" views. i.e, the view that can actually be seen on a text
-// pane
 
 impl TextView {
     fn new(rect: Rect<u32, PixelSize>, buffer: Rc<RefCell<Buffer>>, id: BufferViewID) -> TextView {
@@ -32,6 +29,13 @@ impl TextView {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.set_view_rect(&self.id, rect);
+        }
+    }
+
+    fn draw(&self, painter: &mut Painter) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.draw_view(&self.id);
         }
     }
 }
@@ -86,5 +90,6 @@ impl TextPane {
 
     pub(super) fn draw(&self, painter: &mut Painter) {
         painter.rect(self.rect, Color::new(0xff, 0xff, 0xff, 0xff));
+        self.views[self.active].draw(painter);
     }
 }
