@@ -14,6 +14,7 @@ pub(crate) use shaper::TextShaper;
 pub(crate) struct ShapedText {
     pub(crate) metrics: ShapedTextMetrics,
     glyphs: Vec<GlyphInfo>,
+    cursor_positions: Vec<usize>,
     faces: Vec<(usize, FaceKey)>,
     styles: Vec<(usize, TextStyle)>,
     sizes: Vec<(usize, TextSize)>,
@@ -38,6 +39,7 @@ impl ShapedText {
         ShapedText {
             metrics: ShapedTextMetrics::default(),
             glyphs: Vec::new(),
+            cursor_positions: Vec::new(),
             faces: Vec::new(),
             styles: Vec::new(),
             sizes: Vec::new(),

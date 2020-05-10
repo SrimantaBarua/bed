@@ -5,7 +5,7 @@ use std::cmp::{max, min};
 use euclid::Size2D;
 use ropey::RopeSlice;
 
-use crate::common::DPI;
+use crate::common::{RopeGraphemes, DPI};
 use crate::font::{harfbuzz, FaceKey, FontCore, RasterFace};
 use crate::style::{Color, TextSize, TextStyle};
 
@@ -55,6 +55,15 @@ impl TextShaper {
         }
 
         let mut ret = ShapedText::default();
+
+        let mut last_cursor_position = 0;
+        ret.cursor_positions
+            .extend(RopeGraphemes::new(&line).map(|g| {
+                let ret = last_cursor_position;
+                last_cursor_position += g.len_chars();
+                ret
+            }));
+
         let input_iter = InputRangesIter {
             slice: line,
             faces: faces,
@@ -133,6 +142,7 @@ impl TextShaper {
         ShapedText {
             metrics: metrics,
             glyphs: glyphs,
+            cursor_positions: vec![0],
             faces: vec![(1, face)],
             styles: vec![(1, style)],
             sizes: vec![(1, size)],

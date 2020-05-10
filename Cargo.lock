@@ -53,6 +53,7 @@ dependencies = [
  "harfbuzz-sys",
  "ropey",
  "servo-fontconfig",
+ "unicode-segmentation",
  "winapi",
 ]
 
@@ -574,6 +575,12 @@ checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
  "unicode-width",
 ]
+
+[[package]]
+name = "unicode-segmentation"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e83e153d1053cbb5a118eeff7fd5be06ed99153f00dbcd8ae310c5fb2b22edc0"
 
 [[package]]
 name = "unicode-width"

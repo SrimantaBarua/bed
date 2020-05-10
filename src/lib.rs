@@ -53,7 +53,7 @@ impl Bed {
 
         let mut font_core = font::FontCore::new().unwrap();
         let face_key = font_core.find("monospace").unwrap();
-        let text_size = style::TextSize::from_f32(8.0);
+        let text_size = style::TextSize::from_f32(7.5);
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
         let mut buffer_mgr = buffer::BufferMgr::new(text_shaper, face_key, text_size, dpi);
