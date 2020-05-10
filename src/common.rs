@@ -2,5 +2,5 @@
 
 // Types for euclid
 pub(crate) struct DPI;
-pub(crate) struct PixelSize;
+pub struct PixelSize;
 pub(crate) struct TextureSize;
