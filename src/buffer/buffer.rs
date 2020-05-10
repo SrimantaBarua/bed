@@ -12,8 +12,8 @@ use ropey::Rope;
 use crate::common::{PixelSize, DPI};
 use crate::font::FaceKey;
 use crate::painter::Painter;
-use crate::style::{TextSize, TextStyle};
-use crate::text::{ShapedTextLine, TextShaper};
+use crate::style::TextSize;
+use crate::text::{ShapedText, TextShaper};
 
 use super::view::BufferView;
 use super::BufferViewID;
@@ -23,9 +23,10 @@ pub(crate) struct Buffer {
     views: FnvHashMap<BufferViewID, BufferView>,
     // Text rendering
     text_shaper: Rc<RefCell<TextShaper>>,
-    text_size: TextSize,
     face_key: FaceKey,
-    shaped_lines: Vec<ShapedTextLine>,
+    text_size: TextSize,
+    dpi: Size2D<u32, DPI>,
+    shaped_lines: Vec<ShapedText>,
 }
 
 impl Buffer {
@@ -43,38 +44,28 @@ impl Buffer {
         let mut pos = view.rect.origin.cast();
         for line in &self.shaped_lines {
             pos.y += line.metrics.ascender;
-            'outer: for span in &line.spans {
-                let raster = shaper.get_raster(span.face, span.style).unwrap();
-                for (gis, color, opt_under) in span.styled_iter() {
-                    let start_x = pos.x;
-                    for gi in gis {
-                        painter.glyph(
-                            pos + gi.offset,
-                            span.face,
-                            gi.gid,
-                            self.text_size,
-                            color,
-                            span.style,
-                            raster,
-                        );
-                        pos.x += gi.advance.width;
-                        if (pos.x as u32) - view.rect.origin.x >= view.rect.size.width {
-                            break;
-                        }
-                    }
-                    if let Some(under) = opt_under {
-                        painter.rect(
-                            Rect::new(
-                                point2(start_x, pos.y - line.metrics.underline_position),
-                                size2(pos.x - start_x, line.metrics.underline_thickness),
-                            )
-                            .cast(),
-                            under,
-                        );
-                    }
+            for (gis, face, style, size, color, opt_under) in line.styled_iter() {
+                let raster = shaper.get_raster(face, style).unwrap();
+                let start_x = pos.x;
+                for gi in gis {
+                    painter.glyph(pos + gi.offset, face, gi.gid, size, color, style, raster);
+                    pos.x += gi.advance.width;
                     if (pos.x as u32) - view.rect.origin.x >= view.rect.size.width {
-                        break 'outer;
+                        break;
                     }
+                }
+                if let Some(under) = opt_under {
+                    painter.rect(
+                        Rect::new(
+                            point2(start_x, pos.y - line.metrics.underline_position),
+                            size2(pos.x - start_x, line.metrics.underline_thickness),
+                        )
+                        .cast(),
+                        under,
+                    );
+                }
+                if (pos.x as u32) - view.rect.origin.x >= view.rect.size.width {
+                    break;
                 }
             }
             pos.y -= line.metrics.descender;
@@ -98,6 +89,7 @@ impl Buffer {
         Buffer {
             text_size: text_size,
             face_key: face_key,
+            dpi: dpi,
             text_shaper: text_shaper,
             data: Rope::new(),
             shaped_lines: Vec::new(),
@@ -117,6 +109,7 @@ impl Buffer {
             .map(|rope| Buffer {
                 text_size: text_size,
                 face_key: face_key,
+                dpi: dpi,
                 text_shaper: text_shaper,
                 data: rope,
                 shaped_lines: Vec::new(),

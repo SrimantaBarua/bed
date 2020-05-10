@@ -100,10 +100,3 @@ impl TextSize {
         size2(val * dpi.width as f32, val * dpi.height as f32)
     }
 }
-
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum TextPitch {
-    Fixed,
-    Variable,
-}

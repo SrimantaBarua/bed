@@ -4,4 +4,4 @@ mod color;
 mod text;
 
 pub(crate) use color::Color;
-pub(crate) use text::{TextPitch, TextSize, TextSlant, TextStyle, TextWeight};
+pub(crate) use text::{TextSize, TextSlant, TextStyle, TextWeight};

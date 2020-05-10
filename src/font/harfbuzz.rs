@@ -9,11 +9,11 @@ use crate::common::{PixelSize, DPI};
 use crate::style::TextSize;
 
 use harfbuzz_sys::{
-    hb_blob_create_from_file, hb_blob_destroy, hb_blob_t, hb_buffer_add_utf8,
-    hb_buffer_clear_contents, hb_buffer_create, hb_buffer_destroy, hb_buffer_get_glyph_infos,
-    hb_buffer_get_glyph_positions, hb_buffer_guess_segment_properties, hb_buffer_t, hb_face_create,
+    hb_blob_create_from_file, hb_blob_destroy, hb_blob_t, hb_buffer_add, hb_buffer_clear_contents,
+    hb_buffer_create, hb_buffer_destroy, hb_buffer_get_glyph_infos, hb_buffer_get_glyph_positions,
+    hb_buffer_guess_segment_properties, hb_buffer_set_content_type, hb_buffer_t, hb_face_create,
     hb_face_destroy, hb_font_create, hb_font_destroy, hb_font_set_scale, hb_font_t,
-    hb_glyph_info_t, hb_glyph_position_t, hb_shape,
+    hb_glyph_info_t, hb_glyph_position_t, hb_shape, HB_BUFFER_CONTENT_TYPE_UNICODE,
 };
 
 pub(crate) fn shape<'a>(font: &HbFont, buf: &'a mut HbBuffer) -> GlyphInfoIter<'a> {
@@ -83,6 +83,14 @@ impl HbBuffer {
         unsafe { hb_buffer_guess_segment_properties(self.raw) }
     }
 
+    pub(crate) fn add(&mut self, c: char, cluster: u32) {
+        unsafe {
+            hb_buffer_add(self.raw, c as u32, cluster);
+            hb_buffer_set_content_type(self.raw, HB_BUFFER_CONTENT_TYPE_UNICODE);
+        }
+    }
+
+    /*
     pub(crate) fn add_utf8(&mut self, s: &str) {
         unsafe {
             hb_buffer_add_utf8(
@@ -94,6 +102,7 @@ impl HbBuffer {
             )
         }
     }
+    */
 
     fn get_info_and_pos(&self) -> GlyphInfoIter {
         let mut len1 = 0u32;
