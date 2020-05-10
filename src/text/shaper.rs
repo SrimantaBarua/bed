@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::cmp::min;
+use std::cmp::{max, min};
 
 use euclid::Size2D;
 use ropey::RopeSlice;
@@ -83,6 +83,14 @@ impl TextShaper {
             cidx += 1;
 
             let face_metrics = font.raster.get_metrics(size, dpi);
+            ret.metrics.ascender = max(ret.metrics.ascender, face_metrics.ascender);
+            ret.metrics.descender = min(ret.metrics.descender, face_metrics.descender);
+            ret.metrics.underline_position =
+                min(ret.metrics.underline_position, face_metrics.underline_pos);
+            ret.metrics.underline_thickness = min(
+                ret.metrics.underline_thickness,
+                face_metrics.underline_thickness,
+            );
 
             while let Some(c) = chars.peek() {
                 if font.raster.has_glyph_for_char(*c) {

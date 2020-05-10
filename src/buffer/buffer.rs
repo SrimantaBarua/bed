@@ -7,12 +7,12 @@ use std::rc::Rc;
 
 use euclid::{point2, size2, Rect, Size2D};
 use fnv::FnvHashMap;
-use ropey::Rope;
+use ropey::{Rope, RopeSlice};
 
 use crate::common::{PixelSize, DPI};
 use crate::font::FaceKey;
 use crate::painter::Painter;
-use crate::style::TextSize;
+use crate::style::{Color, TextSize, TextStyle};
 use crate::text::{ShapedText, TextShaper};
 
 use super::view::BufferView;
@@ -21,6 +21,7 @@ use super::BufferViewID;
 pub(crate) struct Buffer {
     data: Rope,
     views: FnvHashMap<BufferViewID, BufferView>,
+    tab_width: usize,
     // Text rendering
     text_shaper: Rc<RefCell<TextShaper>>,
     face_key: FaceKey,
@@ -89,6 +90,7 @@ impl Buffer {
         Buffer {
             text_size: text_size,
             face_key: face_key,
+            tab_width: 8,
             dpi: dpi,
             text_shaper: text_shaper,
             data: Rope::new(),
@@ -106,14 +108,19 @@ impl Buffer {
     ) -> IOResult<Buffer> {
         File::open(path)
             .and_then(|mut f| Rope::from_reader(&mut f))
-            .map(|rope| Buffer {
-                text_size: text_size,
-                face_key: face_key,
-                dpi: dpi,
-                text_shaper: text_shaper,
-                data: rope,
-                shaped_lines: Vec::new(),
-                views: FnvHashMap::default(),
+            .map(|rope| {
+                let mut ret = Buffer {
+                    text_size: text_size,
+                    face_key: face_key,
+                    tab_width: 8,
+                    dpi: dpi,
+                    text_shaper: text_shaper,
+                    data: rope,
+                    shaped_lines: Vec::new(),
+                    views: FnvHashMap::default(),
+                };
+                ret.shape_text();
+                ret
             })
     }
 
@@ -122,4 +129,36 @@ impl Buffer {
             .and_then(|mut f| Rope::from_reader(&mut f))
             .map(|rope| self.data = rope)
     }
+
+    fn shape_text(&mut self) {
+        self.shaped_lines.clear();
+        let shaper = &mut *self.text_shaper.borrow_mut();
+        for line in self.data.lines() {
+            let trimmed = trim_newlines(line);
+            let len_chars = trimmed.len_chars();
+            let shaped = shaper.shape_line_rope(
+                trimmed,
+                self.dpi,
+                self.tab_width,
+                &[(len_chars, self.face_key)],
+                &[(len_chars, TextStyle::default())],
+                &[(len_chars, self.text_size)],
+                &[(len_chars, Color::new(0, 0, 0, 0xff))],
+                &[(len_chars, None)],
+            );
+            self.shaped_lines.push(shaped);
+        }
+    }
+}
+
+fn trim_newlines<'a>(line: RopeSlice<'a>) -> RopeSlice<'a> {
+    let mut nchars = line.len_chars();
+    let mut chars = line.chars_at(line.len_chars());
+    while let Some(c) = chars.prev() {
+        match c {
+            '\n' | '\x0b' | '\x0c' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}' => nchars -= 1,
+            _ => break,
+        }
+    }
+    line.slice(..nchars)
 }

@@ -48,7 +48,7 @@ impl ShapedText {
 
     fn push(
         &mut self,
-        mut gis: GlyphInfoIter,
+        gis: GlyphInfoIter,
         face: FaceKey,
         style: TextStyle,
         size: TextSize,
