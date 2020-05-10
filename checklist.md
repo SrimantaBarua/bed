@@ -1,4 +1,7 @@
 - [ ] Cursor rendering
+  - [x] Line
+  - [ ] Block
+  - [ ] Underline
 - [ ] Cursor motion
 - [ ] Insert character
 - [ ] Delete character

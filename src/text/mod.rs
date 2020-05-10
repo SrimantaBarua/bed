@@ -26,6 +26,7 @@ impl ShapedText {
     pub(crate) fn styled_iter(&self) -> ShapedStyledTextIter {
         ShapedStyledTextIter {
             glyphs: &self.glyphs,
+            cursor_positions: &self.cursor_positions,
             faces: &self.faces,
             styles: &self.styles,
             sizes: &self.sizes,
@@ -100,6 +101,7 @@ impl ShapedText {
 
 pub(crate) struct ShapedStyledTextIter<'a> {
     glyphs: &'a [GlyphInfo],
+    cursor_positions: &'a [usize],
     faces: &'a [(usize, FaceKey)],
     styles: &'a [(usize, TextStyle)],
     sizes: &'a [(usize, TextSize)],
@@ -110,7 +112,7 @@ pub(crate) struct ShapedStyledTextIter<'a> {
 
 impl<'a> Iterator for ShapedStyledTextIter<'a> {
     type Item = (
-        &'a [GlyphInfo],
+        ShapedClusterIter<'a>,
         FaceKey,
         TextStyle,
         TextSize,
@@ -151,8 +153,77 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
         if self.unders[0].0 == minidx {
             self.unders = &self.unders[1..];
         }
-        Some((glyphs, face, style, size, color, under))
+        let mut cii = if minidx == self.glyphs.len() {
+            self.cursor_positions.len()
+        } else {
+            let mut cii = 0;
+            while cii < self.cursor_positions.len()
+                && self.cursor_positions[cii] < glyphs[minidx].cluster as usize
+            {
+                cii += 1;
+            }
+            cii
+        };
+        let cluster_iter = ShapedClusterIter {
+            cursor_positions: &self.cursor_positions[..cii],
+            cpi: 0,
+            glyph_infos: glyphs,
+            gii: 0,
+        };
+        self.cursor_positions = &self.cursor_positions[cii..];
+        Some((cluster_iter, face, style, size, color, under))
     }
+}
+
+pub(crate) struct ShapedClusterIter<'a> {
+    cursor_positions: &'a [usize],
+    cpi: usize,
+    glyph_infos: &'a [GlyphInfo],
+    gii: usize,
+}
+
+impl<'a> Iterator for ShapedClusterIter<'a> {
+    type Item = ShapedCluster<'a>;
+
+    fn next(&mut self) -> Option<ShapedCluster<'a>> {
+        if self.cpi == self.cursor_positions.len() || self.gii == self.glyph_infos.len() {
+            return None;
+        }
+        let mut i = self.gii + 1;
+        while i < self.glyph_infos.len()
+            && self.glyph_infos[i].cluster == self.glyph_infos[self.gii].cluster
+        {
+            i += 1;
+        }
+        if i == self.glyph_infos.len() {
+            let ret = Some(ShapedCluster {
+                num_graphemes: self.cursor_positions.len() - self.cpi,
+                glyph_infos: &self.glyph_infos[self.gii..],
+            });
+            self.cpi = self.cursor_positions.len();
+            self.gii = self.glyph_infos.len();
+            ret
+        } else {
+            let mut count = 0;
+            while self.cpi < self.cursor_positions.len()
+                && self.cursor_positions[self.cpi] != self.glyph_infos[i].cluster as usize
+            {
+                self.cpi += 1;
+                count += 1;
+            }
+            let ret = Some(ShapedCluster {
+                num_graphemes: count,
+                glyph_infos: &self.glyph_infos[self.gii..i],
+            });
+            self.gii = i;
+            ret
+        }
+    }
+}
+
+pub(crate) struct ShapedCluster<'a> {
+    pub(crate) num_graphemes: usize,
+    pub(crate) glyph_infos: &'a [GlyphInfo],
 }
 
 pub(crate) struct ShapedTextMetrics {

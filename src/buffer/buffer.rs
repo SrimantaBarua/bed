@@ -43,30 +43,46 @@ impl Buffer {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let view = self.views.get(id).unwrap();
         let mut pos = point2(0, 0);
+        let mut linum = 0;
+        let (cline, cgidx) = (view.cursor.line_num, view.cursor.line_gidx);
+
         for line in &self.shaped_lines {
             pos.y += line.metrics.ascender;
-            for (gis, face, style, size, color, opt_under) in line.styled_iter() {
-                if pos.x as u32 >= view.rect.size.width {
-                    break;
-                }
-                let raster = shaper.get_raster(face, style).unwrap();
-                let start_x = pos.x;
-                for gi in gis {
-                    painter.glyph(pos + gi.offset, face, gi.gid, size, color, style, raster);
-                    pos.x += gi.advance.width;
+            let mut gidx = 0;
+
+            for (clusters, face, style, size, color, opt_under) in line.styled_iter() {
+                for cluster in clusters {
                     if pos.x as u32 >= view.rect.size.width {
                         break;
                     }
-                }
-                if let Some(under) = opt_under {
-                    painter.color_quad(
-                        Rect::new(
-                            point2(start_x, pos.y - line.metrics.underline_position),
-                            size2(pos.x - start_x, line.metrics.underline_thickness),
-                        )
-                        .cast(),
-                        under,
-                    );
+                    let raster = shaper.get_raster(face, style).unwrap();
+                    let start_x = pos.x;
+                    for gi in cluster.glyph_infos {
+                        painter.glyph(pos + gi.offset, face, gi.gid, size, color, style, raster);
+                        pos.x += gi.advance.width;
+                    }
+                    let width = pos.x - start_x;
+                    if linum == cline && gidx <= cgidx && gidx + cluster.num_graphemes > cgidx {
+                        let cwidth = 2;
+                        let cheight = line.metrics.ascender - line.metrics.descender;
+                        let mut cx = (width * (cgidx - gidx) as i32) / cluster.num_graphemes as i32;
+                        cx += start_x;
+                        let cy = pos.y - line.metrics.ascender;
+                        painter.color_quad(
+                            Rect::new(point2(cx, cy), size2(cwidth, cheight)),
+                            Color::new(0xff, 0x88, 0x22, 0xff),
+                        );
+                    }
+                    if let Some(under) = opt_under {
+                        painter.color_quad(
+                            Rect::new(
+                                point2(start_x, pos.y - line.metrics.underline_position),
+                                size2(width, line.metrics.underline_thickness),
+                            ),
+                            under,
+                        );
+                    }
+                    gidx += cluster.num_graphemes;
                 }
             }
             pos.y -= line.metrics.descender;
@@ -74,6 +90,7 @@ impl Buffer {
             if pos.y as u32 >= view.rect.size.height {
                 break;
             }
+            linum += 1;
         }
     }
 
