@@ -11,7 +11,7 @@ use ropey::{Rope, RopeSlice};
 
 use crate::common::{PixelSize, DPI};
 use crate::font::FaceKey;
-use crate::painter::Painter;
+use crate::painter::WidgetPainter;
 use crate::style::{Color, TextSize, TextStyle};
 use crate::text::{ShapedText, TextShaper};
 
@@ -39,24 +39,27 @@ impl Buffer {
         self.views.get_mut(id).unwrap().rect = rect;
     }
 
-    pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut Painter) {
+    pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let view = self.views.get(id).unwrap();
-        let mut pos = view.rect.origin.cast();
+        let mut pos = point2(0, 0);
         for line in &self.shaped_lines {
             pos.y += line.metrics.ascender;
             for (gis, face, style, size, color, opt_under) in line.styled_iter() {
+                if pos.x as u32 >= view.rect.size.width {
+                    break;
+                }
                 let raster = shaper.get_raster(face, style).unwrap();
                 let start_x = pos.x;
                 for gi in gis {
                     painter.glyph(pos + gi.offset, face, gi.gid, size, color, style, raster);
                     pos.x += gi.advance.width;
-                    if (pos.x as u32) - view.rect.origin.x >= view.rect.size.width {
+                    if pos.x as u32 >= view.rect.size.width {
                         break;
                     }
                 }
                 if let Some(under) = opt_under {
-                    painter.rect(
+                    painter.color_quad(
                         Rect::new(
                             point2(start_x, pos.y - line.metrics.underline_position),
                             size2(pos.x - start_x, line.metrics.underline_thickness),
@@ -65,13 +68,10 @@ impl Buffer {
                         under,
                     );
                 }
-                if (pos.x as u32) - view.rect.origin.x >= view.rect.size.width {
-                    break;
-                }
             }
             pos.y -= line.metrics.descender;
-            pos.x = view.rect.origin.x as i32;
-            if (pos.y as u32) - view.rect.origin.y >= view.rect.size.height {
+            pos.x = 0;
+            if pos.y as u32 >= view.rect.size.height {
                 break;
             }
         }

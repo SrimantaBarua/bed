@@ -4,4 +4,4 @@ mod tree;
 mod view;
 
 pub(crate) use tree::TextTree;
-pub(crate) use view::{TextPane, TextView};
+pub(crate) use view::TextPane;

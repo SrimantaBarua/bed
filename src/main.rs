@@ -71,9 +71,8 @@ fn main() {
                 _ => {}
             }
         }
-        painter.clear();
+        painter.clear(style::Color::new(0, 0, 0, 0xff));
         textview_tree.draw(&mut painter);
-        painter.flush();
         window.swap_buffers();
         glfw.poll_events();
     }

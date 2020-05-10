@@ -39,7 +39,6 @@ impl TextTree {
     }
 
     pub(crate) fn draw(&self, painter: &mut Painter) {
-        painter.rect(self.rect, self.bg_color);
         self.root.draw(painter);
     }
 

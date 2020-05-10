@@ -55,7 +55,7 @@ impl TextShaper {
         }
 
         let mut ret = ShapedText::default();
-        let mut input_iter = InputRangesIter {
+        let input_iter = InputRangesIter {
             slice: line,
             faces: faces,
             styles: styles,

@@ -1,12 +1,16 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::ffi::CStr;
+use std::ops::Drop;
 
 use euclid::{Point2D, Rect, Size2D};
 
 use crate::common::{PixelSize, DPI};
 use crate::font::{FaceKey, RasterFace};
-use crate::opengl::{gl_clear, gl_clear_color, gl_viewport, ElemArr, Mat4, ShaderProgram};
+use crate::opengl::{
+    gl_clear, gl_clear_color, gl_clear_stencil, gl_set_stencil_reading, gl_set_stencil_test,
+    gl_set_stencil_writing, gl_viewport, ElemArr, Mat4, ShaderProgram,
+};
 use crate::style::{Color, TextSize, TextStyle};
 
 mod glyphrender;
@@ -70,13 +74,45 @@ impl Painter {
         }
     }
 
-    pub(crate) fn clear(&mut self) {
-        gl_clear_color(Color::new(0, 0, 0, 0xff));
+    pub(crate) fn clear(&mut self, color: Color) {
+        gl_clear_color(color);
         gl_clear();
     }
 
-    pub(crate) fn rect(&mut self, rect: Rect<u32, PixelSize>, color: Color) {
-        self.cq_arr.push(ColorQuad::new(rect.cast(), color));
+    pub(crate) fn widget_ctx(&mut self, rect: Rect<i32, PixelSize>, bgcol: Color) -> WidgetPainter {
+        let mut ret = WidgetPainter {
+            painter: self,
+            rect: rect,
+            background_color: bgcol,
+        };
+        ret.draw_bg_stencil();
+        ret
+    }
+
+    fn flush(&mut self) {
+        {
+            let ash = self.cq_shader.use_program();
+            self.cq_arr.flush(&ash);
+        }
+        {
+            let ash = self.tcq_shader.use_program();
+            self.tcq_arr.flush(&ash);
+        }
+    }
+}
+
+pub(crate) struct WidgetPainter<'a> {
+    painter: &'a mut Painter,
+    rect: Rect<i32, PixelSize>,
+    background_color: Color,
+}
+
+impl<'a> WidgetPainter<'a> {
+    pub(crate) fn color_quad(&mut self, rect: Rect<i32, PixelSize>, color: Color) {
+        let tvec = self.rect.origin.to_vector();
+        self.painter
+            .cq_arr
+            .push(ColorQuad::new(rect.translate(tvec).cast(), color));
     }
 
     pub(crate) fn glyph(
@@ -89,26 +125,39 @@ impl Painter {
         style: TextStyle,
         raster: &mut RasterFace,
     ) {
-        self.glyph_render.render_glyph(
-            pos,
+        let tvec = self.rect.origin.to_vector();
+        self.painter.glyph_render.render_glyph(
+            pos + tvec,
             face,
             gid,
             size,
             color,
             style,
             raster,
-            &mut self.tcq_arr,
+            &mut self.painter.tcq_arr,
         );
     }
 
-    pub(crate) fn flush(&mut self) {
+    fn draw_bg_stencil(&mut self) {
+        // Activate stencil writing
+        gl_set_stencil_test(true);
+        gl_set_stencil_writing();
+        // Draw background and write to stencil
         {
-            let ash = self.cq_shader.use_program();
-            self.cq_arr.flush(&ash);
+            let ash = self.painter.cq_shader.use_program();
+            self.painter
+                .cq_arr
+                .push(ColorQuad::new(self.rect.cast(), self.background_color));
+            self.painter.cq_arr.flush(&ash);
         }
-        {
-            let ash = self.tcq_shader.use_program();
-            self.tcq_arr.flush(&ash);
-        }
+        // Set stencil reading
+        gl_set_stencil_reading();
+    }
+}
+
+impl<'a> Drop for WidgetPainter<'a> {
+    fn drop(&mut self) {
+        self.painter.flush();
+        gl_clear_stencil();
     }
 }

@@ -28,12 +28,6 @@ use self::harfbuzz::{HbBuffer, HbFont};
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub(crate) struct FaceKey(u16);
 
-impl FaceKey {
-    pub(crate) fn ival(self) -> u16 {
-        self.0
-    }
-}
-
 pub(crate) struct Face {
     pub(crate) raster: RasterFace,
     pub(crate) shaper: HbFont,
