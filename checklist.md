@@ -17,7 +17,7 @@
 - [ ] Insert character
   - [x] Basic characters
   - [ ] Tab
-  - [ ] Newline
+  - [x] Newline
 - [ ] Delete character
   - [ ] Backspace
   - [ ] Delete

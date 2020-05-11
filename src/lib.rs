@@ -104,6 +104,8 @@ impl Bed {
                     | WindowEvent::Key(Key::Right, _, Action::Repeat, _) => {
                         bed.move_cursor(Direction::Right)
                     }
+                    WindowEvent::Key(Key::Enter, _, Action::Press, _)
+                    | WindowEvent::Key(Key::Enter, _, Action::Repeat, _) => bed.insert_char('\n'),
                     WindowEvent::Char(c) => bed.insert_char(c),
                     _ => {}
                 }

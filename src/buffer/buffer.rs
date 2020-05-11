@@ -116,7 +116,6 @@ impl Buffer {
     }
 
     // -------- View edits -----------------
-
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
         let (cidx, linum, height) = {
             let view = self.views.get_mut(id).unwrap();
