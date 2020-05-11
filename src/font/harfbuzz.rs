@@ -65,6 +65,9 @@ pub(crate) struct HbBuffer {
     raw: *mut hb_buffer_t,
 }
 
+// Harbuzz is thread-safe
+unsafe impl Send for HbBuffer {}
+
 impl HbBuffer {
     pub(super) fn new() -> Option<HbBuffer> {
         let ptr = unsafe { hb_buffer_create() };
@@ -133,6 +136,9 @@ impl std::ops::Drop for HbBuffer {
 pub(crate) struct HbFont {
     raw: *mut hb_font_t,
 }
+
+// Harbuzz is thread-safe
+unsafe impl Send for HbFont {}
 
 impl std::ops::Drop for HbFont {
     fn drop(&mut self) {

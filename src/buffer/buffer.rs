@@ -1,13 +1,13 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::cell::RefCell;
 use std::fs::File;
 use std::io::Result as IOResult;
-use std::rc::Rc;
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
 
 use euclid::{Rect, Size2D};
 use fnv::FnvHashMap;
-use ropey::{Rope, RopeSlice};
+use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
 use crate::font::FaceKey;
@@ -18,16 +18,18 @@ use crate::text::{ShapedText, TextShaper};
 use super::view::BufferView;
 use super::BufferViewID;
 
+const SYNC_HL_LINES: usize = 1000;
+
 pub(crate) struct Buffer {
     data: Rope,
     views: FnvHashMap<BufferViewID, BufferView>,
     tab_width: usize,
     // Text rendering
-    text_shaper: Rc<RefCell<TextShaper>>,
+    text_shaper: Arc<Mutex<TextShaper>>,
     face_key: FaceKey,
     text_size: TextSize,
     dpi: Size2D<u32, DPI>,
-    shaped_lines: Vec<ShapedText>,
+    shaped_lines: Arc<Mutex<Vec<ShapedText>>>,
 }
 
 impl Buffer {
@@ -41,9 +43,10 @@ impl Buffer {
     }
 
     pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {
-        let shaper = &mut *self.text_shaper.borrow_mut();
         let view = self.views.get(id).unwrap();
-        view.draw(&self.shaped_lines, shaper, painter);
+        let mut shaper = self.text_shaper.lock().unwrap();
+        let shaped_lines = self.shaped_lines.lock().unwrap();
+        view.draw(&shaped_lines, &mut shaper, painter);
     }
 
     pub(crate) fn remove_view(&mut self, id: &BufferViewID) {
@@ -101,8 +104,9 @@ impl Buffer {
             .sync_line_cidx_gidx_right(&self.data, self.tab_width);
     }
 
+    // -------- Create buffer ----------------
     pub(super) fn empty(
-        text_shaper: Rc<RefCell<TextShaper>>,
+        text_shaper: Arc<Mutex<TextShaper>>,
         face_key: FaceKey,
         text_size: TextSize,
         dpi: Size2D<u32, DPI>,
@@ -114,14 +118,14 @@ impl Buffer {
             dpi: dpi,
             text_shaper: text_shaper,
             data: Rope::new(),
-            shaped_lines: Vec::new(),
+            shaped_lines: Arc::new(Mutex::new(Vec::new())),
             views: FnvHashMap::default(),
         }
     }
 
     pub(super) fn from_file(
         path: &str,
-        text_shaper: Rc<RefCell<TextShaper>>,
+        text_shaper: Arc<Mutex<TextShaper>>,
         face_key: FaceKey,
         text_size: TextSize,
         dpi: Size2D<u32, DPI>,
@@ -136,7 +140,7 @@ impl Buffer {
                     dpi: dpi,
                     text_shaper: text_shaper,
                     data: rope,
-                    shaped_lines: Vec::new(),
+                    shaped_lines: Arc::new(Mutex::new(Vec::new())),
                     views: FnvHashMap::default(),
                 };
                 ret.shape_text();
@@ -151,22 +155,79 @@ impl Buffer {
     }
 
     fn shape_text(&mut self) {
-        self.shaped_lines.clear();
-        let shaper = &mut *self.text_shaper.borrow_mut();
-        for line in self.data.lines() {
-            let trimmed = rope_trim_newlines(line);
-            let len_chars = trimmed.len_chars();
-            let shaped = shaper.shape_line_rope(
-                trimmed,
-                self.dpi,
-                self.tab_width,
-                &[(len_chars, self.face_key)],
-                &[(len_chars, TextStyle::default())],
-                &[(len_chars, self.text_size)],
-                &[(len_chars, Color::new(0, 0, 0, 0xff))],
-                &[(len_chars, None)],
-            );
-            self.shaped_lines.push(shaped);
+        let shaper = Arc::clone(&self.text_shaper);
+        let shaped_lines = Arc::clone(&self.shaped_lines);
+
+        let rope = self.data.clone();
+
+        let pair = Arc::new((Mutex::new(false), Condvar::new()));
+        let pair2 = pair.clone();
+
+        let dpi = self.dpi;
+        let tab_width = self.tab_width;
+        let face_key = self.face_key;
+        let text_size = self.text_size;
+
+        thread::spawn(move || {
+            let (lock, cvar) = &*pair2;
+
+            // Shape first SYNC_HL_LINES lines
+            {
+                let mut linum = 0;
+                let mut shaper = shaper.lock().unwrap();
+                let mut shaped_lines = shaped_lines.lock().unwrap();
+                shaped_lines.clear();
+
+                for line in rope.lines() {
+                    let trimmed = rope_trim_newlines(line);
+                    let len_chars = trimmed.len_chars();
+                    let shaped = shaper.shape_line_rope(
+                        trimmed,
+                        dpi,
+                        tab_width,
+                        &[(len_chars, face_key)],
+                        &[(len_chars, TextStyle::default())],
+                        &[(len_chars, text_size)],
+                        &[(len_chars, Color::new(0, 0, 0, 0xff))],
+                        &[(len_chars, None)],
+                    );
+                    shaped_lines.push(shaped);
+                    linum += 1;
+                    if linum >= SYNC_HL_LINES {
+                        break;
+                    }
+                }
+
+                let mut initial_hl_done = lock.lock().unwrap();
+                *initial_hl_done = true;
+                cvar.notify_one();
+            }
+
+            // Shape the rest of the text
+            if rope.len_lines() > SYNC_HL_LINES {
+                for line in rope.lines_at(SYNC_HL_LINES) {
+                    let trimmed = rope_trim_newlines(line);
+                    let len_chars = trimmed.len_chars();
+                    let shaped = shaper.lock().unwrap().shape_line_rope(
+                        trimmed,
+                        dpi,
+                        tab_width,
+                        &[(len_chars, face_key)],
+                        &[(len_chars, TextStyle::default())],
+                        &[(len_chars, text_size)],
+                        &[(len_chars, Color::new(0, 0, 0, 0xff))],
+                        &[(len_chars, None)],
+                    );
+                    shaped_lines.lock().unwrap().push(shaped);
+                }
+            }
+        });
+
+        // Wait for the first few lines to be highlighted
+        let (lock, cvar) = &*pair;
+        let mut started = lock.lock().unwrap();
+        while !*started {
+            started = cvar.wait(started).unwrap();
         }
     }
 }

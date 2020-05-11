@@ -19,6 +19,9 @@ pub(super) struct RasterCore {
     ft_lib: FT_Library,
 }
 
+// FreeType is thread-safe
+unsafe impl Send for RasterCore {}
+
 impl Drop for RasterCore {
     fn drop(&mut self) {
         unsafe { FT_Done_FreeType(self.ft_lib) };
@@ -68,6 +71,9 @@ impl RasterCore {
 pub(crate) struct RasterFace {
     face: FT_Face,
 }
+
+// FreeType is thread-safe
+unsafe impl Send for RasterFace {}
 
 impl std::ops::Drop for RasterFace {
     fn drop(&mut self) {

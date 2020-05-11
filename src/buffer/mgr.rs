@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::io::Result as IOResult;
 use std::rc::{Rc, Weak};
+use std::sync::{Arc, Mutex};
 
 use euclid::Size2D;
 use fnv::FnvHashMap;
@@ -17,7 +18,7 @@ use super::BufferViewID;
 
 pub(crate) struct BufferMgr {
     dpi: Size2D<u32, DPI>,
-    text_shaper: Rc<RefCell<TextShaper>>,
+    text_shaper: Arc<Mutex<TextShaper>>,
     face_key: FaceKey,
     text_size: TextSize,
     buffers: FnvHashMap<String, Weak<RefCell<Buffer>>>,
@@ -28,7 +29,7 @@ pub(crate) struct BufferMgr {
 
 impl BufferMgr {
     pub(crate) fn new(
-        text_shaper: Rc<RefCell<TextShaper>>,
+        text_shaper: Arc<Mutex<TextShaper>>,
         face_key: FaceKey,
         text_size: TextSize,
         dpi: Size2D<u32, DPI>,

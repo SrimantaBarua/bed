@@ -18,6 +18,9 @@ pub(super) struct FontSource {
     raw: *mut FcConfig,
 }
 
+// FreeType is thread-safe
+unsafe impl Send for FontSource {}
+
 impl FontSource {
     pub(super) fn new() -> Option<FontSource> {
         let ptr = unsafe { FcInitLoadConfigAndFonts() };

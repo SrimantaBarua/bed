@@ -1,7 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use euclid::{size2, Size2D};
 use glfw::{Action, Key, WindowEvent};
@@ -52,7 +51,7 @@ impl Bed {
         let mut font_core = font::FontCore::new().unwrap();
         let face_key = font_core.find("monospace").unwrap();
         let text_size = style::TextSize::from_f32(7.5);
-        let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
+        let text_shaper = Arc::new(Mutex::new(text::TextShaper::new(font_core)));
 
         let mut buffer_mgr = buffer::BufferMgr::new(text_shaper, face_key, text_size, dpi);
         let buf = match args.value_of("FILE") {
