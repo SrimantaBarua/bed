@@ -1,3 +1,6 @@
+- [ ] Parallel shaping
+  - [x] Spawn shaper thread on load
+  - [ ] On-demand shaping when navigating to line
 - [ ] Cursor rendering
   - [x] Line
   - [ ] Block
@@ -7,6 +10,9 @@
   - [ ] PageUp / PageDown
   - [ ] Start / End of line
   - [ ] Go to line
+- [ ] Snap to cursor
+  - [x] Snap to line
+  - [ ] Snap horizontally
 - [ ] Multiple cursors
 - [ ] Insert character
 - [ ] Delete character

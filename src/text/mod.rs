@@ -36,6 +36,10 @@ impl ShapedText {
         }
     }
 
+    pub(crate) fn height(&self) -> i32 {
+        self.metrics.ascender - self.metrics.descender
+    }
+
     fn default() -> ShapedText {
         ShapedText {
             metrics: ShapedTextMetrics::default(),

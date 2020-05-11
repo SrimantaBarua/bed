@@ -101,6 +101,8 @@ impl Cursor {
 pub(super) struct BufferView {
     pub(super) rect: Rect<u32, PixelSize>,
     pub(super) cursor: Cursor,
+    pub(super) start_line: usize,
+    pub(super) yoff: u32,
 }
 
 impl BufferView {
@@ -108,6 +110,27 @@ impl BufferView {
         BufferView {
             rect: rect,
             cursor: Cursor::default(),
+            start_line: 0,
+            yoff: 0,
+        }
+    }
+
+    pub(super) fn snap_to_cursor(&mut self, shaped_lines: &[ShapedText]) {
+        if self.start_line >= self.cursor.line_num {
+            self.start_line = self.cursor.line_num;
+            self.yoff = 0;
+            return;
+        }
+        let mut i = self.cursor.line_num;
+        let mut height = shaped_lines[i].height();
+        while i > self.start_line {
+            if height >= self.rect.size.height as i32 {
+                self.start_line = i;
+                self.yoff = height as u32 - self.rect.size.height;
+                return;
+            }
+            i -= 1;
+            height += shaped_lines[i].height();
         }
     }
 
@@ -117,10 +140,13 @@ impl BufferView {
         shaper: &mut TextShaper,
         painter: &mut WidgetPainter,
     ) {
-        let mut pos = point2(0, 0);
+        let mut pos = point2(0, -(self.yoff as i32));
         let mut linum = 0;
-        let (cline, cgidx) = (self.cursor.line_num, self.cursor.line_gidx);
-        for line in shaped_lines {
+        let (cline, cgidx) = (
+            self.cursor.line_num - self.start_line,
+            self.cursor.line_gidx,
+        );
+        for line in &shaped_lines[self.start_line..] {
             pos.y += line.metrics.ascender;
             let mut gidx = 0;
 

@@ -39,7 +39,10 @@ impl Buffer {
     }
 
     pub(crate) fn set_view_rect(&mut self, id: &BufferViewID, rect: Rect<u32, PixelSize>) {
-        self.views.get_mut(id).unwrap().rect = rect;
+        let view = self.views.get_mut(id).unwrap();
+        view.rect = rect;
+        // TODO: Ensure we've shaped till here
+        view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
     }
 
     pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {
@@ -69,6 +72,8 @@ impl Buffer {
             view.cursor.line_num -= n;
         }
         view.cursor.sync_global_x(&self.data, self.tab_width);
+        // TODO: Ensure we've shaped till here
+        view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
     }
 
     pub(crate) fn move_view_cursor_down(&mut self, id: &BufferViewID, n: usize) {
@@ -81,6 +86,8 @@ impl Buffer {
         } else {
             view.cursor.sync_global_x(&self.data, self.tab_width);
         }
+        // TODO: Ensure we've shaped till here
+        view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
     }
 
     pub(crate) fn move_view_cursor_left(&mut self, id: &BufferViewID, n: usize) {
