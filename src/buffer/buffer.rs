@@ -122,7 +122,7 @@ impl Buffer {
         text_size: TextSize,
         dpi: Size2D<u32, DPI>,
     ) -> Buffer {
-        Buffer {
+        let mut buf = Buffer {
             text_size: text_size,
             face_key: face_key,
             tab_width: 8,
@@ -131,7 +131,9 @@ impl Buffer {
             data: Rope::new(),
             shaped_lines: Arc::new(Mutex::new(Vec::new())),
             views: FnvHashMap::default(),
-        }
+        };
+        buf.shape_text();
+        buf
     }
 
     pub(super) fn from_file(
