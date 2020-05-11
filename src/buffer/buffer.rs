@@ -9,7 +9,7 @@ use euclid::{Rect, Size2D};
 use fnv::FnvHashMap;
 use ropey::{Rope, RopeSlice};
 
-use crate::common::{PixelSize, DPI};
+use crate::common::{rope_trim_newlines, PixelSize, DPI};
 use crate::font::FaceKey;
 use crate::painter::WidgetPainter;
 use crate::style::{Color, TextSize, TextStyle};
@@ -31,17 +31,13 @@ pub(crate) struct Buffer {
 }
 
 impl Buffer {
+    // -------- View management ----------------
     pub(crate) fn new_view(&mut self, id: &BufferViewID, rect: Rect<u32, PixelSize>) {
         self.views.insert(id.clone(), BufferView::new(rect));
     }
 
     pub(crate) fn set_view_rect(&mut self, id: &BufferViewID, rect: Rect<u32, PixelSize>) {
         self.views.get_mut(id).unwrap().rect = rect;
-    }
-
-    pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, dirn: crate::Direction) {
-        let view = self.views.get_mut(id).unwrap();
-        view.move_cursor(dirn, &self.data);
     }
 
     pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {
@@ -52,6 +48,57 @@ impl Buffer {
 
     pub(crate) fn remove_view(&mut self, id: &BufferViewID) {
         self.views.remove(id);
+    }
+
+    // -------- View cursor motion ----------------
+    pub(crate) fn move_view_cursor_up(&mut self, id: &BufferViewID, n: usize) {
+        let view = self.views.get_mut(id).unwrap();
+        if view.cursor.line_num == 0 {
+            view.cursor.char_idx = 0;
+            view.cursor.line_cidx = 0;
+            view.cursor.line_gidx = 0;
+            view.cursor.line_global_x = 0;
+            return;
+        }
+        if view.cursor.line_num < n {
+            view.cursor.line_num = 0;
+        } else {
+            view.cursor.line_num -= n;
+        }
+        view.cursor.sync_global_x(&self.data, self.tab_width);
+    }
+
+    pub(crate) fn move_view_cursor_down(&mut self, id: &BufferViewID, n: usize) {
+        let view = self.views.get_mut(id).unwrap();
+        view.cursor.line_num += n;
+        if view.cursor.line_num >= self.data.len_lines() {
+            view.cursor.char_idx = self.data.len_chars();
+            view.cursor
+                .sync_and_update_char_idx_left(&self.data, self.tab_width);
+        } else {
+            view.cursor.sync_global_x(&self.data, self.tab_width);
+        }
+    }
+
+    pub(crate) fn move_view_cursor_left(&mut self, id: &BufferViewID, n: usize) {
+        let view = self.views.get_mut(id).unwrap();
+        if view.cursor.line_cidx <= n {
+            view.cursor.char_idx -= view.cursor.line_cidx;
+            view.cursor.line_cidx = 0;
+            view.cursor.line_gidx = 0;
+            view.cursor.line_global_x = 0;
+        } else {
+            view.cursor.line_cidx -= n;
+            view.cursor
+                .sync_line_cidx_gidx_left(&self.data, self.tab_width);
+        }
+    }
+
+    pub(crate) fn move_view_cursor_right(&mut self, id: &BufferViewID, n: usize) {
+        let view = self.views.get_mut(id).unwrap();
+        view.cursor.line_cidx += n;
+        view.cursor
+            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
     }
 
     pub(super) fn empty(
@@ -107,7 +154,7 @@ impl Buffer {
         self.shaped_lines.clear();
         let shaper = &mut *self.text_shaper.borrow_mut();
         for line in self.data.lines() {
-            let trimmed = trim_newlines(line);
+            let trimmed = rope_trim_newlines(line);
             let len_chars = trimmed.len_chars();
             let shaped = shaper.shape_line_rope(
                 trimmed,
@@ -122,16 +169,4 @@ impl Buffer {
             self.shaped_lines.push(shaped);
         }
     }
-}
-
-fn trim_newlines<'a>(line: RopeSlice<'a>) -> RopeSlice<'a> {
-    let mut nchars = line.len_chars();
-    let mut chars = line.chars_at(line.len_chars());
-    while let Some(c) = chars.prev() {
-        match c {
-            '\n' | '\x0b' | '\x0c' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}' => nchars -= 1,
-            _ => break,
-        }
-    }
-    line.slice(..nchars)
 }

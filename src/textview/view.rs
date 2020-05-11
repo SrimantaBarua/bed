@@ -17,10 +17,31 @@ struct TextView {
 }
 
 impl TextView {
-    fn move_cursor(&mut self, dirn: crate::Direction) {
+    fn move_cursor_up(&mut self, n: usize) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor(&self.id, dirn);
+            buffer.move_view_cursor_up(&self.id, n);
+        }
+    }
+
+    fn move_cursor_down(&mut self, n: usize) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.move_view_cursor_down(&self.id, n);
+        }
+    }
+
+    fn move_cursor_left(&mut self, n: usize) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.move_view_cursor_left(&self.id, n);
+        }
+    }
+
+    fn move_cursor_right(&mut self, n: usize) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.move_view_cursor_right(&self.id, n);
         }
     }
 
@@ -61,8 +82,20 @@ pub(crate) struct TextPane {
 }
 
 impl TextPane {
-    pub(crate) fn move_cursor(&mut self, dirn: crate::Direction) {
-        self.views[self.active].move_cursor(dirn);
+    pub(crate) fn move_cursor_up(&mut self, n: usize) {
+        self.views[self.active].move_cursor_up(n);
+    }
+
+    pub(crate) fn move_cursor_down(&mut self, n: usize) {
+        self.views[self.active].move_cursor_down(n);
+    }
+
+    pub(crate) fn move_cursor_left(&mut self, n: usize) {
+        self.views[self.active].move_cursor_left(n);
+    }
+
+    pub(crate) fn move_cursor_right(&mut self, n: usize) {
+        self.views[self.active].move_cursor_right(n);
     }
 
     pub(super) fn new(

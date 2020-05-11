@@ -108,7 +108,12 @@ impl Bed {
 
     fn move_cursor(&mut self, dirn: Direction) {
         let textpane = self.textview_tree.active_mut();
-        textpane.move_cursor(dirn);
+        match dirn {
+            Direction::Up => textpane.move_cursor_up(1),
+            Direction::Down => textpane.move_cursor_down(1),
+            Direction::Left => textpane.move_cursor_left(1),
+            Direction::Right => textpane.move_cursor_right(1),
+        }
     }
 }
 

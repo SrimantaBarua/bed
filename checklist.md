@@ -3,6 +3,11 @@
   - [ ] Block
   - [ ] Underline
 - [ ] Cursor motion
+  - [x] Basic 1-unit movement
+  - [ ] PageUp / PageDown
+  - [ ] Start / End of line
+  - [ ] Go to line
+- [ ] Multiple cursors
 - [ ] Insert character
 - [ ] Delete character
 - [ ] Modal editing
