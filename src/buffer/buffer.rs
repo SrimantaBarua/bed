@@ -115,6 +115,26 @@ impl Buffer {
         view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
     }
 
+    // -------- View edits -----------------
+
+    pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
+        let (cidx, linum) = {
+            let view = self.views.get_mut(id).unwrap();
+            self.data.insert_char(view.cursor.char_idx, c);
+            (view.cursor.char_idx, view.cursor.line_num)
+        };
+        for view in self.views.values_mut() {
+            if view.cursor.char_idx >= cidx {
+                view.cursor.char_idx += 1;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+                // TODO: Ensure we've shaped till here
+                view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
+            }
+        }
+        self.shape_text_from_linum(linum)
+    }
+
     // -------- Create buffer ----------------
     pub(super) fn empty(
         text_shaper: Arc<Mutex<TextShaper>>,
@@ -122,7 +142,7 @@ impl Buffer {
         text_size: TextSize,
         dpi: Size2D<u32, DPI>,
     ) -> Buffer {
-        let mut buf = Buffer {
+        let mut ret = Buffer {
             text_size: text_size,
             face_key: face_key,
             tab_width: 8,
@@ -132,8 +152,8 @@ impl Buffer {
             shaped_lines: Arc::new(Mutex::new(Vec::new())),
             views: FnvHashMap::default(),
         };
-        buf.shape_text();
-        buf
+        ret.shape_text_from_linum(0);
+        ret
     }
 
     pub(super) fn from_file(
@@ -156,7 +176,7 @@ impl Buffer {
                     shaped_lines: Arc::new(Mutex::new(Vec::new())),
                     views: FnvHashMap::default(),
                 };
-                ret.shape_text();
+                ret.shape_text_from_linum(0);
                 ret
             })
     }
@@ -167,7 +187,8 @@ impl Buffer {
             .map(|rope| self.data = rope)
     }
 
-    fn shape_text(&mut self) {
+    // -------- Shape text ----------------
+    fn shape_text_from_linum(&mut self, start_linum: usize) {
         let shaper = Arc::clone(&self.text_shaper);
         let shaped_lines = Arc::clone(&self.shaped_lines);
 
@@ -186,10 +207,10 @@ impl Buffer {
 
             // Shape first SYNC_HL_LINES lines
             {
-                let mut linum = 0;
+                let mut linum = start_linum;
                 let mut shaper = shaper.lock().unwrap();
                 let mut shaped_lines = shaped_lines.lock().unwrap();
-                shaped_lines.clear();
+                shaped_lines.truncate(start_linum);
 
                 for line in rope.lines() {
                     let trimmed = rope_trim_newlines(line);

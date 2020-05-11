@@ -15,7 +15,12 @@
   - [x] Snap horizontally
 - [ ] Multiple cursors
 - [ ] Insert character
+  - [x] Basic characters
+  - [ ] Tab
+  - [ ] Newline
 - [ ] Delete character
+  - [ ] Backspace
+  - [ ] Delete
 - [ ] Modal editing
   - [ ] Actions, text objects, motions
 - [ ] Prompt

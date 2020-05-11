@@ -97,6 +97,7 @@ impl Bed {
                     | WindowEvent::Key(Key::Right, _, Action::Repeat, _) => {
                         bed.move_cursor(Direction::Right)
                     }
+                    WindowEvent::Char(c) => bed.insert_char(c),
                     _ => {}
                 }
             }
@@ -105,6 +106,11 @@ impl Bed {
             bed.window.swap_buffers();
             glfw.poll_events();
         }
+    }
+
+    fn insert_char(&mut self, c: char) {
+        let textpane = self.textview_tree.active_mut();
+        textpane.insert_char(c);
     }
 
     fn move_cursor(&mut self, dirn: Direction) {

@@ -45,6 +45,13 @@ impl TextView {
         }
     }
 
+    fn insert_char(&mut self, c: char) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.view_insert_char(&self.id, c);
+        }
+    }
+
     fn new(rect: Rect<u32, PixelSize>, buffer: Rc<RefCell<Buffer>>, id: BufferViewID) -> TextView {
         {
             let buffer = &mut *buffer.borrow_mut();
@@ -96,6 +103,10 @@ impl TextPane {
 
     pub(crate) fn move_cursor_right(&mut self, n: usize) {
         self.views[self.active].move_cursor_right(n);
+    }
+
+    pub(crate) fn insert_char(&mut self, c: char) {
+        self.views[self.active].insert_char(c);
     }
 
     pub(super) fn new(
