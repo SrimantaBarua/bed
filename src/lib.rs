@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use euclid::{size2, Size2D};
-use glfw::WindowEvent;
+use glfw::{Action, Key, WindowEvent};
 
 use crate::common::PixelSize;
 
@@ -38,13 +38,11 @@ pub struct Bed {
     textview_tree: textview::TextTree,
     painter: painter::Painter,
     buffer_mgr: buffer::BufferMgr,
-    events: std::sync::mpsc::Receiver<(f64, WindowEvent)>,
     window: window::Window,
-    glfw: glfw::Glfw,
 }
 
 impl Bed {
-    pub fn new(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) -> Bed {
+    pub fn run(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) {
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
         let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
         let viewable_rect = window.viewable_rect();
@@ -67,32 +65,56 @@ impl Bed {
         let view_id = buffer_mgr.next_view_id();
         let textview_tree = textview::TextTree::new(viewable_rect, buf, view_id);
 
-        Bed {
-            glfw: glfw,
-            events: events,
+        let mut bed = Bed {
             window: window,
             painter: painter,
             buffer_mgr: buffer_mgr,
             textview_tree: textview_tree,
-        }
-    }
+        };
 
-    pub fn run(mut self) {
-        while !self.window.should_close() {
-            for (_, event) in glfw::flush_messages(&self.events) {
+        while !bed.window.should_close() {
+            for (_, event) in glfw::flush_messages(&events) {
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
-                        let viewable_rect = self.window.viewable_rect();
-                        self.painter.resize(size2(w, h).cast(), viewable_rect);
-                        self.textview_tree.set_rect(viewable_rect);
+                        let viewable_rect = bed.window.viewable_rect();
+                        bed.painter.resize(size2(w, h).cast(), viewable_rect);
+                        bed.textview_tree.set_rect(viewable_rect);
+                    }
+                    WindowEvent::Key(Key::Up, _, Action::Press, _)
+                    | WindowEvent::Key(Key::Up, _, Action::Repeat, _) => {
+                        bed.move_cursor(Direction::Up)
+                    }
+                    WindowEvent::Key(Key::Down, _, Action::Press, _)
+                    | WindowEvent::Key(Key::Down, _, Action::Repeat, _) => {
+                        bed.move_cursor(Direction::Down)
+                    }
+                    WindowEvent::Key(Key::Left, _, Action::Press, _)
+                    | WindowEvent::Key(Key::Left, _, Action::Repeat, _) => {
+                        bed.move_cursor(Direction::Left)
+                    }
+                    WindowEvent::Key(Key::Right, _, Action::Press, _)
+                    | WindowEvent::Key(Key::Right, _, Action::Repeat, _) => {
+                        bed.move_cursor(Direction::Right)
                     }
                     _ => {}
                 }
             }
-            self.painter.clear(style::Color::new(0, 0, 0, 0xff));
-            self.textview_tree.draw(&mut self.painter);
-            self.window.swap_buffers();
-            self.glfw.poll_events();
+            bed.painter.clear(style::Color::new(0, 0, 0, 0xff));
+            bed.textview_tree.draw(&mut bed.painter);
+            bed.window.swap_buffers();
+            glfw.poll_events();
         }
     }
+
+    fn move_cursor(&mut self, dirn: Direction) {
+        let textpane = self.textview_tree.active_mut();
+        textpane.move_cursor(dirn);
+    }
+}
+
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
 }

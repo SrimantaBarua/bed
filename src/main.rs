@@ -10,8 +10,7 @@ use ::bed::Bed;
 fn main() {
     let args = parse_args();
     let size = size2(800, 600);
-    let bed = Bed::new(args, size);
-    bed.run();
+    Bed::run(args, size);
 }
 
 fn parse_args() -> clap::ArgMatches<'static> {

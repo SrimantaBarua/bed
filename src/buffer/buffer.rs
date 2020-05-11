@@ -14,6 +14,7 @@ use crate::font::FaceKey;
 use crate::painter::WidgetPainter;
 use crate::style::{Color, TextSize, TextStyle};
 use crate::text::{ShapedText, TextShaper};
+use crate::Direction;
 
 use super::view::BufferView;
 use super::BufferViewID;
@@ -37,6 +38,28 @@ impl Buffer {
 
     pub(crate) fn set_view_rect(&mut self, id: &BufferViewID, rect: Rect<u32, PixelSize>) {
         self.views.get_mut(id).unwrap().rect = rect;
+    }
+
+    pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, dirn: Direction) {
+        let view = self.views.get_mut(id).unwrap();
+        match dirn {
+            Direction::Up => {
+                if view.cursor.line_num > 0 {
+                    view.cursor.line_num -= 1;
+                }
+            }
+            Direction::Down => {
+                if view.cursor.line_num + 1 < self.data.len_lines() {
+                    view.cursor.line_num += 1;
+                }
+            }
+            Direction::Left => {
+                if view.cursor.line_gidx > 0 {
+                    view.cursor.line_gidx -= 1;
+                }
+            }
+            Direction::Right => view.cursor.line_gidx += 1,
+        }
     }
 
     pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {

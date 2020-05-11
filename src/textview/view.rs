@@ -17,6 +17,13 @@ struct TextView {
 }
 
 impl TextView {
+    fn move_cursor(&mut self, dirn: crate::Direction) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.move_view_cursor(&self.id, dirn);
+        }
+    }
+
     fn new(rect: Rect<u32, PixelSize>, buffer: Rc<RefCell<Buffer>>, id: BufferViewID) -> TextView {
         {
             let buffer = &mut *buffer.borrow_mut();
@@ -54,6 +61,10 @@ pub(crate) struct TextPane {
 }
 
 impl TextPane {
+    pub(crate) fn move_cursor(&mut self, dirn: crate::Direction) {
+        self.views[self.active].move_cursor(dirn);
+    }
+
     pub(super) fn new(
         rect: Rect<u32, PixelSize>,
         buffer: Rc<RefCell<Buffer>>,
