@@ -18,7 +18,7 @@ use crate::text::{ShapedText, TextShaper};
 use super::view::BufferView;
 use super::BufferViewID;
 
-const SYNC_HL_LINES: usize = 1000;
+const START_VIEWPORT_HEIGHT: u32 = 4000;
 
 pub(crate) struct Buffer {
     data: Rope,
@@ -118,10 +118,14 @@ impl Buffer {
     // -------- View edits -----------------
 
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
-        let (cidx, linum) = {
+        let (cidx, linum, height) = {
             let view = self.views.get_mut(id).unwrap();
             self.data.insert_char(view.cursor.char_idx, c);
-            (view.cursor.char_idx, view.cursor.line_num)
+            (
+                view.cursor.char_idx,
+                view.cursor.line_num,
+                view.rect.size.height,
+            )
         };
         for view in self.views.values_mut() {
             if view.cursor.char_idx >= cidx {
@@ -132,7 +136,7 @@ impl Buffer {
                 view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
             }
         }
-        self.shape_text_from_linum(linum)
+        self.shape_text(linum, height)
     }
 
     // -------- Create buffer ----------------
@@ -152,7 +156,7 @@ impl Buffer {
             shaped_lines: Arc::new(Mutex::new(Vec::new())),
             views: FnvHashMap::default(),
         };
-        ret.shape_text_from_linum(0);
+        ret.shape_text(0, START_VIEWPORT_HEIGHT);
         ret
     }
 
@@ -176,7 +180,7 @@ impl Buffer {
                     shaped_lines: Arc::new(Mutex::new(Vec::new())),
                     views: FnvHashMap::default(),
                 };
-                ret.shape_text_from_linum(0);
+                ret.shape_text(0, START_VIEWPORT_HEIGHT);
                 ret
             })
     }
@@ -188,7 +192,7 @@ impl Buffer {
     }
 
     // -------- Shape text ----------------
-    fn shape_text_from_linum(&mut self, start_linum: usize) {
+    fn shape_text(&mut self, start_linum: usize, viewport_height: u32) {
         let shaper = Arc::clone(&self.text_shaper);
         let shaped_lines = Arc::clone(&self.shaped_lines);
 
@@ -204,15 +208,16 @@ impl Buffer {
 
         thread::spawn(move || {
             let (lock, cvar) = &*pair2;
+            let mut lines = rope.lines_at(start_linum);
 
             // Shape first SYNC_HL_LINES lines
             {
-                let mut linum = start_linum;
+                let mut height = 0;
                 let mut shaper = shaper.lock().unwrap();
                 let mut shaped_lines = shaped_lines.lock().unwrap();
                 shaped_lines.truncate(start_linum);
 
-                for line in rope.lines() {
+                while let Some(line) = lines.next() {
                     let trimmed = rope_trim_newlines(line);
                     let len_chars = trimmed.len_chars();
                     let shaped = shaper.shape_line_rope(
@@ -225,9 +230,9 @@ impl Buffer {
                         &[(len_chars, Color::new(0, 0, 0, 0xff))],
                         &[(len_chars, None)],
                     );
+                    height += shaped.height() as u32;
                     shaped_lines.push(shaped);
-                    linum += 1;
-                    if linum >= SYNC_HL_LINES {
+                    if height >= viewport_height {
                         break;
                     }
                 }
@@ -238,22 +243,20 @@ impl Buffer {
             }
 
             // Shape the rest of the text
-            if rope.len_lines() > SYNC_HL_LINES {
-                for line in rope.lines_at(SYNC_HL_LINES) {
-                    let trimmed = rope_trim_newlines(line);
-                    let len_chars = trimmed.len_chars();
-                    let shaped = shaper.lock().unwrap().shape_line_rope(
-                        trimmed,
-                        dpi,
-                        tab_width,
-                        &[(len_chars, face_key)],
-                        &[(len_chars, TextStyle::default())],
-                        &[(len_chars, text_size)],
-                        &[(len_chars, Color::new(0, 0, 0, 0xff))],
-                        &[(len_chars, None)],
-                    );
-                    shaped_lines.lock().unwrap().push(shaped);
-                }
+            while let Some(line) = lines.next() {
+                let trimmed = rope_trim_newlines(line);
+                let len_chars = trimmed.len_chars();
+                let shaped = shaper.lock().unwrap().shape_line_rope(
+                    trimmed,
+                    dpi,
+                    tab_width,
+                    &[(len_chars, face_key)],
+                    &[(len_chars, TextStyle::default())],
+                    &[(len_chars, text_size)],
+                    &[(len_chars, Color::new(0, 0, 0, 0xff))],
+                    &[(len_chars, None)],
+                );
+                shaped_lines.lock().unwrap().push(shaped);
             }
         });
 
