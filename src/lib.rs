@@ -64,6 +64,8 @@ impl Bed {
         let view_id = buffer_mgr.next_view_id();
         let textview_tree = textview::TextTree::new(viewable_rect, buf, view_id);
 
+        window.show();
+
         let mut bed = Bed {
             window: window,
             painter: painter,

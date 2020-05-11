@@ -21,6 +21,7 @@ impl Window {
     // Create a new window. Compute monitor DPI. Return Window, DPI, and handle to GLFW events
     pub(crate) fn new(glfw: &mut Glfw, size: Size2D<u32, PixelSize>, title: &str) -> WindowRet {
         // Initialize GLFW
+        glfw.window_hint(WindowHint::Visible(false));
         glfw.window_hint(WindowHint::ContextVersion(3, 3));
         glfw.window_hint(WindowHint::OpenGlProfile(OpenGlProfileHint::Core));
         // Create GLFW window, and calculate DPI
@@ -79,5 +80,10 @@ impl Window {
     // Swap window buffers
     pub(crate) fn swap_buffers(&mut self) {
         self.window.swap_buffers();
+    }
+
+    // Set the window to be visible
+    pub(crate) fn show(&mut self) {
+        self.window.show();
     }
 }
