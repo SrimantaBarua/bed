@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::sync::{Arc, Mutex};
+use std::{thread, time};
 
 use euclid::{size2, Size2D};
 use glfw::{Action, Key, WindowEvent};
@@ -73,8 +74,14 @@ impl Bed {
             textview_tree: textview_tree,
         };
 
+        let mut start = time::Instant::now();
+        let target = time::Duration::from_nanos(1_000_000_000 / 120);
+
         while !bed.window.should_close() {
+            let mut redraw = false;
+
             for (_, event) in glfw::flush_messages(&events) {
+                redraw = true;
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
                         let viewable_rect = bed.window.viewable_rect();
@@ -101,9 +108,19 @@ impl Bed {
                     _ => {}
                 }
             }
-            bed.painter.clear(style::Color::new(0, 0, 0, 0xff));
-            bed.textview_tree.draw(&mut bed.painter);
-            bed.window.swap_buffers();
+
+            let diff = start.elapsed();
+            start = time::Instant::now();
+
+            if redraw {
+                bed.painter.clear(style::Color::new(0, 0, 0, 0xff));
+                bed.textview_tree.draw(&mut bed.painter);
+                bed.window.swap_buffers();
+            }
+
+            if diff < target {
+                thread::sleep(target - diff);
+            }
             glfw.poll_events();
         }
     }
