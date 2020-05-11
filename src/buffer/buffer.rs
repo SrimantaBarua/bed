@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::Result as IOResult;
 use std::rc::Rc;
 
-use euclid::{point2, size2, Rect, Size2D};
+use euclid::{Rect, Size2D};
 use fnv::FnvHashMap;
 use ropey::{Rope, RopeSlice};
 
@@ -14,7 +14,6 @@ use crate::font::FaceKey;
 use crate::painter::WidgetPainter;
 use crate::style::{Color, TextSize, TextStyle};
 use crate::text::{ShapedText, TextShaper};
-use crate::Direction;
 
 use super::view::BufferView;
 use super::BufferViewID;
@@ -40,81 +39,15 @@ impl Buffer {
         self.views.get_mut(id).unwrap().rect = rect;
     }
 
-    pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, dirn: Direction) {
+    pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, dirn: crate::Direction) {
         let view = self.views.get_mut(id).unwrap();
-        match dirn {
-            Direction::Up => {
-                if view.cursor.line_num > 0 {
-                    view.cursor.line_num -= 1;
-                }
-            }
-            Direction::Down => {
-                if view.cursor.line_num + 1 < self.data.len_lines() {
-                    view.cursor.line_num += 1;
-                }
-            }
-            Direction::Left => {
-                if view.cursor.line_gidx > 0 {
-                    view.cursor.line_gidx -= 1;
-                }
-            }
-            Direction::Right => view.cursor.line_gidx += 1,
-        }
+        view.move_cursor(dirn, &self.data);
     }
 
     pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let view = self.views.get(id).unwrap();
-        let mut pos = point2(0, 0);
-        let mut linum = 0;
-        let (cline, cgidx) = (view.cursor.line_num, view.cursor.line_gidx);
-
-        for line in &self.shaped_lines {
-            pos.y += line.metrics.ascender;
-            let mut gidx = 0;
-
-            for (clusters, face, style, size, color, opt_under) in line.styled_iter() {
-                for cluster in clusters {
-                    if pos.x as u32 >= view.rect.size.width {
-                        break;
-                    }
-                    let raster = shaper.get_raster(face, style).unwrap();
-                    let start_x = pos.x;
-                    for gi in cluster.glyph_infos {
-                        painter.glyph(pos + gi.offset, face, gi.gid, size, color, style, raster);
-                        pos.x += gi.advance.width;
-                    }
-                    let width = pos.x - start_x;
-                    if linum == cline && gidx <= cgidx && gidx + cluster.num_graphemes > cgidx {
-                        let cwidth = 2;
-                        let cheight = line.metrics.ascender - line.metrics.descender;
-                        let mut cx = (width * (cgidx - gidx) as i32) / cluster.num_graphemes as i32;
-                        cx += start_x;
-                        let cy = pos.y - line.metrics.ascender;
-                        painter.color_quad(
-                            Rect::new(point2(cx, cy), size2(cwidth, cheight)),
-                            Color::new(0xff, 0x88, 0x22, 0xff),
-                        );
-                    }
-                    if let Some(under) = opt_under {
-                        painter.color_quad(
-                            Rect::new(
-                                point2(start_x, pos.y - line.metrics.underline_position),
-                                size2(width, line.metrics.underline_thickness),
-                            ),
-                            under,
-                        );
-                    }
-                    gidx += cluster.num_graphemes;
-                }
-            }
-            pos.y -= line.metrics.descender;
-            pos.x = 0;
-            if pos.y as u32 >= view.rect.size.height {
-                break;
-            }
-            linum += 1;
-        }
+        view.draw(&self.shaped_lines, shaper, painter);
     }
 
     pub(crate) fn remove_view(&mut self, id: &BufferViewID) {
