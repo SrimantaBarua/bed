@@ -12,7 +12,7 @@
   - [ ] Go to line
 - [ ] Snap to cursor
   - [x] Snap to line
-  - [ ] Snap horizontally
+  - [x] Snap horizontally
 - [ ] Multiple cursors
 - [ ] Insert character
 - [ ] Delete character

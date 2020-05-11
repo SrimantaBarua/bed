@@ -11,6 +11,8 @@ use crate::painter::WidgetPainter;
 use crate::style::Color;
 use crate::text::{ShapedText, TextShaper};
 
+const CURSOR_WIDTH: i32 = 2;
+
 pub(super) struct Cursor {
     pub(super) char_idx: usize,
     pub(super) line_num: usize,
@@ -103,6 +105,7 @@ pub(super) struct BufferView {
     pub(super) cursor: Cursor,
     pub(super) start_line: usize,
     pub(super) yoff: u32,
+    pub(super) xoff: u32,
 }
 
 impl BufferView {
@@ -112,25 +115,50 @@ impl BufferView {
             cursor: Cursor::default(),
             start_line: 0,
             yoff: 0,
+            xoff: 0,
         }
     }
 
     pub(super) fn snap_to_cursor(&mut self, shaped_lines: &[ShapedText]) {
+        // Sync Y
         if self.start_line >= self.cursor.line_num {
             self.start_line = self.cursor.line_num;
             self.yoff = 0;
-            return;
-        }
-        let mut i = self.cursor.line_num;
-        let mut height = shaped_lines[i].height();
-        while i > self.start_line {
-            if height >= self.rect.size.height as i32 {
-                self.start_line = i;
-                self.yoff = height as u32 - self.rect.size.height;
-                return;
+        } else {
+            let mut i = self.cursor.line_num;
+            let mut height = shaped_lines[i].height();
+            while i > self.start_line {
+                if height >= self.rect.size.height as i32 {
+                    self.start_line = i;
+                    self.yoff = height as u32 - self.rect.size.height;
+                    return;
+                }
+                i -= 1;
+                height += shaped_lines[i].height();
             }
-            i -= 1;
-            height += shaped_lines[i].height();
+        }
+        // Sync X
+        let line = &shaped_lines[self.cursor.line_num];
+        let mut gidx = 0;
+        let mut cursor_x = 0;
+        let cgidx = self.cursor.line_gidx;
+        for (clusters, _, _, _, _, _) in line.styled_iter() {
+            for clus in clusters {
+                let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
+                if gidx + clus.num_graphemes <= cgidx {
+                    gidx += clus.num_graphemes;
+                    cursor_x += width;
+                } else {
+                    cursor_x += width * ((cgidx - gidx) as i32) / clus.num_graphemes as i32;
+                    break;
+                }
+            }
+        }
+        let cursor_x = if cursor_x < 0 { 0u32 } else { cursor_x as u32 };
+        if cursor_x < self.xoff {
+            self.xoff = cursor_x;
+        } else if cursor_x + CURSOR_WIDTH as u32 >= self.xoff + self.rect.size.width {
+            self.xoff = cursor_x + CURSOR_WIDTH as u32 - self.rect.size.width;
         }
     }
 
@@ -140,7 +168,7 @@ impl BufferView {
         shaper: &mut TextShaper,
         painter: &mut WidgetPainter,
     ) {
-        let mut pos = point2(0, -(self.yoff as i32));
+        let mut pos = point2(-(self.xoff as i32), -(self.yoff as i32));
         let mut linum = 0;
         let (cline, cgidx) = (
             self.cursor.line_num - self.start_line,
@@ -152,18 +180,26 @@ impl BufferView {
 
             for (clusters, face, style, size, color, opt_under) in line.styled_iter() {
                 for cluster in clusters {
-                    if pos.x as u32 >= self.rect.size.width {
+                    if pos.x >= self.rect.size.width as i32 {
                         break;
                     }
                     let raster = shaper.get_raster(face, style).unwrap();
                     let start_x = pos.x;
                     for gi in cluster.glyph_infos {
+                        if pos.x + gi.offset.width + gi.advance.width <= 0 {
+                            pos.x += gi.advance.width;
+                            continue;
+                        }
                         painter.glyph(pos + gi.offset, face, gi.gid, size, color, style, raster);
                         pos.x += gi.advance.width;
                     }
+                    if pos.x <= 0 {
+                        gidx += cluster.num_graphemes;
+                        continue;
+                    }
                     let width = pos.x - start_x;
                     if linum == cline && gidx <= cgidx && gidx + cluster.num_graphemes > cgidx {
-                        let cwidth = 2;
+                        let cwidth = CURSOR_WIDTH;
                         let cheight = line.metrics.ascender - line.metrics.descender;
                         let mut cx = (width * (cgidx - gidx) as i32) / cluster.num_graphemes as i32;
                         cx += start_x;
@@ -195,7 +231,7 @@ impl BufferView {
                 );
             }
             pos.y -= line.metrics.descender;
-            pos.x = 0;
+            pos.x = -(self.xoff as i32);
             if pos.y as u32 >= self.rect.size.height {
                 break;
             }

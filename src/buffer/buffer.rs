@@ -102,6 +102,8 @@ impl Buffer {
             view.cursor
                 .sync_line_cidx_gidx_left(&self.data, self.tab_width);
         }
+        // TODO: Ensure we've shaped till here
+        view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
     }
 
     pub(crate) fn move_view_cursor_right(&mut self, id: &BufferViewID, n: usize) {
@@ -109,6 +111,8 @@ impl Buffer {
         view.cursor.line_cidx += n;
         view.cursor
             .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+        // TODO: Ensure we've shaped till here
+        view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
     }
 
     // -------- Create buffer ----------------
