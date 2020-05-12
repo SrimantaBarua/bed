@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use euclid::{size2, Rect};
 
-use crate::buffer::{Buffer, BufferViewID};
+use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
 use crate::painter::Painter;
 use crate::style::Color;
@@ -21,15 +21,15 @@ pub(crate) struct TextTree {
 
 impl TextTree {
     pub(crate) fn new(
-        rect: Rect<u32, PixelSize>,
+        view_params: BufferViewCreateParams,
         buf: Rc<RefCell<Buffer>>,
         view_id: BufferViewID,
     ) -> TextTree {
         TextTree {
             bg_color: Color::new(0, 0, 0, 0xff),
-            rect: rect,
+            rect: view_params.rect,
             border_width: 1,
-            root: Node::new_leaf(rect, buf, view_id),
+            root: Node::new_leaf(view_params, buf, view_id),
         }
     }
 
@@ -76,12 +76,16 @@ struct Node {
 }
 
 impl Node {
-    fn new_leaf(rect: Rect<u32, PixelSize>, buf: Rc<RefCell<Buffer>>, id: BufferViewID) -> Node {
+    fn new_leaf(
+        view_params: BufferViewCreateParams,
+        buf: Rc<RefCell<Buffer>>,
+        id: BufferViewID,
+    ) -> Node {
         Node {
             split: Split::None,
             children: Vec::new(),
             active: 0,
-            opt_view: Some(TextPane::new(rect, buf, id)),
+            opt_view: Some(TextPane::new(view_params, buf, id)),
         }
     }
 

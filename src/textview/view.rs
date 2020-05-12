@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use euclid::Rect;
 
-use crate::buffer::{Buffer, BufferViewID};
+use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
 use crate::painter::{Painter, WidgetPainter};
 use crate::style::Color;
@@ -66,10 +66,14 @@ impl TextView {
         }
     }
 
-    fn new(rect: Rect<u32, PixelSize>, buffer: Rc<RefCell<Buffer>>, id: BufferViewID) -> TextView {
+    fn new(
+        view_params: BufferViewCreateParams,
+        buffer: Rc<RefCell<Buffer>>,
+        id: BufferViewID,
+    ) -> TextView {
         {
             let buffer = &mut *buffer.borrow_mut();
-            buffer.new_view(&id, rect);
+            buffer.new_view(&id, view_params);
         }
         TextView { buffer, id }
     }
@@ -97,7 +101,7 @@ impl Drop for TextView {
 }
 
 pub(crate) struct TextPane {
-    rect: Rect<u32, PixelSize>,
+    params: BufferViewCreateParams,
     views: Vec<TextView>,
     active: usize,
 }
@@ -132,41 +136,41 @@ impl TextPane {
     }
 
     pub(super) fn new(
-        rect: Rect<u32, PixelSize>,
+        view_params: BufferViewCreateParams,
         buffer: Rc<RefCell<Buffer>>,
         view_id: BufferViewID,
     ) -> TextPane {
-        let views = vec![TextView::new(rect, buffer, view_id)];
+        let views = vec![TextView::new(view_params.clone(), buffer, view_id)];
         TextPane {
             views,
             active: 0,
-            rect,
+            params: view_params,
         }
     }
 
     pub(super) fn clone(&self, view_id: BufferViewID) -> TextPane {
         let views = vec![TextView::new(
-            self.rect,
+            self.params.clone(),
             self.views[self.active].buffer.clone(),
             view_id,
         )];
-        let rect = self.rect;
         TextPane {
             views,
             active: 0,
-            rect,
+            params: self.params.clone(),
         }
     }
 
     pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
-        self.rect = rect;
+        self.params.rect = rect;
         for v in &mut self.views {
             v.set_rect(rect);
         }
     }
 
     pub(super) fn draw(&self, painter: &mut Painter) {
-        let mut widget = painter.widget_ctx(self.rect.cast(), Color::new(0xff, 0xff, 0xff, 0xff));
+        let mut widget =
+            painter.widget_ctx(self.params.rect.cast(), Color::new(0xff, 0xff, 0xff, 0xff));
         self.views[self.active].draw(&mut widget);
     }
 }

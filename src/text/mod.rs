@@ -36,8 +36,8 @@ impl ShapedText {
         }
     }
 
-    pub(crate) fn height(&self) -> i32 {
-        self.metrics.ascender - self.metrics.descender
+    pub(crate) fn height(&self) -> u32 {
+        (self.metrics.ascender - self.metrics.descender) as u32
     }
 
     fn default() -> ShapedText {

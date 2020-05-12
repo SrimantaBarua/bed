@@ -3,24 +3,13 @@
 use std::cell::RefCell;
 use std::io::Result as IOResult;
 use std::rc::{Rc, Weak};
-use std::sync::{Arc, Mutex};
 
-use euclid::Size2D;
 use fnv::FnvHashMap;
-
-use crate::common::DPI;
-use crate::font::FaceKey;
-use crate::style::TextSize;
-use crate::text::TextShaper;
 
 use super::buffer::Buffer;
 use super::BufferViewID;
 
 pub(crate) struct BufferMgr {
-    dpi: Size2D<u32, DPI>,
-    text_shaper: Arc<Mutex<TextShaper>>,
-    face_key: FaceKey,
-    text_size: TextSize,
     buffers: FnvHashMap<String, Weak<RefCell<Buffer>>>,
     next_view_id: usize,
 }
@@ -28,29 +17,15 @@ pub(crate) struct BufferMgr {
 // TODO: Periodically clear out Weak buffers with a strong count of 0
 
 impl BufferMgr {
-    pub(crate) fn new(
-        text_shaper: Arc<Mutex<TextShaper>>,
-        face_key: FaceKey,
-        text_size: TextSize,
-        dpi: Size2D<u32, DPI>,
-    ) -> BufferMgr {
+    pub(crate) fn new() -> BufferMgr {
         BufferMgr {
-            dpi: dpi,
-            text_shaper: text_shaper,
-            face_key: face_key,
-            text_size: text_size,
             buffers: FnvHashMap::default(),
             next_view_id: 0,
         }
     }
 
     pub(crate) fn empty(&mut self) -> Rc<RefCell<Buffer>> {
-        Rc::new(RefCell::new(Buffer::empty(
-            self.text_shaper.clone(),
-            self.face_key,
-            self.text_size,
-            self.dpi,
-        )))
+        Rc::new(RefCell::new(Buffer::empty()))
     }
 
     pub(crate) fn from_file(&mut self, path: &str) -> IOResult<Rc<RefCell<Buffer>>> {
@@ -63,14 +38,7 @@ impl BufferMgr {
                     .map(|_| buffer.clone())
             })
             .unwrap_or_else(|| {
-                Buffer::from_file(
-                    path,
-                    self.text_shaper.clone(),
-                    self.face_key,
-                    self.text_size,
-                    self.dpi,
-                )
-                .map(|buffer| {
+                Buffer::from_file(path).map(|buffer| {
                     let buffer = Rc::new(RefCell::new(buffer));
                     self.buffers.insert(path.to_owned(), Rc::downgrade(&buffer));
                     buffer

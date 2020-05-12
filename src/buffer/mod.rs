@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 mod buffer;
+mod cursor;
 mod mgr;
 mod view;
 
@@ -15,3 +16,4 @@ impl BufferViewID {
 
 pub(crate) use buffer::Buffer;
 pub(crate) use mgr::BufferMgr;
+pub(crate) use view::BufferViewCreateParams;

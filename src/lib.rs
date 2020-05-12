@@ -1,12 +1,11 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::{thread, time};
 
 use euclid::{size2, Size2D};
 use glfw::{Action, Key, WindowEvent};
-
-use crate::common::PixelSize;
 
 mod buffer;
 mod common;
@@ -17,6 +16,9 @@ mod style;
 mod text;
 mod textview;
 mod window;
+
+use buffer::BufferViewCreateParams;
+use common::PixelSize;
 
 fn abspath(spath: &str) -> String {
     use std::env;
@@ -52,9 +54,9 @@ impl Bed {
         let mut font_core = font::FontCore::new().unwrap();
         let face_key = font_core.find("monospace").unwrap();
         let text_size = style::TextSize::from_f32(7.5);
-        let text_shaper = Arc::new(Mutex::new(text::TextShaper::new(font_core)));
+        let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
-        let mut buffer_mgr = buffer::BufferMgr::new(text_shaper, face_key, text_size, dpi);
+        let mut buffer_mgr = buffer::BufferMgr::new();
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))
@@ -63,7 +65,14 @@ impl Bed {
         };
 
         let view_id = buffer_mgr.next_view_id();
-        let textview_tree = textview::TextTree::new(viewable_rect, buf, view_id);
+        let view_params = BufferViewCreateParams {
+            face_key,
+            text_size,
+            dpi,
+            text_shaper,
+            rect: viewable_rect,
+        };
+        let textview_tree = textview::TextTree::new(view_params, buf, view_id);
 
         window.show();
 

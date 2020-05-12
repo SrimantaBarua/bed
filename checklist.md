@@ -1,7 +1,11 @@
-- [ ] Parallel shaping
-  - [x] Spawn shaper thread on load
-  - [ ] On-demand shaping when navigating to line
-  - [ ] Shaping worker pool
+- [x] Shape text per view
+  - [x] Only as visible on viewport
+  - [x] Update range of shaped lines on scroll
+  - [x] On edit, only reshape required line(s). Send to all views, ignore as appropriate
+    - [x] Normal edit, just current line
+    - [x] Newline - reshape current line, insert new line
+    - [x] Delete line - reshape current line, delete next line
+  - [x] We're using fixed faces and text sizes. Take advantage of that and assume uniform line heights
 - [ ] Cursor rendering
   - [x] Line
   - [ ] Block
