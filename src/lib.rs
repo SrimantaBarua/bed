@@ -109,6 +109,8 @@ impl Bed {
                     WindowEvent::Key(Key::Tab, _, Action::Press, _)
                     | WindowEvent::Key(Key::Tab, _, Action::Repeat, _) => bed.insert_char('\t'),
                     WindowEvent::Char(c) => bed.insert_char(c),
+                    WindowEvent::Key(Key::Backspace, _, Action::Press, _)
+                    | WindowEvent::Key(Key::Backspace, _, Action::Repeat, _) => bed.delete_left(),
                     _ => {}
                 }
             }
@@ -132,6 +134,11 @@ impl Bed {
     fn insert_char(&mut self, c: char) {
         let textpane = self.textview_tree.active_mut();
         textpane.insert_char(c);
+    }
+
+    fn delete_left(&mut self) {
+        let textpane = self.textview_tree.active_mut();
+        textpane.delete_left();
     }
 
     fn move_cursor(&mut self, dirn: Direction) {

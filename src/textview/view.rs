@@ -52,6 +52,13 @@ impl TextView {
         }
     }
 
+    fn delete_left(&mut self) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.view_delete_left(&self.id);
+        }
+    }
+
     fn new(rect: Rect<u32, PixelSize>, buffer: Rc<RefCell<Buffer>>, id: BufferViewID) -> TextView {
         {
             let buffer = &mut *buffer.borrow_mut();
@@ -107,6 +114,10 @@ impl TextPane {
 
     pub(crate) fn insert_char(&mut self, c: char) {
         self.views[self.active].insert_char(c);
+    }
+
+    pub(crate) fn delete_left(&mut self) {
+        self.views[self.active].delete_left();
     }
 
     pub(super) fn new(

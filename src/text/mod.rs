@@ -157,7 +157,7 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
         if self.unders[0].0 == minidx {
             self.unders = &self.unders[1..];
         }
-        let mut cii = if minidx == self.glyphs.len() {
+        let cii = if minidx == self.glyphs.len() {
             self.cursor_positions.len()
         } else {
             let mut cii = 0;

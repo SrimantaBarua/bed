@@ -117,15 +117,12 @@ impl Buffer {
 
     // -------- View edits -----------------
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
-        let (cidx, linum, height) = {
-            let view = self.views.get_mut(id).unwrap();
-            self.data.insert_char(view.cursor.char_idx, c);
-            (
-                view.cursor.char_idx,
-                view.cursor.line_num,
-                view.rect.size.height,
-            )
-        };
+        let view = self.views.get_mut(id).unwrap();
+        self.data.insert_char(view.cursor.char_idx, c);
+        let cidx = view.cursor.char_idx;
+        let linum = view.cursor.line_num;
+        let height = view.rect.size.height;
+        self.shape_text(linum, height);
         for view in self.views.values_mut() {
             if view.cursor.char_idx >= cidx {
                 view.cursor.char_idx += 1;
@@ -135,7 +132,30 @@ impl Buffer {
                 view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
             }
         }
-        self.shape_text(linum, height)
+    }
+
+    pub(crate) fn view_delete_left(&mut self, id: &BufferViewID) {
+        let view = self.views.get_mut(id).unwrap();
+        if view.cursor.char_idx == 0 {
+            return;
+        }
+        let cidx = view.cursor.char_idx;
+        self.data.remove(cidx - 1..cidx);
+        let mut linum = view.cursor.line_num;
+        if view.cursor.line_cidx == 0 {
+            linum -= 1;
+        }
+        let height = view.rect.size.height;
+        self.shape_text(linum, height);
+        for view in self.views.values_mut() {
+            if view.cursor.char_idx >= cidx {
+                view.cursor.char_idx -= 1;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+                // TODO: Ensure we've shaped till here
+                view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
+            }
+        }
     }
 
     // -------- Create buffer ----------------
