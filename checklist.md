@@ -1,6 +1,7 @@
 - [ ] Parallel shaping
   - [x] Spawn shaper thread on load
   - [ ] On-demand shaping when navigating to line
+  - [ ] Shaping worker pool
 - [ ] Cursor rendering
   - [x] Line
   - [ ] Block
@@ -18,9 +19,9 @@
   - [x] Basic characters
   - [x] Tab
   - [x] Newline
-- [ ] Delete character
-  - [ ] Backspace
-  - [ ] Delete
+- [x] Delete character
+  - [x] Backspace
+  - [x] Delete
 - [ ] Modal editing
   - [ ] Actions, text objects, motions
 - [ ] Prompt
