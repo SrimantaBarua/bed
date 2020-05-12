@@ -158,6 +158,29 @@ impl Buffer {
         }
     }
 
+    pub(crate) fn view_delete_right(&mut self, id: &BufferViewID) {
+        let view = self.views.get_mut(id).unwrap();
+        if view.cursor.char_idx == self.data.len_chars() {
+            return;
+        }
+        let cidx = view.cursor.char_idx;
+        self.data.remove(cidx..cidx + 1);
+        let linum = view.cursor.line_num;
+        let height = view.rect.size.height;
+        self.shape_text(linum, height);
+        for view in self.views.values_mut() {
+            if view.cursor.char_idx < cidx {
+                continue;
+            } else if view.cursor.char_idx > cidx {
+                view.cursor.char_idx -= 1;
+            }
+            view.cursor
+                .sync_and_update_char_idx_left(&self.data, self.tab_width);
+            // TODO: Ensure we've shaped till here
+            view.snap_to_cursor(&self.shaped_lines.lock().unwrap());
+        }
+    }
+
     // -------- Create buffer ----------------
     pub(super) fn empty(
         text_shaper: Arc<Mutex<TextShaper>>,
