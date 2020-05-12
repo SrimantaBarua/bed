@@ -106,6 +106,8 @@ impl Bed {
                     }
                     WindowEvent::Key(Key::Enter, _, Action::Press, _)
                     | WindowEvent::Key(Key::Enter, _, Action::Repeat, _) => bed.insert_char('\n'),
+                    WindowEvent::Key(Key::Tab, _, Action::Press, _)
+                    | WindowEvent::Key(Key::Tab, _, Action::Repeat, _) => bed.insert_char('\t'),
                     WindowEvent::Char(c) => bed.insert_char(c),
                     _ => {}
                 }

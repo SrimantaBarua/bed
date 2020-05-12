@@ -57,12 +57,18 @@ impl TextShaper {
         let mut ret = ShapedText::default();
 
         let mut last_cursor_position = 0;
-        ret.cursor_positions
-            .extend(RopeGraphemes::new(&line).map(|g| {
-                let ret = last_cursor_position;
+        for g in RopeGraphemes::new(&line) {
+            if g == "\t" {
+                let next_tab = (last_cursor_position / tab_width) * tab_width + tab_width;
+                while last_cursor_position < next_tab {
+                    ret.cursor_positions.push(last_cursor_position);
+                    last_cursor_position += 1;
+                }
+            } else {
+                ret.cursor_positions.push(last_cursor_position);
                 last_cursor_position += g.len_chars();
-                ret
-            }));
+            }
+        }
 
         let input_iter = InputRangesIter {
             slice: line,
@@ -75,21 +81,37 @@ impl TextShaper {
         };
 
         let mut cidx = 0;
+        let mut x = 0;
 
         'outer: for (slice, base_face, style, size, color, under) in
             input_iter.filter(|x| x.0.len_chars() > 0)
         {
             let mut chars = slice.chars().peekable();
             let first_char = chars.next().unwrap();
-            let face_key = self
-                .font_core
-                .find_for_char(base_face, first_char)
-                .unwrap_or(base_face);
+            let face_key = if first_char == '\t' {
+                self.font_core
+                    .find_for_char(base_face, ' ')
+                    .unwrap_or(base_face)
+            } else {
+                self.font_core
+                    .find_for_char(base_face, first_char)
+                    .unwrap_or(base_face)
+            };
 
             let (buf, font) = self.font_core.get(face_key, style).unwrap();
             buf.clear_contents();
-            buf.add(first_char, cidx);
-            cidx += 1;
+            if first_char == '\t' {
+                let next_tab = (x / tab_width) * tab_width + tab_width;
+                while x < next_tab {
+                    buf.add(' ', cidx);
+                    cidx += 1;
+                    x += 1;
+                }
+            } else {
+                buf.add(first_char, cidx);
+                cidx += 1;
+                x += 1;
+            }
 
             let face_metrics = font.raster.get_metrics(size, dpi);
             ret.metrics.ascender = max(ret.metrics.ascender, face_metrics.ascender);
@@ -102,11 +124,25 @@ impl TextShaper {
             );
 
             while let Some(c) = chars.peek() {
-                if font.raster.has_glyph_for_char(*c) {
-                    buf.add(*c, cidx);
-                    cidx += 1;
-                    chars.next();
-                    continue;
+                if *c == '\t' {
+                    if font.raster.has_glyph_for_char(' ') {
+                        let next_tab = (x / tab_width) * tab_width + tab_width;
+                        while x < next_tab {
+                            buf.add(' ', cidx);
+                            cidx += 1;
+                            x += 1;
+                        }
+                        chars.next();
+                        continue;
+                    }
+                } else {
+                    if font.raster.has_glyph_for_char(*c) {
+                        buf.add(*c, cidx);
+                        cidx += 1;
+                        x += 1;
+                        chars.next();
+                        continue;
+                    }
                 }
                 font.shaper.set_scale(size, dpi);
                 buf.guess_segment_properties();

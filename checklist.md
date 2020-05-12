@@ -16,7 +16,7 @@
 - [ ] Multiple cursors
 - [ ] Insert character
   - [x] Basic characters
-  - [ ] Tab
+  - [x] Tab
   - [x] Newline
 - [ ] Delete character
   - [ ] Backspace
@@ -32,6 +32,10 @@
 - [ ] Render in "layers". This will make it easy to implement shadows
 - [ ] Syntax highlighting
   - [ ] Parse tree - generic node types
-  - [ ] Parsers for specific languages
+    - [ ] Parsers for specific languages
+  - [ ] Alternative - TextMate grammars? Syntect?
+  - [ ] On-demand syntax highlighting when jumping? Possible?
+    - [ ] If yes, mark regions of highlighted text as "dirty" / "clear"
+    - [ ] API to change color/underline of shaped lines without reshaping
 - [ ]  Plugins. API? Scripting? Related to config
   - [ ] LSP for completion
