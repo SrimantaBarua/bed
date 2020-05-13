@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use euclid::{point2, size2, Rect, Size2D};
+use euclid::{point2, size2, Point2D, Rect, Size2D};
 use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
@@ -74,6 +74,42 @@ impl BufferView {
         };
         view.fill_or_truncate_view(data);
         view
+    }
+
+    pub(super) fn move_cursor_to_point(
+        &mut self,
+        mut point: Point2D<u32, PixelSize>,
+        data: &Rope,
+        tab_width: usize,
+    ) {
+        assert!(self.rect.contains(point));
+        point.y -= self.rect.origin.y;
+        point.x -= self.rect.origin.x;
+        point.y += self.yoff;
+        point.x += self.xoff;
+        let mut linum = (point.y / self.height) as usize;
+        if linum >= data.len_lines() {
+            linum = data.len_lines() - 1;
+        }
+        self.cursor.line_num = self.start_line + linum;
+        let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
+        let (mut gidx, mut x) = (0, 0);
+        'outer: for (clusters, _, _, _, _, _) in line.styled_iter() {
+            for clus in clusters {
+                let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
+                if x + width < point.x as i32 {
+                    x += width;
+                    gidx += clus.num_graphemes;
+                    continue;
+                }
+                let rem_width = point.x as i32 - x;
+                gidx += ((rem_width * clus.num_graphemes as i32) / width) as usize;
+                break 'outer;
+            }
+        }
+        self.cursor.line_gidx = gidx;
+        self.cursor.sync_gidx(data, tab_width);
+        self.snap_to_cursor(data);
     }
 
     pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>, data: &Rope) {
@@ -341,10 +377,7 @@ impl BufferView {
         }
         cur_height += new_height;
         if cur_height > self.rect.size.height {
-            let mut num_lines = self.rect.size.height / self.height;
-            if self.rect.size.height % self.height > 0 {
-                num_lines += 1;
-            }
+            let num_lines = (self.rect.size.height + self.height - 1) / self.height;
             self.shaped_lines.truncate(num_lines as usize);
         }
     }

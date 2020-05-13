@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::ops::Drop;
 use std::rc::Rc;
 
-use euclid::Rect;
+use euclid::{Point2D, Rect};
 
 use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
@@ -42,6 +42,13 @@ impl TextView {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.move_view_cursor_right(&self.id, n);
+        }
+    }
+
+    fn move_cursor_to_point(&mut self, point: Point2D<u32, PixelSize>) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.move_view_cursor_to_point(&self.id, point);
         }
     }
 
@@ -123,6 +130,10 @@ impl TextPane {
         self.views[self.active].move_cursor_right(n);
     }
 
+    pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<u32, PixelSize>) {
+        self.views[self.active].move_cursor_to_point(point);
+    }
+
     pub(crate) fn insert_char(&mut self, c: char) {
         self.views[self.active].insert_char(c);
     }
@@ -133,6 +144,10 @@ impl TextPane {
 
     pub(crate) fn delete_right(&mut self) {
         self.views[self.active].delete_right();
+    }
+
+    pub(crate) fn rect(&self) -> Rect<u32, PixelSize> {
+        self.params.rect
     }
 
     pub(super) fn new(

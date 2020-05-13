@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::Receiver;
 
-use euclid::{point2, size2, Rect, Size2D};
+use euclid::{point2, size2, Point2D, Rect, Size2D};
 use glfw::{
     Context, Glfw, OpenGlProfileHint, Window as GlfwWindow, WindowEvent, WindowHint, WindowMode,
 };
@@ -85,5 +85,11 @@ impl Window {
     // Set the window to be visible
     pub(crate) fn show(&mut self) {
         self.window.show();
+    }
+
+    // Get the cursor position
+    pub(crate) fn cursor_pos(&self) -> Point2D<u32, PixelSize> {
+        let (x, y) = self.window.get_cursor_pos();
+        point2(x, y).cast()
     }
 }

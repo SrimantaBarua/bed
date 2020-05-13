@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use euclid::{size2, Rect};
+use euclid::{size2, Point2D, Rect};
 
 use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
@@ -59,6 +59,16 @@ impl TextTree {
     pub(crate) fn active_mut(&mut self) -> &mut TextPane {
         self.root.active_mut()
     }
+
+    pub(crate) fn set_active_and_get_from_pos(
+        &mut self,
+        pos: Point2D<u32, PixelSize>,
+    ) -> Option<&mut TextPane> {
+        if !self.rect.contains(pos) {
+            return None;
+        }
+        self.root.set_active_and_get_from_pos(pos)
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -69,6 +79,7 @@ enum Split {
 }
 
 struct Node {
+    rect: Rect<u32, PixelSize>,
     split: Split,
     children: Vec<Node>,
     active: usize,
@@ -82,6 +93,7 @@ impl Node {
         id: BufferViewID,
     ) -> Node {
         Node {
+            rect: view_params.rect,
             split: Split::None,
             children: Vec::new(),
             active: 0,
@@ -91,6 +103,7 @@ impl Node {
 
     fn leaf_with(view: TextPane) -> Node {
         Node {
+            rect: view.rect(),
             split: Split::None,
             children: Vec::new(),
             active: 0,
@@ -159,6 +172,7 @@ impl Node {
     }
 
     fn set_rect(&mut self, rect: Rect<u32, PixelSize>, border_width: u32) {
+        self.rect = rect;
         if self.is_leaf() {
             self.opt_view.as_mut().unwrap().set_rect(rect);
         } else {
@@ -209,6 +223,23 @@ impl Node {
             tv
         } else {
             self.children[self.active].active_mut()
+        }
+    }
+
+    fn set_active_and_get_from_pos(
+        &mut self,
+        pos: Point2D<u32, PixelSize>,
+    ) -> Option<&mut TextPane> {
+        if self.is_leaf() {
+            self.opt_view.as_mut()
+        } else {
+            for i in 0..self.children.len() {
+                if self.children[i].rect.contains(pos) {
+                    self.active = i;
+                    return self.children[i].set_active_and_get_from_pos(pos);
+                }
+            }
+            None
         }
     }
 }

@@ -15,7 +15,12 @@
   - [ ] PageUp / PageDown
   - [ ] Start / End of line
   - [ ] Go to line
-- [ ] Snap to cursor
+- [ ] FS notifications to reload file
+  - [ ] inotify for Linux
+  - [ ] Research Windows, Mac
+  - [ ] Special case, reload config
+- [x] Click to move cursor
+- [x] Snap to cursor
   - [x] Snap to line
   - [x] Snap horizontally
 - [ ] Multiple cursors

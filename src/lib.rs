@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::{thread, time};
 
 use euclid::{size2, Size2D};
-use glfw::{Action, Key, WindowEvent};
+use glfw::{Action, Key, MouseButtonLeft, WindowEvent};
 
 mod buffer;
 mod common;
@@ -84,7 +84,7 @@ impl Bed {
         };
 
         let mut start = time::Instant::now();
-        let target = time::Duration::from_nanos(1_000_000_000 / 120);
+        let target = time::Duration::from_nanos(1_000_000_000 / 60);
 
         while !bed.window.should_close() {
             let mut redraw = false;
@@ -122,6 +122,9 @@ impl Bed {
                     | WindowEvent::Key(Key::Backspace, _, Action::Repeat, _) => bed.delete_left(),
                     WindowEvent::Key(Key::Delete, _, Action::Press, _)
                     | WindowEvent::Key(Key::Delete, _, Action::Repeat, _) => bed.delete_right(),
+                    WindowEvent::MouseButton(MouseButtonLeft, Action::Press, _) => {
+                        bed.move_cursor_to_mouse()
+                    }
                     _ => {}
                 }
             }
@@ -164,6 +167,13 @@ impl Bed {
             Direction::Down => textpane.move_cursor_down(1),
             Direction::Left => textpane.move_cursor_left(1),
             Direction::Right => textpane.move_cursor_right(1),
+        }
+    }
+
+    fn move_cursor_to_mouse(&mut self) {
+        let pos = self.window.cursor_pos();
+        if let Some(view) = self.textview_tree.set_active_and_get_from_pos(pos) {
+            view.move_cursor_to_point(pos);
         }
     }
 }

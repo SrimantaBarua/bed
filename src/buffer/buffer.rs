@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::io::Result as IOResult;
 
-use euclid::Rect;
+use euclid::{Point2D, Rect};
 use fnv::FnvHashMap;
 use ropey::Rope;
 
@@ -95,6 +95,15 @@ impl Buffer {
         view.cursor
             .sync_line_cidx_gidx_right(&self.data, self.tab_width);
         view.snap_to_cursor(&self.data);
+    }
+
+    pub(crate) fn move_view_cursor_to_point(
+        &mut self,
+        id: &BufferViewID,
+        point: Point2D<u32, PixelSize>,
+    ) {
+        let view = self.views.get_mut(id).unwrap();
+        view.move_cursor_to_point(point, &self.data, self.tab_width);
     }
 
     // -------- View edits -----------------
