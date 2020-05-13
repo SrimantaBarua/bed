@@ -141,6 +141,10 @@ impl BufferView {
         }
         self.shaped_lines.remove(linum - self.start_line);
         let shaper = &mut *self.text_shaper.borrow_mut();
+        let last_line = self.start_line + self.shaped_lines.len();
+        if last_line >= data.len_lines() {
+            return;
+        }
         let line = data.line(self.start_line + self.shaped_lines.len());
         let trimmed = rope_trim_newlines(line);
         let len_chars = trimmed.len_chars();
