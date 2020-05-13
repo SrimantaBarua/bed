@@ -47,6 +47,7 @@ impl Bed {
     pub fn run(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) {
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
         let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
+        window.set_cursor(Some(glfw::Cursor::standard(glfw::StandardCursor::IBeam)));
         let viewable_rect = window.viewable_rect();
 
         let painter = painter::Painter::new(size, viewable_rect, dpi);

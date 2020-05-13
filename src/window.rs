@@ -92,4 +92,9 @@ impl Window {
         let (x, y) = self.window.get_cursor_pos();
         point2(x, y).cast()
     }
+
+    // Set the window cursor
+    pub(crate) fn set_cursor(&mut self, cursor: Option<glfw::Cursor>) -> Option<glfw::Cursor> {
+        self.window.set_cursor(cursor)
+    }
 }
