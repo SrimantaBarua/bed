@@ -6,6 +6,10 @@
     - [x] Newline - reshape current line, insert new line
     - [x] Delete line - reshape current line, delete next line
   - [x] We're using fixed faces and text sizes. Take advantage of that and assume uniform line heights
+- [ ] Make it an actual text editor
+  - [ ] Edit existing file
+  - [ ] Save buffer to file
+  - [ ] Open a new file
 - [ ] Cursor rendering
   - [x] Line
   - [ ] Block
@@ -39,6 +43,7 @@
 - [ ] Modal editing
   - [ ] Actions, text objects, motions
 - [ ] Prompt
+- [ ] Status bar
 - [ ] Textview gutter
 - [x] Scroll wheel
 - [ ] Config file
