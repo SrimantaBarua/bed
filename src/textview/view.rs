@@ -148,20 +148,16 @@ impl TextPane {
         mut acc: Vector2D<i32, PixelSize>,
         _duration: Duration,
     ) -> bool {
-        println!("acc: {}", acc);
         // TODO: update logic if duration varies. Currently assuming a const 60fps
         acc.x *= acc.x.abs();
         acc.y *= acc.y.abs();
-        let dist = self.scroll_vel + acc;
+        let dist = (self.scroll_vel + acc) * 2;
+        self.scroll_vel += acc;
         if acc.x == 0 {
             self.scroll_vel.x /= 2;
-        } else {
-            self.scroll_vel.x += acc.y;
         }
         if acc.y == 0 {
             self.scroll_vel.y /= 2;
-        } else {
-            self.scroll_vel.y += acc.y;
         }
         if dist.x != 0 || dist.y != 0 {
             self.views[self.active].scroll(dist);

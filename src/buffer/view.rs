@@ -113,11 +113,11 @@ impl BufferView {
         point.x -= self.rect.origin.x;
         point.y += self.yoff;
         point.x += self.xoff;
-        let mut linum = (point.y / self.height) as usize;
-        if linum >= data.len_lines() {
-            linum = data.len_lines() - 1;
-        }
+        let linum = (point.y / self.height) as usize;
         self.cursor.line_num = self.start_line + linum;
+        if self.cursor.line_num >= data.len_lines() {
+            self.cursor.line_num = data.len_lines() - 1;
+        }
         let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
         let (mut gidx, mut x) = (0, 0);
         'outer: for (clusters, _, _, _, _, _) in line.styled_iter() {
