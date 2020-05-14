@@ -3,8 +3,9 @@
 use std::cell::RefCell;
 use std::ops::Drop;
 use std::rc::Rc;
+use std::time::Duration;
 
-use euclid::{Point2D, Rect};
+use euclid::{vec2, Point2D, Rect, Vector2D};
 
 use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
@@ -49,6 +50,13 @@ impl TextView {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.move_view_cursor_to_point(&self.id, point);
+        }
+    }
+
+    fn scroll(&mut self, vec: Vector2D<i32, PixelSize>) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.scroll_view(&self.id, vec);
         }
     }
 
@@ -108,6 +116,7 @@ impl Drop for TextView {
 }
 
 pub(crate) struct TextPane {
+    scroll_vel: Vector2D<i32, PixelSize>,
     params: BufferViewCreateParams,
     views: Vec<TextView>,
     active: usize,
@@ -134,6 +143,33 @@ impl TextPane {
         self.views[self.active].move_cursor_to_point(point);
     }
 
+    pub(crate) fn scroll(
+        &mut self,
+        mut acc: Vector2D<i32, PixelSize>,
+        _duration: Duration,
+    ) -> bool {
+        println!("acc: {}", acc);
+        // TODO: update logic if duration varies. Currently assuming a const 60fps
+        acc.x *= acc.x.abs();
+        acc.y *= acc.y.abs();
+        let dist = self.scroll_vel + acc;
+        if acc.x == 0 {
+            self.scroll_vel.x /= 2;
+        } else {
+            self.scroll_vel.x += acc.y;
+        }
+        if acc.y == 0 {
+            self.scroll_vel.y /= 2;
+        } else {
+            self.scroll_vel.y += acc.y;
+        }
+        if dist.x != 0 || dist.y != 0 {
+            self.views[self.active].scroll(dist);
+            return true;
+        }
+        return false;
+    }
+
     pub(crate) fn insert_char(&mut self, c: char) {
         self.views[self.active].insert_char(c);
     }
@@ -158,6 +194,7 @@ impl TextPane {
         let views = vec![TextView::new(view_params.clone(), buffer, view_id)];
         TextPane {
             views,
+            scroll_vel: vec2(0, 0),
             active: 0,
             params: view_params,
         }
@@ -172,6 +209,7 @@ impl TextPane {
         TextPane {
             views,
             active: 0,
+            scroll_vel: vec2(0, 0),
             params: self.params.clone(),
         }
     }

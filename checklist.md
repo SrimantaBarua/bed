@@ -24,18 +24,23 @@
   - [x] Snap to line
   - [x] Snap horizontally
 - [ ] Multiple cursors
-- [ ] Insert character
+- [x] Insert character
   - [x] Basic characters
   - [x] Tab
   - [x] Newline
 - [x] Delete character
   - [x] Backspace
   - [x] Delete
+- [ ] Selection
+  - [ ] View-level expression of selection
+  - [ ] Rendering of selection
+- [ ] Cut + Copy
+- [ ] Paste
 - [ ] Modal editing
   - [ ] Actions, text objects, motions
 - [ ] Prompt
 - [ ] Textview gutter
-- [ ] Scroll wheel
+- [x] Scroll wheel
 - [ ] Config file
   - [ ] What format? Declarative (YAML)? Or programmatic?
 - [ ] Popups (completion, tooltip)

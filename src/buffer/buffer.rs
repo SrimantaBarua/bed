@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::io::Result as IOResult;
 
-use euclid::{Point2D, Rect};
+use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
 
@@ -29,17 +29,19 @@ impl Buffer {
     }
 
     pub(crate) fn set_view_rect(&mut self, id: &BufferViewID, rect: Rect<u32, PixelSize>) {
-        let view = self.views.get_mut(id).unwrap();
-        view.set_rect(rect, &self.data);
+        self.views.get_mut(id).unwrap().set_rect(rect, &self.data);
     }
 
     pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {
-        let view = self.views.get(id).unwrap();
-        view.draw(painter);
+        self.views.get(id).unwrap().draw(painter);
     }
 
     pub(crate) fn remove_view(&mut self, id: &BufferViewID) {
         self.views.remove(id);
+    }
+
+    pub(crate) fn scroll_view(&mut self, id: &BufferViewID, vec: Vector2D<i32, PixelSize>) {
+        self.views.get_mut(id).unwrap().scroll(vec, &self.data);
     }
 
     // -------- View cursor motion ----------------

@@ -69,6 +69,13 @@ impl TextTree {
         }
         self.root.set_active_and_get_from_pos(pos)
     }
+
+    pub(crate) fn map<F>(&mut self, f: F) -> bool
+    where
+        F: FnMut(&mut TextPane) -> bool + Clone,
+    {
+        self.root.map(f)
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -113,6 +120,21 @@ impl Node {
 
     fn is_leaf(&self) -> bool {
         self.opt_view.is_some()
+    }
+
+    fn map<F>(&mut self, mut f: F) -> bool
+    where
+        F: FnMut(&mut TextPane) -> bool + Clone,
+    {
+        if self.is_leaf() {
+            f(self.opt_view.as_mut().unwrap())
+        } else {
+            let mut ret = false;
+            for c in &mut self.children {
+                ret |= c.map(f.clone());
+            }
+            ret
+        }
     }
 
     fn draw(&self, painter: &mut Painter) {

@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::{thread, time};
 
-use euclid::{size2, Size2D};
+use euclid::{size2, vec2, Size2D};
 use glfw::{Action, Key, MouseButtonLeft, WindowEvent};
 
 mod buffer;
@@ -89,6 +89,7 @@ impl Bed {
 
         while !bed.window.should_close() {
             let mut redraw = false;
+            let mut scroll_amt = (0.0, 0.0);
 
             for (_, event) in glfw::flush_messages(&events) {
                 redraw = true;
@@ -126,13 +127,17 @@ impl Bed {
                     WindowEvent::MouseButton(MouseButtonLeft, Action::Press, _) => {
                         bed.move_cursor_to_mouse()
                     }
+                    WindowEvent::Scroll(xsc, ysc) => {
+                        scroll_amt.0 += xsc;
+                        scroll_amt.1 += ysc;
+                    }
                     _ => {}
                 }
             }
+            redraw |= bed.scroll(scroll_amt, target);
 
             let diff = start.elapsed();
             start = time::Instant::now();
-
             if redraw {
                 bed.painter.clear(style::Color::new(0, 0, 0, 0xff));
                 bed.textview_tree.draw(&mut bed.painter);
@@ -176,6 +181,19 @@ impl Bed {
         if let Some(view) = self.textview_tree.set_active_and_get_from_pos(pos) {
             view.move_cursor_to_point(pos);
         }
+    }
+
+    fn scroll(&mut self, amt: (f64, f64), duration: time::Duration) -> bool {
+        let pos = self.window.cursor_pos();
+        let vec = vec2(amt.0, -amt.1).cast();
+        let redraw = self.textview_tree.map(|pane| {
+            if pane.rect().contains(pos) {
+                pane.scroll(vec, duration)
+            } else {
+                pane.scroll(vec2(0, 0), duration)
+            }
+        });
+        redraw
     }
 }
 

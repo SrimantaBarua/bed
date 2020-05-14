@@ -90,7 +90,14 @@ impl Window {
     // Get the cursor position
     pub(crate) fn cursor_pos(&self) -> Point2D<u32, PixelSize> {
         let (x, y) = self.window.get_cursor_pos();
-        point2(x, y).cast()
+        let mut ret = point2(x, y);
+        if ret.x <= 0.0 {
+            ret.x = 0.0;
+        }
+        if ret.y <= 0.0 {
+            ret.y = 0.0;
+        }
+        ret.cast()
     }
 
     // Set the window cursor

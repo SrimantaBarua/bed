@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use euclid::{point2, size2, Point2D, Rect, Size2D};
+use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
@@ -74,6 +74,32 @@ impl BufferView {
         };
         view.fill_or_truncate_view(data);
         view
+    }
+
+    pub(super) fn scroll(&mut self, vec: Vector2D<i32, PixelSize>, data: &Rope) {
+        // Scroll y
+        if vec.y < 0 {
+            let ysub = (-vec.y) as usize;
+            let mut ycur = self.start_line * self.height as usize + self.yoff as usize;
+            if ycur <= ysub {
+                self.start_line = 0;
+                self.yoff = 0;
+            } else {
+                ycur -= ysub;
+                self.start_line = ycur / self.height as usize;
+                self.yoff = (ycur % self.height as usize) as u32;
+            }
+        } else {
+            let ycur = self.start_line * self.height as usize + self.yoff as usize + vec.y as usize;
+            self.start_line = ycur / self.height as usize;
+            self.yoff = (ycur % self.height as usize) as u32;
+            if self.start_line >= data.len_lines() - 1 {
+                self.start_line = data.len_lines() - 1;
+                self.yoff = 0;
+            }
+        }
+        self.shaped_lines.clear();
+        self.fill_or_truncate_view(data);
     }
 
     pub(super) fn move_cursor_to_point(
@@ -233,10 +259,14 @@ impl BufferView {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut pos = point2(-(self.xoff as i32), -(self.yoff as i32));
         let mut linum = 0;
-        let (cline, cgidx) = (
-            self.cursor.line_num - self.start_line,
-            self.cursor.line_gidx,
-        );
+        let cursor = if self.cursor.line_num < self.start_line {
+            None
+        } else {
+            Some((
+                self.cursor.line_num - self.start_line,
+                self.cursor.line_gidx,
+            ))
+        };
         for line in &self.shaped_lines {
             pos.y += self.ascender;
             let mut gidx = 0;
@@ -261,16 +291,19 @@ impl BufferView {
                         continue;
                     }
                     let width = pos.x - start_x;
-                    if linum == cline && gidx <= cgidx && gidx + cluster.num_graphemes > cgidx {
-                        let cwidth = CURSOR_WIDTH;
-                        let cheight = line.metrics.ascender - line.metrics.descender;
-                        let mut cx = (width * (cgidx - gidx) as i32) / cluster.num_graphemes as i32;
-                        cx += start_x;
-                        let cy = pos.y - line.metrics.ascender;
-                        painter.color_quad(
-                            Rect::new(point2(cx, cy), size2(cwidth, cheight)),
-                            Color::new(0xff, 0x88, 0x22, 0xff),
-                        );
+                    if let Some((cline, cgidx)) = cursor {
+                        if linum == cline && gidx <= cgidx && gidx + cluster.num_graphemes > cgidx {
+                            let cwidth = CURSOR_WIDTH;
+                            let cheight = line.metrics.ascender - line.metrics.descender;
+                            let mut cx =
+                                (width * (cgidx - gidx) as i32) / cluster.num_graphemes as i32;
+                            cx += start_x;
+                            let cy = pos.y - line.metrics.ascender;
+                            painter.color_quad(
+                                Rect::new(point2(cx, cy), size2(cwidth, cheight)),
+                                Color::new(0xff, 0x88, 0x22, 0xff),
+                            );
+                        }
                     }
                     if let Some(under) = opt_under {
                         painter.color_quad(
@@ -284,14 +317,16 @@ impl BufferView {
                     gidx += cluster.num_graphemes;
                 }
             }
-            if linum == cline && gidx == cgidx {
-                let cwidth = 2;
-                let cheight = line.metrics.ascender - line.metrics.descender;
-                let cy = pos.y - line.metrics.ascender;
-                painter.color_quad(
-                    Rect::new(point2(pos.x, cy), size2(cwidth, cheight)),
-                    Color::new(0xff, 0x88, 0x22, 0xff),
-                );
+            if let Some((cline, cgidx)) = cursor {
+                if linum == cline && gidx == cgidx {
+                    let cwidth = 2;
+                    let cheight = line.metrics.ascender - line.metrics.descender;
+                    let cy = pos.y - line.metrics.ascender;
+                    painter.color_quad(
+                        Rect::new(point2(pos.x, cy), size2(cwidth, cheight)),
+                        Color::new(0xff, 0x88, 0x22, 0xff),
+                    );
+                }
             }
             pos.y -= self.descender;
             pos.x = -(self.xoff as i32);
