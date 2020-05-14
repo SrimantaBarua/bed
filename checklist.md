@@ -6,6 +6,7 @@
     - [x] Newline - reshape current line, insert new line
     - [x] Delete line - reshape current line, delete next line
   - [x] We're using fixed faces and text sizes. Take advantage of that and assume uniform line heights
+- [ ] BUG: LRU glyph removal from the atlas
 - [ ] Make it an actual text editor
   - [ ] Edit existing file
   - [ ] Save buffer to file
@@ -50,12 +51,7 @@
   - [ ] What format? Declarative (YAML)? Or programmatic?
 - [ ] Popups (completion, tooltip)
 - [ ] Render in "layers". This will make it easy to implement shadows
-- [ ] Syntax highlighting
-  - [ ] Parse tree - generic node types
-    - [ ] Parsers for specific languages
-  - [ ] Alternative - TextMate grammars? Syntect?
-  - [ ] On-demand syntax highlighting when jumping? Possible?
-    - [ ] If yes, mark regions of highlighted text as "dirty" / "clear"
-    - [ ] API to change color/underline of shaped lines without reshaping
+- [ ] Syntax highlighting - Syntect
+  - [ ] One thread for rehighlighting background buffers, and one thread per active buffer.
 - [ ]  Plugins. API? Scripting? Related to config
   - [ ] LSP for completion

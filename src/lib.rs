@@ -6,6 +6,8 @@ use std::{thread, time};
 
 use euclid::{size2, vec2, Size2D};
 use glfw::{Action, Key, MouseButtonLeft, WindowEvent};
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
 
 mod buffer;
 mod common;
@@ -39,8 +41,10 @@ fn abspath(spath: &str) -> String {
 pub struct Bed {
     textview_tree: textview::TextTree,
     painter: painter::Painter,
-    buffer_mgr: buffer::BufferMgr,
+    _buffer_mgr: buffer::BufferMgr,
     window: window::Window,
+    _syntax_set: Rc<SyntaxSet>,
+    _theme_set: Rc<ThemeSet>,
 }
 
 impl Bed {
@@ -57,7 +61,11 @@ impl Bed {
         let text_size = style::TextSize::from_f32(7.5);
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
-        let mut buffer_mgr = buffer::BufferMgr::new();
+        let syntax_set = Rc::new(SyntaxSet::load_defaults_newlines());
+        let theme_set = Rc::new(ThemeSet::load_defaults());
+
+        let mut buffer_mgr =
+            buffer::BufferMgr::new(syntax_set.clone(), theme_set.clone(), "base16-ocean.dark");
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))
@@ -80,8 +88,10 @@ impl Bed {
         let mut bed = Bed {
             window: window,
             painter: painter,
-            buffer_mgr: buffer_mgr,
+            _buffer_mgr: buffer_mgr,
             textview_tree: textview_tree,
+            _syntax_set: syntax_set,
+            _theme_set: theme_set,
         };
 
         let mut start = time::Instant::now();

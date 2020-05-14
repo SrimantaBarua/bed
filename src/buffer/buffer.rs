@@ -2,10 +2,14 @@
 
 use std::fs::File;
 use std::io::Result as IOResult;
+use std::rc::Rc;
+use std::fmt::Write;
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
+use syntect::highlighting::{ThemeSet, HighlightState, Highlighter, RangedHighlightIterator};
+use syntect::parsing::{ParseState, SyntaxSet, ScopeStack};
 
 use crate::common::PixelSize;
 use crate::painter::WidgetPainter;
@@ -13,9 +17,16 @@ use crate::painter::WidgetPainter;
 use super::view::{BufferView, BufferViewCreateParams};
 use super::BufferViewID;
 
+const PARSE_CACHE_DIFF: usize = 1000;
+
 pub(crate) struct Buffer {
     data: Rope,
     views: FnvHashMap<BufferViewID, BufferView>,
+    syntax_set: Rc<SyntaxSet>,
+    theme_set: Rc<ThemeSet>,
+    hl_states: Vec<HighlightState>,
+    parse_states: Vec<ParseState>,
+    cur_theme: String,
     tab_width: usize,
 }
 
@@ -234,21 +245,54 @@ impl Buffer {
     }
 
     // -------- Create buffer ----------------
-    pub(super) fn empty() -> Buffer {
+    pub(super) fn empty(
+        syntax_set: Rc<SyntaxSet>,
+        theme_set: Rc<ThemeSet>,
+        cur_theme: &str,
+    ) -> Buffer {
+        let synref = syntax_set.find_syntax_plain_text();
+        let hl = Highlighter::new(theme_set.themes.get(cur_theme).unwrap());
+        let hl_state = HighlightState::new(&hl, ScopeStack::new());
+        let parse_state = ParseState::new(synref);
         Buffer {
             tab_width: 8,
             data: Rope::new(),
             views: FnvHashMap::default(),
+            syntax_set: syntax_set,
+            theme_set: theme_set,
+            cur_theme: cur_theme.to_owned(),
+            hl_states: vec![hl_state],
+            parse_states: vec![parse_state],
         }
     }
 
-    pub(super) fn from_file(path: &str) -> IOResult<Buffer> {
+    pub(super) fn from_file(
+        path: &str,
+        syntax_set: Rc<SyntaxSet>,
+        theme_set: Rc<ThemeSet>,
+        cur_theme: &str,
+    ) -> IOResult<Buffer> {
         File::open(path)
             .and_then(|mut f| Rope::from_reader(&mut f))
-            .map(|rope| Buffer {
-                tab_width: 8,
-                data: rope,
-                views: FnvHashMap::default(),
+            .map(|rope| {
+                let synref = syntax_set
+                    .find_syntax_for_file(path)
+                    .unwrap()
+                    .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
+                let parse_state = ParseState::new(synref);
+                let hl = Highlighter::new(theme_set.themes.get(cur_theme).unwrap());
+                let hl_state = HighlightState::new(&hl, ScopeStack::new());
+                let mut ret = Buffer {
+                    tab_width: 8,
+                    data: rope,
+                    views: FnvHashMap::default(),
+                    syntax_set: syntax_set,
+                    theme_set: theme_set,
+                    hl_states: vec![hl_state],
+                    parse_states: vec![parse_state],
+                    cur_theme: cur_theme.to_owned(),
+                };
+                ret
             })
     }
 
@@ -256,5 +300,27 @@ impl Buffer {
         File::open(path)
             .and_then(|mut f| Rope::from_reader(&mut f))
             .map(|rope| self.data = rope)
+    }
+
+    fn rehighlight_from(&mut self, mut linum: usize) {
+        let i = linum / PARSE_CACHE_DIFF;
+        self.hl_states.truncate(i + 1);
+        self.parse_states.truncate(i + 1);
+        let mut buf = String::new();
+        let hl = Highlighter::new(self.theme_set.themes.get(&self.cur_theme).unwrap());
+        let mut hlstate = self.hl_states[i].clone();
+        let mut parse_state = self.parse_states[i].clone();
+        for line in self.data.lines_at(linum) {
+            buf.clear();
+            write!(&mut buf, "{}", line).unwrap();
+            let ops = parse_state.parse_line(&buf, &self.syntax_set);
+            for (style, txt, _) in RangedHighlightIterator::new(&mut hlstate, &ops, &buf, &hl) {
+            }
+            linum += 1;
+            if linum % PARSE_CACHE_DIFF == 0 {
+                self.hl_states.push(hlstate.clone());
+                self.parse_states.push(parse_state.clone());
+            }
+        }
     }
 }
