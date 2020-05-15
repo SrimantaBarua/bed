@@ -15,6 +15,64 @@ use crate::text::{ShapedText, TextShaper};
 
 use super::cursor::Cursor;
 
+// All indices here are codepoint indices
+#[derive(Debug)]
+pub(super) struct StyledText {
+    styles: Vec<(usize, TextStyle)>,
+    colors: Vec<(usize, Color)>,
+    unders: Vec<(usize, Option<Color>)>,
+}
+
+impl StyledText {
+    pub(super) fn new() -> StyledText {
+        StyledText {
+            styles: Vec::new(),
+            colors: Vec::new(),
+            unders: Vec::new(),
+        }
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.styles.len() == 0
+    }
+
+    pub(super) fn push(
+        &mut self,
+        len: usize,
+        style: TextStyle,
+        color: Color,
+        under: Option<Color>,
+    ) {
+        let style_len = self.styles.len();
+        let color_len = self.colors.len();
+        let under_len = self.unders.len();
+        if style_len == 0 {
+            self.styles.push((len, style));
+        } else if self.styles[style_len - 1].1 != style {
+            self.styles
+                .push((self.styles[style_len - 1].0 + len, style));
+        } else {
+            self.styles[style_len - 1].0 += len;
+        }
+        if color_len == 0 {
+            self.colors.push((len, color));
+        } else if self.colors[color_len - 1].1 != color {
+            self.colors
+                .push((self.colors[color_len - 1].0 + len, color));
+        } else {
+            self.colors[color_len - 1].0 += len;
+        }
+        if under_len == 0 {
+            self.unders.push((len, under));
+        } else if self.unders[under_len - 1].1 != under {
+            self.unders
+                .push((self.unders[under_len - 1].0 + len, under));
+        } else {
+            self.unders[under_len - 1].0 += len;
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct BufferViewCreateParams {
     pub(crate) face_key: FaceKey,
@@ -47,7 +105,12 @@ pub(super) struct BufferView {
 }
 
 impl BufferView {
-    pub(super) fn new(params: BufferViewCreateParams, data: &Rope, tab_width: usize) -> BufferView {
+    pub(super) fn new(
+        params: BufferViewCreateParams,
+        data: &Rope,
+        styled_lines: &[StyledText],
+        tab_width: usize,
+    ) -> BufferView {
         let (ascender, descender) = {
             let shaper = &mut *params.text_shaper.borrow_mut();
             let raster = shaper
@@ -72,11 +135,16 @@ impl BufferView {
             yoff: 0,
             xoff: 0,
         };
-        view.fill_or_truncate_view(data);
+        view.fill_or_truncate_view(data, styled_lines);
         view
     }
 
-    pub(super) fn scroll(&mut self, vec: Vector2D<i32, PixelSize>, data: &Rope) {
+    pub(super) fn scroll(
+        &mut self,
+        vec: Vector2D<i32, PixelSize>,
+        data: &Rope,
+        styled_lines: &[StyledText],
+    ) {
         // Scroll y
         if vec.y < 0 {
             let ysub = (-vec.y) as usize;
@@ -99,13 +167,14 @@ impl BufferView {
             }
         }
         self.shaped_lines.clear();
-        self.fill_or_truncate_view(data);
+        self.fill_or_truncate_view(data, styled_lines);
     }
 
     pub(super) fn move_cursor_to_point(
         &mut self,
         mut point: Point2D<u32, PixelSize>,
         data: &Rope,
+        styled_lines: &[StyledText],
         tab_width: usize,
     ) {
         assert!(self.rect.contains(point));
@@ -135,100 +204,38 @@ impl BufferView {
         }
         self.cursor.line_gidx = gidx;
         self.cursor.sync_gidx(data, tab_width);
-        self.snap_to_cursor(data);
+        self.snap_to_cursor(data, styled_lines);
     }
 
-    pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>, data: &Rope) {
+    pub(super) fn set_rect(
+        &mut self,
+        rect: Rect<u32, PixelSize>,
+        data: &Rope,
+        styled_lines: &[StyledText],
+    ) {
         self.rect = rect;
-        self.fill_or_truncate_view(data);
-        self.snap_to_cursor(data);
+        self.fill_or_truncate_view(data, styled_lines);
+        self.snap_to_cursor(data, styled_lines);
     }
 
-    pub(super) fn reshape_line(&mut self, data: &Rope, linum: usize) {
-        if linum < self.start_line || linum >= self.start_line + self.shaped_lines.len() {
-            return;
-        }
-        let shaper = &mut *self.text_shaper.borrow_mut();
-        let line = data.line(linum);
-        let trimmed = rope_trim_newlines(line);
-        let len_chars = trimmed.len_chars();
-        let shaped = shaper.shape_line_rope(
-            trimmed,
-            self.dpi,
-            self.tab_width,
-            &[(len_chars, self.face_key)],
-            &[(len_chars, TextStyle::default())],
-            &[(len_chars, self.text_size)],
-            &[(len_chars, Color::new(0, 0, 0, 0xff))],
-            &[(len_chars, None)],
-        );
-        self.shaped_lines[linum - self.start_line] = shaped;
-    }
-
-    pub(super) fn insert_line(&mut self, data: &Rope, linum: usize) {
-        if linum < self.start_line {
-            self.start_line += 1;
-            return;
-        }
+    pub(super) fn reshape_from(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
         if linum >= self.start_line + self.shaped_lines.len() {
             return;
         }
-        let shaper = &mut *self.text_shaper.borrow_mut();
-        let line = data.line(linum);
-        let trimmed = rope_trim_newlines(line);
-        let len_chars = trimmed.len_chars();
-        let shaped = shaper.shape_line_rope(
-            trimmed,
-            self.dpi,
-            self.tab_width,
-            &[(len_chars, self.face_key)],
-            &[(len_chars, TextStyle::default())],
-            &[(len_chars, self.text_size)],
-            &[(len_chars, Color::new(0, 0, 0, 0xff))],
-            &[(len_chars, None)],
-        );
-        if self.shaped_lines.len() as u32 * self.height >= self.rect.size.height {
-            self.shaped_lines.pop_back();
+        if linum <= self.start_line {
+            self.shaped_lines.clear();
+        } else {
+            self.shaped_lines.truncate(linum - self.start_line);
         }
-        self.shaped_lines.insert(linum - self.start_line, shaped);
+        self.fill_or_truncate_view(data, styled_lines);
     }
 
-    pub(super) fn delete_line(&mut self, data: &Rope, linum: usize) {
-        if linum < self.start_line {
-            self.start_line -= 1;
-            return;
-        }
-        if linum >= self.start_line + self.shaped_lines.len() {
-            return;
-        }
-        self.shaped_lines.remove(linum - self.start_line);
-        let shaper = &mut *self.text_shaper.borrow_mut();
-        let last_line = self.start_line + self.shaped_lines.len();
-        if last_line >= data.len_lines() {
-            return;
-        }
-        let line = data.line(self.start_line + self.shaped_lines.len());
-        let trimmed = rope_trim_newlines(line);
-        let len_chars = trimmed.len_chars();
-        let shaped = shaper.shape_line_rope(
-            trimmed,
-            self.dpi,
-            self.tab_width,
-            &[(len_chars, self.face_key)],
-            &[(len_chars, TextStyle::default())],
-            &[(len_chars, self.text_size)],
-            &[(len_chars, Color::new(0, 0, 0, 0xff))],
-            &[(len_chars, None)],
-        );
-        self.shaped_lines.push_back(shaped);
-    }
-
-    pub(super) fn snap_to_cursor(&mut self, data: &Rope) {
+    pub(super) fn snap_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
         // Sync Y
         if self.cursor.line_num <= self.start_line {
-            self.move_view_up_to_cursor(data);
+            self.move_view_up_to_cursor(data, styled_lines);
         } else {
-            self.move_view_down_to_cursor(data);
+            self.move_view_down_to_cursor(data, styled_lines);
         }
         // Sync X
         let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
@@ -334,7 +341,7 @@ impl BufferView {
         }
     }
 
-    fn fill_or_truncate_view(&mut self, data: &Rope) {
+    fn fill_or_truncate_view(&mut self, data: &Rope, styled_lines: &[StyledText]) {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut height = self.shaped_lines.len() as u32 * self.height;
         if height >= self.rect.size.height {
@@ -345,7 +352,9 @@ impl BufferView {
             self.shaped_lines.truncate(num_lines as usize);
             return;
         }
-        for line in data.lines_at(self.start_line + self.shaped_lines.len()) {
+        let start = self.start_line + self.shaped_lines.len();
+        for (line, styled) in data.lines_at(start).zip(&styled_lines[start..]) {
+            // println!("styled: {:?}", styled);
             let trimmed = rope_trim_newlines(line);
             let len_chars = trimmed.len_chars();
             let shaped = shaper.shape_line_rope(
@@ -353,10 +362,10 @@ impl BufferView {
                 self.dpi,
                 self.tab_width,
                 &[(len_chars, self.face_key)],
-                &[(len_chars, TextStyle::default())],
+                &styled.styles,
                 &[(len_chars, self.text_size)],
-                &[(len_chars, Color::new(0, 0, 0, 0xff))],
-                &[(len_chars, None)],
+                &styled.colors,
+                &styled.unders,
             );
             height += self.height;
             self.shaped_lines.push_back(shaped);
@@ -366,7 +375,7 @@ impl BufferView {
         }
     }
 
-    fn move_view_up_to_cursor(&mut self, data: &Rope) {
+    fn move_view_up_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
         self.yoff = 0;
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut cur_height = self.shaped_lines.len() as u32 * self.height;
@@ -378,7 +387,8 @@ impl BufferView {
         }
         let mut new_height = 0;
         let mut new_shaped_lines = Vec::new();
-        for line in data.lines_at(self.cursor.line_num) {
+        let cline = self.cursor.line_num;
+        for (line, styled) in data.lines_at(cline).zip(&styled_lines[cline..]) {
             let trimmed = rope_trim_newlines(line);
             let len_chars = trimmed.len_chars();
             let shaped = shaper.shape_line_rope(
@@ -386,10 +396,10 @@ impl BufferView {
                 self.dpi,
                 self.tab_width,
                 &[(len_chars, self.face_key)],
-                &[(len_chars, TextStyle::default())],
+                &styled.styles,
                 &[(len_chars, self.text_size)],
-                &[(len_chars, Color::new(0, 0, 0, 0xff))],
-                &[(len_chars, None)],
+                &styled.colors,
+                &styled.unders,
             );
             new_height += self.height;
             new_shaped_lines.push(shaped);
@@ -417,7 +427,7 @@ impl BufferView {
         }
     }
 
-    fn move_view_down_to_cursor(&mut self, data: &Rope) {
+    fn move_view_down_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
         if self.cursor.line_num < self.start_line + self.shaped_lines.len() {
             let height = (self.cursor.line_num as u32 - self.start_line as u32 + 1) * self.height;
             if height > self.rect.size.height {
@@ -430,7 +440,11 @@ impl BufferView {
         let mut height = 0;
         let mut new_shaped_lines = Vec::new();
         let mut lines = data.lines_at(self.cursor.line_num + 1);
+        let mut linum = self.cursor.line_num + 1;
+        // TODO
         while let Some(line) = lines.prev() {
+            linum -= 1;
+            let styled = &styled_lines[linum];
             let trimmed = rope_trim_newlines(line);
             let len_chars = trimmed.len_chars();
             let shaped = shaper.shape_line_rope(
@@ -438,10 +452,10 @@ impl BufferView {
                 self.dpi,
                 self.tab_width,
                 &[(len_chars, self.face_key)],
-                &[(len_chars, TextStyle::default())],
+                &styled.styles,
                 &[(len_chars, self.text_size)],
-                &[(len_chars, Color::new(0, 0, 0, 0xff))],
-                &[(len_chars, None)],
+                &styled.colors,
+                &styled.unders,
             );
             height += self.height;
             new_shaped_lines.push(shaped);

@@ -65,7 +65,7 @@ impl Bed {
         let theme_set = Rc::new(ThemeSet::load_defaults());
 
         let mut buffer_mgr =
-            buffer::BufferMgr::new(syntax_set.clone(), theme_set.clone(), "base16-ocean.dark");
+            buffer::BufferMgr::new(syntax_set.clone(), theme_set.clone(), "base16-ocean.light");
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))

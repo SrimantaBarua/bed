@@ -1,5 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use syntect::highlighting::Color as SynColor;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Color {
     pub(crate) r: u8,
@@ -37,6 +39,15 @@ impl Color {
     pub(crate) fn opacity(mut self, percentage: u8) -> Color {
         self.a = ((((self.a as u16) * (percentage as u16)) / 100) & 0xff) as u8;
         self
+    }
+
+    pub(crate) fn from_syntect(c: SynColor) -> Color {
+        Color {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+            a: c.a,
+        }
     }
 
     pub(crate) fn to_opengl_color(&self) -> (f32, f32, f32, f32) {
