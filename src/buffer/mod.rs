@@ -2,6 +2,7 @@
 
 mod buffer;
 mod cursor;
+mod hlpool;
 mod mgr;
 mod view;
 
@@ -13,6 +14,9 @@ impl BufferViewID {
         BufferViewID(self.0)
     }
 }
+
+#[derive(Clone, Eq, Hash, PartialEq)]
+struct BufferID(usize);
 
 pub(crate) use buffer::Buffer;
 pub(crate) use mgr::BufferMgr;

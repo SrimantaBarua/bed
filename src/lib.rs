@@ -2,7 +2,11 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::{thread, time};
+
+#[macro_use]
+extern crate crossbeam_channel;
 
 use euclid::{size2, vec2, Size2D};
 use glfw::{Action, Key, MouseButtonLeft, WindowEvent};
@@ -43,8 +47,8 @@ pub struct Bed {
     painter: painter::Painter,
     _buffer_mgr: buffer::BufferMgr,
     window: window::Window,
-    _syntax_set: Rc<SyntaxSet>,
-    _theme_set: Rc<ThemeSet>,
+    _syntax_set: Arc<SyntaxSet>,
+    _theme_set: Arc<ThemeSet>,
 }
 
 impl Bed {
@@ -61,11 +65,14 @@ impl Bed {
         let text_size = style::TextSize::from_f32(7.5);
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
-        let syntax_set = Rc::new(SyntaxSet::load_defaults_newlines());
-        let theme_set = Rc::new(ThemeSet::load_defaults());
+        let syntax_set = Arc::new(SyntaxSet::load_defaults_newlines());
+        let theme_set = Arc::new(ThemeSet::load_defaults());
 
-        let mut buffer_mgr =
-            buffer::BufferMgr::new(syntax_set.clone(), theme_set.clone(), "base16-ocean.light");
+        let mut buffer_mgr = buffer::BufferMgr::new(
+            Arc::clone(&syntax_set),
+            Arc::clone(&theme_set),
+            "base16-ocean.light",
+        );
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))

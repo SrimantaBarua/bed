@@ -52,6 +52,12 @@
 - [ ] Popups (completion, tooltip)
 - [ ] Render in "layers". This will make it easy to implement shadows
 - [ ] Syntax highlighting - Syntect
-  - [ ] One thread for rehighlighting background buffers, and one thread per active buffer.
+  - [x] Rehighlight on each keypress
+  - [ ] Highlighter threadpool
+    - [ ] Worker threads. One manager thread.
+    - [ ] One bounded channel from manager to each worker. One general work queue. One queue for manager.
+  - [ ] Fill dummy highlighting and start thread. Signal views when they need to be updated
+  - [ ] CSS theme for entire editor. Replace Syntect (TextMate) themes.
+  - [ ] Clear shaping and highlighting information for "inactive" views
 - [ ]  Plugins. API? Scripting? Related to config
   - [ ] LSP for completion

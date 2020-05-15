@@ -218,16 +218,86 @@ impl BufferView {
         self.snap_to_cursor(data, styled_lines);
     }
 
-    pub(super) fn reshape_from(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
+    pub(super) fn reshape_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
+        if linum < self.start_line || linum >= self.start_line + self.shaped_lines.len() {
+            return;
+        }
+        let shaper = &mut *self.text_shaper.borrow_mut();
+        let line = data.line(linum);
+        let styled = &styled_lines[linum];
+        let trimmed = rope_trim_newlines(line);
+        let len_chars = trimmed.len_chars();
+        let shaped = shaper.shape_line_rope(
+            trimmed,
+            self.dpi,
+            self.tab_width,
+            &[(len_chars, self.face_key)],
+            &styled.styles,
+            &[(len_chars, self.text_size)],
+            &styled.colors,
+            &styled.unders,
+        );
+        self.shaped_lines[linum - self.start_line] = shaped;
+    }
+
+    pub(super) fn insert_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
+        if linum < self.start_line {
+            self.start_line += 1;
+            return;
+        }
         if linum >= self.start_line + self.shaped_lines.len() {
             return;
         }
-        if linum <= self.start_line {
-            self.shaped_lines.clear();
-        } else {
-            self.shaped_lines.truncate(linum - self.start_line);
+        let shaper = &mut *self.text_shaper.borrow_mut();
+        let line = data.line(linum);
+        let styled = &styled_lines[linum];
+        let trimmed = rope_trim_newlines(line);
+        let len_chars = trimmed.len_chars();
+        let shaped = shaper.shape_line_rope(
+            trimmed,
+            self.dpi,
+            self.tab_width,
+            &[(len_chars, self.face_key)],
+            &styled.styles,
+            &[(len_chars, self.text_size)],
+            &styled.colors,
+            &styled.unders,
+        );
+        if self.shaped_lines.len() as u32 * self.height >= self.rect.size.height {
+            self.shaped_lines.pop_back();
         }
-        self.fill_or_truncate_view(data, styled_lines);
+        self.shaped_lines.insert(linum - self.start_line, shaped);
+    }
+
+    pub(super) fn delete_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
+        if linum < self.start_line {
+            self.start_line -= 1;
+            return;
+        }
+        if linum >= self.start_line + self.shaped_lines.len() {
+            return;
+        }
+        self.shaped_lines.remove(linum - self.start_line);
+        let shaper = &mut *self.text_shaper.borrow_mut();
+        let last_line = self.start_line + self.shaped_lines.len();
+        if last_line >= data.len_lines() {
+            return;
+        }
+        let line = data.line(self.start_line + self.shaped_lines.len());
+        let styled = &styled_lines[self.start_line + self.shaped_lines.len()];
+        let trimmed = rope_trim_newlines(line);
+        let len_chars = trimmed.len_chars();
+        let shaped = shaper.shape_line_rope(
+            trimmed,
+            self.dpi,
+            self.tab_width,
+            &[(len_chars, self.face_key)],
+            &styled.styles,
+            &[(len_chars, self.text_size)],
+            &styled.colors,
+            &styled.unders,
+        );
+        self.shaped_lines.push_back(shaped);
     }
 
     pub(super) fn snap_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
