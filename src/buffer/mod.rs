@@ -15,7 +15,7 @@ impl BufferViewID {
     }
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct BufferID(usize);
 
 pub(crate) use buffer::Buffer;

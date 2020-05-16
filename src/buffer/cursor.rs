@@ -22,11 +22,13 @@ impl Cursor {
         self.sync_line_cidx_gidx_left(data, tab_width);
     }
 
+    /*
     pub(super) fn sync_and_update_char_idx_right(&mut self, data: &Rope, tab_width: usize) {
         self.line_num = data.char_to_line(self.char_idx);
         self.line_cidx = self.char_idx - data.line_to_char(self.line_num);
         self.sync_line_cidx_gidx_right(data, tab_width);
     }
+    */
 
     pub(super) fn sync_line_cidx_gidx_left(&mut self, data: &Rope, tab_width: usize) {
         let trimmed = rope_trim_newlines(data.line(self.line_num));
@@ -93,6 +95,7 @@ impl Cursor {
     }
 }
 
+/*
 fn gidx_from_cidx(line: &RopeSlice, cidx: usize, tab_width: usize) -> usize {
     let (mut gidx, mut ccount) = (0, 0);
     for g in RopeGraphemes::new(line) {
@@ -108,6 +111,7 @@ fn gidx_from_cidx(line: &RopeSlice, cidx: usize, tab_width: usize) -> usize {
     }
     gidx
 }
+*/
 
 fn cidx_gidx_from_cidx(slice: &RopeSlice, cidx: usize, tab_width: usize) -> (usize, usize) {
     let (mut gidx, mut ccount) = (0, 0);

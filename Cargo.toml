@@ -16,7 +16,7 @@ glfw  = "0.37"
 guillotiere = "0.4.3"
 harfbuzz-sys = "0.3.4"
 ropey = "1.1"
-syntect = "4.1.1"
+syntect = { version = "4.1.1", default-features = false, features = ["default-fancy"] }
 unicode-segmentation = "1.6"
 
 [target.'cfg(unix)'.dependencies]

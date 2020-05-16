@@ -2,7 +2,7 @@
 
 // Copied from https://github.com/cessen/ropey/blob/master/examples/graphemes_iter.rs
 
-use ropey::{iter::Chunks, str_utils::byte_to_char_idx, Rope, RopeSlice};
+use ropey::{iter::Chunks, str_utils::byte_to_char_idx, RopeSlice};
 use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 
 /// An implementation of a graphemes iterator, for iterating over
