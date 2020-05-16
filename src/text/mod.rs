@@ -162,7 +162,7 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
         } else {
             let mut cii = 0;
             while cii < self.cursor_positions.len()
-                && self.cursor_positions[cii] < glyphs[minidx].cluster as usize
+                && self.cursor_positions[cii] < self.glyphs[minidx].cluster as usize
             {
                 cii += 1;
             }
