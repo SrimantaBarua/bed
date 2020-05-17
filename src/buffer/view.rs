@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;

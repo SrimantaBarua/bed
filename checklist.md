@@ -46,17 +46,23 @@
 - [ ] Prompt
 - [ ] Status bar
 - [ ] Textview gutter
+- [ ] Huge files
+  - [ ] Animation when loading huge files
+  - [ ] Threshold to stop syntax highlighting
+  - [ ] Syntect - cache scope stack, not entire HighlightState
 - [x] Scroll wheel
 - [ ] Config file
   - [ ] What format? Declarative (YAML)? Or programmatic?
 - [ ] Popups (completion, tooltip)
 - [ ] Render in "layers". This will make it easy to implement shadows
 - [ ] Syntax highlighting - Syntect
+  - [ ] Initial highlight should be synchronous
+    - [ ] Spawn a thread to load a buffer
   - [x] Rehighlight on each keypress
-  - [ ] Highlighter threadpool
-    - [ ] Worker threads. One manager thread.
-    - [ ] One bounded channel from manager to each worker. One general work queue. One queue for manager.
-  - [ ] Fill dummy highlighting and start thread. Signal views when they need to be updated
+  - [x] Highlighter threadpool
+    - [x] Worker threads. One manager thread.
+    - [x] One bounded channel from manager to each worker. One general work queue. One queue for manager.
+  - [x] Fill dummy highlighting and start thread. Signal views when they need to be updated
   - [ ] CSS theme for entire editor. Replace Syntect (TextMate) themes.
   - [ ] Clear shaping and highlighting information for "inactive" views
 - [ ]  Plugins. API? Scripting? Related to config

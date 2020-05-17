@@ -20,7 +20,7 @@ use crate::style::{Color, TextSlant, TextStyle, TextWeight};
 use super::view::StyledText;
 use super::BufferID;
 
-const PARSE_CACHE_DIFF: usize = 1000;
+pub(super) const PARSE_CACHE_DIFF: usize = 1000;
 
 enum WorkerBroadcast {
     StartHL(
@@ -57,10 +57,10 @@ impl Worker {
         let theme = theme.to_owned();
         Worker {
             wmtx: wmtx,
-            handle: Some(thread::spawn(move || 'outer: loop {
+            handle: Some(thread::spawn(move || 'mainloop: loop {
                 select! {
                     recv(brx) -> job => match job.unwrap() {
-                        WorkerBroadcast::StartHL(cond, bid, data, parse_states_m, hl_states_m, styled_lines_m, mut linum) => {
+                        WorkerBroadcast::StartHL(cond, bid, data, pssm, hssm, slsm, mut ln) => {
                             {
                                 let (lock, cvar) = &*cond;
                                 let mut optwid = lock.lock().unwrap();
@@ -68,17 +68,17 @@ impl Worker {
                                 cvar.notify_one();
                             }
 
-                            let mut hl_states = hl_states_m.lock().unwrap();
-                            let mut parse_states = parse_states_m.lock().unwrap();
-                            let i = min(min(linum / PARSE_CACHE_DIFF, hl_states.len() - 1), parse_states.len() - 1);
-                            hl_states.truncate(i + 1);
-                            parse_states.truncate(i + 1);
-                            linum = i * PARSE_CACHE_DIFF;
+                            let mut hss = hssm.lock().unwrap();
+                            let mut pss = pssm.lock().unwrap();
+                            let i = min(min(ln / PARSE_CACHE_DIFF, hss.len() - 1), pss.len() - 1);
+                            hss.truncate(i + 1);
+                            pss.truncate(i + 1);
+                            ln = i * PARSE_CACHE_DIFF;
                             let mut buf = String::new();
                             let hl = Highlighter::new(theme_set.themes.get(&theme).unwrap());
-                            let mut hlstate = hl_states[i].clone();
-                            let mut parse_state = parse_states[i].clone();
-                            for line in data.lines_at(linum) {
+                            let mut hs = hss[i].clone();
+                            let mut ps = pss[i].clone();
+                            for line in data.lines_at(ln) {
 
                                 match wmrx.try_recv() {
                                     Ok(WorkerMessage::StopHL(cond)) => {
@@ -86,9 +86,9 @@ impl Worker {
                                         let mut stopped = lock.lock().unwrap();
                                         *stopped = true;
                                         cvar.notify_one();
-                                        continue 'outer;
+                                        continue 'mainloop;
                                     }
-                                    Ok(WorkerMessage::Shutdown) => break 'outer,
+                                    Ok(WorkerMessage::Shutdown) => break 'mainloop,
                                     _ => {}
                                 }
 
@@ -96,8 +96,8 @@ impl Worker {
                                 write!(&mut buf, "{}", line).unwrap();
                                 let mut styled = StyledText::new();
 
-                                let ops = parse_state.parse_line(&buf, &syntax_set);
-                                for (style, txt, _) in RangedHighlightIterator::new(&mut hlstate, &ops, &buf, &hl) {
+                                let ops = ps.parse_line(&buf, &syntax_set);
+                                for (style, txt, _) in RangedHighlightIterator::new(&mut hs, &ops, &buf, &hl) {
                                     // TODO Background color
                                     let clr = Color::from_syntect(style.foreground);
                                     let mut ts = TextStyle::default();
@@ -120,13 +120,14 @@ impl Worker {
                                     styled.push(0, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
                                 }
                                 {
-                                    let mut styled_lines = styled_lines_m.lock().unwrap();
-                                    styled_lines[linum] = styled;
+                                    let mut sls = slsm.lock().unwrap();
+                                    sls[ln] = styled;
                                 }
-                                linum += 1;
-                                if linum % PARSE_CACHE_DIFF == 0 {
-                                    hl_states.push(hlstate.clone());
-                                    parse_states.push(parse_state.clone());
+                                ln += 1;
+                                //println!("ln: {}", ln);
+                                if ln % PARSE_CACHE_DIFF == 0 {
+                                    hss.push(hs.clone());
+                                    pss.push(ps.clone());
                                 }
                             }
 

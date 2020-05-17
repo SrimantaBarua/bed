@@ -3,20 +3,23 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::Result as IOResult;
+use std::io::{BufRead, BufReader};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
-use ropey::Rope;
-use syntect::highlighting::{HighlightState, Highlighter, ThemeSet};
+use ropey::{Rope, RopeBuilder};
+use syntect::highlighting::{
+    FontStyle, HighlightState, Highlighter, RangedHighlightIterator, ThemeSet,
+};
 use syntect::parsing::{ParseState, ScopeStack, SyntaxSet};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::painter::WidgetPainter;
-use crate::style::{Color, TextStyle};
+use crate::style::{Color, TextSlant, TextStyle, TextWeight};
 
-use super::hlpool::HlPool;
+use super::hlpool::{HlPool, PARSE_CACHE_DIFF};
 use super::view::{BufferView, BufferViewCreateParams, StyledText};
 use super::{BufferID, BufferViewID};
 
@@ -27,6 +30,9 @@ pub(crate) struct Buffer {
     hl_states: Arc<Mutex<Vec<HighlightState>>>,
     parse_states: Arc<Mutex<Vec<ParseState>>>,
     styled_lines: Arc<Mutex<Vec<StyledText>>>,
+    syntax_set: Arc<SyntaxSet>,
+    theme_set: Arc<ThemeSet>,
+    cur_theme: String,
     tab_width: usize,
     hlpool: Rc<RefCell<HlPool>>,
 }
@@ -330,6 +336,9 @@ impl Buffer {
             hl_states: Arc::new(Mutex::new(vec![hl_state])),
             parse_states: Arc::new(Mutex::new(vec![parse_state])),
             styled_lines: Arc::new(Mutex::new(vec![styled])),
+            syntax_set: syntax_set,
+            theme_set: theme_set,
+            cur_theme: cur_theme.to_owned(),
             hlpool: hlpool,
         }
     }
@@ -342,55 +351,33 @@ impl Buffer {
         cur_theme: &str,
         hlpool: Rc<RefCell<HlPool>>,
     ) -> IOResult<Buffer> {
-        File::open(path)
-            .and_then(|mut f| Rope::from_reader(&mut f))
-            .map(|rope| {
-                let synref = syntax_set
-                    .find_syntax_for_file(path)
-                    .unwrap()
-                    .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
-                let parse_state = ParseState::new(synref);
-                let hl = Highlighter::new(theme_set.themes.get(cur_theme).unwrap());
-                let hl_state = HighlightState::new(&hl, ScopeStack::new());
-                let mut ret = Buffer {
-                    buf_id: buf_id,
-                    tab_width: 8,
-                    data: rope,
-                    views: FnvHashMap::default(),
-                    hl_states: Arc::new(Mutex::new(vec![hl_state])),
-                    parse_states: Arc::new(Mutex::new(vec![parse_state])),
-                    styled_lines: Arc::new(Mutex::new(Vec::new())),
-                    hlpool: hlpool,
-                };
-                ret.refill_dummy_styled_lines();
-                ret.rehighlight_from(0);
-                ret
-            })
+        File::open(path).and_then(|f| {
+            let synref = syntax_set
+                .find_syntax_for_file(path)
+                .unwrap()
+                .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
+            let parse_state = ParseState::new(synref);
+            let hl = Highlighter::new(theme_set.themes.get(cur_theme).unwrap());
+            let hl_state = HighlightState::new(&hl, ScopeStack::new());
+            let mut ret = Buffer {
+                buf_id: buf_id,
+                tab_width: 8,
+                data: Rope::new(),
+                views: FnvHashMap::default(),
+                hl_states: Arc::new(Mutex::new(vec![hl_state])),
+                parse_states: Arc::new(Mutex::new(vec![parse_state])),
+                styled_lines: Arc::new(Mutex::new(Vec::new())),
+                syntax_set: syntax_set,
+                theme_set: theme_set,
+                cur_theme: cur_theme.to_owned(),
+                hlpool: hlpool,
+            };
+            ret.load_and_hl_file(f).map(|_| ret)
+        })
     }
 
     pub(super) fn reload_from_file(&mut self, path: &str) -> IOResult<()> {
-        File::open(path)
-            .and_then(|mut f| Rope::from_reader(&mut f))
-            .map(|rope| {
-                {
-                    let hlpool = &mut *self.hlpool.borrow_mut();
-                    hlpool.stop_highlight(self.buf_id);
-                }
-                self.data = rope;
-                self.refill_dummy_styled_lines();
-                self.rehighlight_from(0);
-            })
-    }
-
-    fn refill_dummy_styled_lines(&mut self) {
-        let mut styled_lines = self.styled_lines.lock().unwrap();
-        styled_lines.clear();
-        for line in self.data.lines() {
-            let lc = rope_trim_newlines(line).len_chars();
-            let mut styled = StyledText::new();
-            styled.push(lc, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
-            styled_lines.push(styled);
-        }
+        File::open(path).and_then(|f| self.load_and_hl_file(f))
     }
 
     fn rehighlight_from(&mut self, linum: usize) {
@@ -403,5 +390,75 @@ impl Buffer {
             Arc::clone(&self.styled_lines),
             linum,
         );
+    }
+
+    fn load_and_hl_file(&mut self, f: File) -> IOResult<()> {
+        let mut reader = BufReader::new(f);
+        let mut buf = String::new();
+        let mut builder = RopeBuilder::new();
+
+        let mut hl_states = self.hl_states.lock().unwrap();
+        let mut parse_states = self.parse_states.lock().unwrap();
+        let mut styled_lines = self.styled_lines.lock().unwrap();
+        hl_states.truncate(1);
+        parse_states.truncate(1);
+        styled_lines.clear();
+
+        let hl = Highlighter::new(self.theme_set.themes.get(&self.cur_theme).unwrap());
+        let mut hlstate = hl_states[0].clone();
+        let mut parse_state = parse_states[0].clone();
+        let mut linum = 0;
+
+        loop {
+            buf.clear();
+            match reader.read_line(&mut buf) {
+                Ok(0) => {
+                    self.data = builder.finish();
+                    if self.data.len_lines() > styled_lines.len() {
+                        let mut styled = StyledText::new();
+                        styled.push(0, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
+                        styled_lines.push(styled);
+                        assert!(self.data.len_lines() == styled_lines.len());
+                    }
+                    break Ok(());
+                }
+                Ok(_) => {
+                    builder.append(&buf);
+
+                    let mut styled = StyledText::new();
+                    let ops = parse_state.parse_line(&buf, &self.syntax_set);
+                    for (style, txt, _) in
+                        RangedHighlightIterator::new(&mut hlstate, &ops, &buf, &hl)
+                    {
+                        // TODO Background color
+                        let clr = Color::from_syntect(style.foreground);
+                        let mut ts = TextStyle::default();
+                        if style.font_style.contains(FontStyle::BOLD) {
+                            ts.weight = TextWeight::Bold;
+                        }
+                        if style.font_style.contains(FontStyle::ITALIC) {
+                            ts.slant = TextSlant::Italic;
+                        }
+                        let under = if style.font_style.contains(FontStyle::UNDERLINE) {
+                            Some(clr)
+                        } else {
+                            None
+                        };
+                        let ccount = txt.chars().count();
+                        styled.push(ccount, ts, clr, under);
+                    }
+                    if styled.is_empty() {
+                        styled.push(0, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
+                    }
+                    styled_lines.push(styled);
+                    linum += 1;
+                    if linum % PARSE_CACHE_DIFF == 0 {
+                        hl_states.push(hlstate.clone());
+                        parse_states.push(parse_state.clone());
+                    }
+                }
+                Err(e) => break Err(e),
+            }
+        }
     }
 }
