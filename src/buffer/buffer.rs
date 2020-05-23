@@ -111,10 +111,61 @@ impl Buffer {
     // -------- View edits -----------------
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
         let view = self.views.get_mut(id).unwrap();
-        self.data.insert_char(view.cursor.char_idx, c);
         let cidx = view.cursor.char_idx;
         let linum = view.cursor.line_num;
-        let is_newline = c == '\n';
+        let mut end_linum = linum;
+        match c {
+            // Insert pair
+            '[' | '{' | '(' => {
+                self.data.insert_char(cidx, c);
+                if cidx + 1 == self.data.len_chars() || self.data.char(cidx + 1).is_whitespace() {
+                    match c {
+                        '[' => self.data.insert_char(cidx + 1, ']'),
+                        '{' => self.data.insert_char(cidx + 1, '}'),
+                        '(' => self.data.insert_char(cidx + 1, ')'),
+                        _ => unreachable!(),
+                    }
+                }
+            }
+            // Maybe insert pair, maybe skip
+            '"' | '\'' => {
+                if self.data.char(cidx) != c {
+                    self.data.insert_char(cidx, c);
+                    self.data.insert_char(cidx + 1, c);
+                } else {
+                    return self.move_view_cursor_right(id, 1);
+                }
+            }
+            // Maybe skip insert
+            ']' | '}' | ')' => {
+                if self.data.char(cidx) != c {
+                    self.data.insert_char(cidx, c);
+                } else {
+                    return self.move_view_cursor_right(id, 1);
+                }
+            }
+            // Maybe insert twice?
+            '\n' | ' ' => {
+                self.data.insert_char(cidx, c);
+                if c == '\n' {
+                    end_linum += 1;
+                }
+                if cidx > 0 && cidx + 1 < self.data.len_chars() {
+                    let c0 = self.data.char(cidx - 1);
+                    let c1 = self.data.char(cidx + 1);
+                    if (c0 == '(' && c1 == ')')
+                        || (c0 == '{' && c1 == '}')
+                        || (c0 == '[' && c1 == ']')
+                    {
+                        self.data.insert_char(cidx + 1, c);
+                        if c == '\n' {
+                            end_linum += 1;
+                        }
+                    }
+                }
+            }
+            c => self.data.insert_char(cidx, c),
+        }
         for view in self.views.values_mut() {
             if view.cursor.char_idx >= cidx {
                 view.cursor.char_idx += 1;
@@ -122,8 +173,8 @@ impl Buffer {
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
             view.reshape_line(&self.data, linum);
-            if is_newline {
-                view.insert_line(&self.data, linum + 1);
+            for i in linum..end_linum {
+                view.insert_line(&self.data, i + 1);
             }
             view.snap_to_cursor(&self.data);
         }
