@@ -56,9 +56,10 @@
 - [ ] Popups (completion, tooltip)
 - [ ] Render in "layers". This will make it easy to implement shadows
 - [ ] Syntax highlighting - Syntect
-  - [ ] Initial highlight should be synchronous
-    - [ ] Spawn a thread to load a buffer
+  - [x] Initial highlight should be synchronous
+  - [ ] Spawn a thread to load a buffer
   - [x] Rehighlight on each keypress
+  - [x] Check if views need to update
   - [x] Highlighter threadpool
     - [x] Worker threads. One manager thread.
     - [x] One bounded channel from manager to each worker. One general work queue. One queue for manager.

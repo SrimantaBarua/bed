@@ -107,11 +107,9 @@ impl Bed {
         bed.draw();
 
         while !bed.window.should_close() {
-            let mut redraw = false;
             let mut scroll_amt = (0.0, 0.0);
 
             for (_, event) in glfw::flush_messages(&events) {
-                redraw = true;
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
                         let viewable_rect = bed.window.viewable_rect();
@@ -153,7 +151,9 @@ impl Bed {
                     _ => {}
                 }
             }
-            redraw |= bed.scroll(scroll_amt, target);
+
+            let mut redraw = bed.scroll(scroll_amt, target);
+            redraw |= bed.check_redraw();
 
             let diff = start.elapsed();
             start = time::Instant::now();
@@ -166,6 +166,10 @@ impl Bed {
             }
             glfw.poll_events();
         }
+    }
+
+    fn check_redraw(&mut self) -> bool {
+        self.textview_tree.map(|pane| pane.check_redraw())
     }
 
     fn draw(&mut self) {

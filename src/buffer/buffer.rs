@@ -59,8 +59,19 @@ impl Buffer {
         );
     }
 
-    pub(crate) fn draw_view(&self, id: &BufferViewID, painter: &mut WidgetPainter) {
-        self.views.get(id).unwrap().draw(painter);
+    pub(crate) fn draw_view(&mut self, id: &BufferViewID, painter: &mut WidgetPainter) {
+        self.views.get_mut(id).unwrap().draw(painter);
+    }
+
+    pub(crate) fn check_view_needs_redraw(&mut self, id: &BufferViewID) -> bool {
+        let hlpool = &mut *self.hlpool.borrow_mut();
+        if let Some(linum) = hlpool.highlight_checkpoint(self.buf_id) {
+            let styled = self.styled_lines.lock().unwrap();
+            for view in self.views.values_mut() {
+                view.rehighlight_to(&self.data, &styled, linum);
+            }
+        }
+        self.views.get(id).unwrap().needs_redraw
     }
 
     pub(crate) fn remove_view(&mut self, id: &BufferViewID) {
@@ -152,6 +163,7 @@ impl Buffer {
         let view = self.views.get_mut(id).unwrap();
         let cidx = view.cursor.char_idx;
         let linum = view.cursor.line_num;
+        let sync_upto = view.max_line_visible();
         let mut end_linum = linum;
         match c {
             // Insert pair
@@ -218,7 +230,7 @@ impl Buffer {
                 styled_lines.insert(i + 1, styled);
             }
         }
-        self.rehighlight_from(linum);
+        self.rehighlight_from(linum, sync_upto);
         for view in self.views.values_mut() {
             if view.cursor.char_idx >= cidx {
                 view.cursor.char_idx += 1;
@@ -246,6 +258,7 @@ impl Buffer {
         let len_lines = self.data.len_lines();
         self.data.remove(cidx - 1..cidx);
         let mut linum = view.cursor.line_num;
+        let sync_upto = view.max_line_visible();
         let is_beg = view.cursor.line_cidx == 0 && self.data.len_lines() < len_lines;
         {
             let mut styled_lines = self.styled_lines.lock().unwrap();
@@ -258,7 +271,7 @@ impl Buffer {
             styled.push(lch, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
             styled_lines[linum] = styled;
         }
-        self.rehighlight_from(linum);
+        self.rehighlight_from(linum, sync_upto);
         for view in self.views.values_mut() {
             if view.cursor.char_idx >= cidx {
                 view.cursor.char_idx -= 1;
@@ -284,6 +297,7 @@ impl Buffer {
         }
         let cidx = view.cursor.char_idx;
         let linum = view.cursor.line_num;
+        let sync_upto = view.max_line_visible();
         let len_lines = self.data.len_lines();
         self.data.remove(cidx..cidx + 1);
         let del_end = self.data.len_lines() < len_lines;
@@ -297,7 +311,7 @@ impl Buffer {
             styled.push(lch, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
             styled_lines[linum] = styled;
         }
-        self.rehighlight_from(linum);
+        self.rehighlight_from(linum, sync_upto);
         for view in self.views.values_mut() {
             if view.cursor.char_idx > cidx {
                 view.cursor.char_idx -= 1;
@@ -377,10 +391,24 @@ impl Buffer {
     }
 
     pub(super) fn reload_from_file(&mut self, path: &str) -> IOResult<()> {
-        File::open(path).and_then(|f| self.load_and_hl_file(f))
+        File::open(path)
+            .and_then(|f| self.load_and_hl_file(f))
+            .map(|_| {
+                for view in self.views.values_mut() {
+                    view.rehighlight_to(
+                        &self.data,
+                        &self.styled_lines.lock().unwrap(),
+                        self.data.len_lines(),
+                    );
+                }
+            })
     }
 
-    fn rehighlight_from(&mut self, linum: usize) {
+    fn rehighlight_from(&mut self, start_linum: usize, sync_upto: usize) {
+        let valid_upto = (start_linum / PARSE_CACHE_DIFF) * PARSE_CACHE_DIFF;
+        for view in self.views.values_mut() {
+            view.hl_valid_upto = valid_upto;
+        }
         let hlpool = &mut *self.hlpool.borrow_mut();
         hlpool.start_highlight(
             self.buf_id,
@@ -388,11 +416,16 @@ impl Buffer {
             Arc::clone(&self.parse_states),
             Arc::clone(&self.hl_states),
             Arc::clone(&self.styled_lines),
-            linum,
+            start_linum,
+            sync_upto,
         );
     }
 
     fn load_and_hl_file(&mut self, f: File) -> IOResult<()> {
+        for view in self.views.values_mut() {
+            view.hl_valid_upto = 0;
+        }
+
         let mut reader = BufReader::new(f);
         let mut buf = String::new();
         let mut builder = RopeBuilder::new();

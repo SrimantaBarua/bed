@@ -100,6 +100,13 @@ impl TextView {
         }
     }
 
+    fn check_redraw(&mut self) -> bool {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.check_view_needs_redraw(&self.id)
+        }
+    }
+
     fn draw(&self, painter: &mut WidgetPainter) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
@@ -141,6 +148,10 @@ impl TextPane {
 
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<u32, PixelSize>) {
         self.views[self.active].move_cursor_to_point(point);
+    }
+
+    pub(crate) fn check_redraw(&mut self) -> bool {
+        self.views[self.active].check_redraw()
     }
 
     pub(crate) fn scroll(

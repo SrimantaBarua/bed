@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 
 use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
@@ -88,6 +87,8 @@ const CURSOR_WIDTH: i32 = 2;
 pub(super) struct BufferView {
     pub(super) cursor: Cursor,
     pub(super) rect: Rect<u32, PixelSize>,
+    pub(super) hl_valid_upto: usize,
+    pub(super) needs_redraw: bool,
     tab_width: usize,
     // Text shaping
     face_key: FaceKey,
@@ -123,6 +124,8 @@ impl BufferView {
         let mut view = BufferView {
             cursor: Cursor::default(),
             rect: params.rect,
+            hl_valid_upto: 0,
+            needs_redraw: true,
             tab_width,
             face_key: params.face_key,
             text_size: params.text_size,
@@ -138,6 +141,15 @@ impl BufferView {
         };
         view.fill_or_truncate_view(data, styled_lines);
         view
+    }
+
+    pub(super) fn max_line_visible(&self) -> usize {
+        let len = self.rect.size.height / self.height;
+        if self.rect.size.height % self.height != 0 {
+            self.start_line + len as usize + 1
+        } else {
+            self.start_line + len as usize
+        }
     }
 
     pub(super) fn scroll(
@@ -169,6 +181,7 @@ impl BufferView {
         }
         self.shaped_lines.clear();
         self.fill_or_truncate_view(data, styled_lines);
+        self.needs_redraw = true;
     }
 
     pub(super) fn move_cursor_to_point(
@@ -206,6 +219,7 @@ impl BufferView {
         self.cursor.line_gidx = gidx;
         self.cursor.sync_gidx(data, tab_width);
         self.snap_to_cursor(data, styled_lines);
+        self.needs_redraw = true;
     }
 
     pub(super) fn set_rect(
@@ -217,6 +231,25 @@ impl BufferView {
         self.rect = rect;
         self.fill_or_truncate_view(data, styled_lines);
         self.snap_to_cursor(data, styled_lines);
+        self.needs_redraw = true;
+    }
+
+    pub(super) fn rehighlight_to(&mut self, data: &Rope, styled: &[StyledText], linum: usize) {
+        if linum <= self.start_line
+            || self.hl_valid_upto >= self.start_line + self.shaped_lines.len()
+        {
+            self.hl_valid_upto = linum;
+            return;
+        }
+        if self.hl_valid_upto <= self.start_line {
+            self.shaped_lines.clear();
+        } else {
+            self.shaped_lines
+                .truncate(self.hl_valid_upto - self.start_line);
+        }
+        self.fill_or_truncate_view(data, styled);
+        self.hl_valid_upto = linum;
+        self.needs_redraw = true;
     }
 
     pub(super) fn reshape_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
@@ -239,6 +272,7 @@ impl BufferView {
             &styled.unders,
         );
         self.shaped_lines[linum - self.start_line] = shaped;
+        self.needs_redraw = true;
     }
 
     pub(super) fn insert_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
@@ -268,6 +302,7 @@ impl BufferView {
             self.shaped_lines.pop_back();
         }
         self.shaped_lines.insert(linum - self.start_line, shaped);
+        self.needs_redraw = true;
     }
 
     pub(super) fn delete_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
@@ -299,6 +334,7 @@ impl BufferView {
             &styled.unders,
         );
         self.shaped_lines.push_back(shaped);
+        self.needs_redraw = true;
     }
 
     pub(super) fn snap_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
@@ -331,9 +367,11 @@ impl BufferView {
         } else if cursor_x + CURSOR_WIDTH as u32 >= self.xoff + self.rect.size.width {
             self.xoff = cursor_x + CURSOR_WIDTH as u32 - self.rect.size.width;
         }
+        self.needs_redraw = true;
     }
 
-    pub(super) fn draw(&self, painter: &mut WidgetPainter) {
+    pub(super) fn draw(&mut self, painter: &mut WidgetPainter) {
+        self.needs_redraw = false;
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut pos = point2(-(self.xoff as i32), -(self.yoff as i32));
         let mut linum = 0;
