@@ -87,6 +87,8 @@ impl Bed {
         let mut start = time::Instant::now();
         let target = time::Duration::from_nanos(1_000_000_000 / 60);
 
+        bed.draw();
+
         while !bed.window.should_close() {
             let mut redraw = false;
             let mut scroll_amt = (0.0, 0.0);
@@ -139,9 +141,7 @@ impl Bed {
             let diff = start.elapsed();
             start = time::Instant::now();
             if redraw {
-                bed.painter.clear(style::Color::new(0, 0, 0, 0xff));
-                bed.textview_tree.draw(&mut bed.painter);
-                bed.window.swap_buffers();
+                bed.draw();
             }
 
             if diff < target {
@@ -149,6 +149,12 @@ impl Bed {
             }
             glfw.poll_events();
         }
+    }
+
+    fn draw(&mut self) {
+        self.painter.clear(style::Color::new(0, 0, 0, 0xff));
+        self.textview_tree.draw(&mut self.painter);
+        self.window.swap_buffers();
     }
 
     fn insert_char(&mut self, c: char) {

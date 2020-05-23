@@ -37,7 +37,6 @@ impl Painter {
         view_rect: Rect<u32, PixelSize>,
         dpi: Size2D<u32, DPI>,
     ) -> Painter {
-        gl_viewport(view_rect.cast());
         let projection = Mat4::projection(winsz);
         let cq_arr = ElemArr::new(8);
         let tcq_arr = ElemArr::new(128);
@@ -50,14 +49,16 @@ impl Painter {
         let tcqfsrc = include_str!("shader_src/tex_color_quad.frag");
         let tcq_shader = ShaderProgram::new(tcqvsrc, tcqfsrc).unwrap();
         // Return painter
-        Painter {
+        let mut ret = Painter {
             projection,
             glyph_render,
             cq_arr,
             tcq_arr,
             cq_shader,
             tcq_shader,
-        }
+        };
+        ret.resize(winsz, view_rect);
+        ret
     }
 
     pub(crate) fn resize(&mut self, winsz: Size2D<u32, PixelSize>, view: Rect<u32, PixelSize>) {
