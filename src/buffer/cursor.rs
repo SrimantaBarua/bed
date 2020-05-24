@@ -19,7 +19,6 @@ pub(super) struct Cursor {
     pub(super) line_cidx: usize,
     pub(super) line_gidx: usize,
     pub(super) line_global_x: usize,
-    pub(super) past_end: bool,
     pub(super) style: CursorStyle,
 }
 
@@ -43,7 +42,7 @@ impl Cursor {
         let len_chars = trimmed.len_chars();
         if self.line_cidx >= len_chars {
             self.line_cidx = len_chars;
-            if !self.past_end && self.line_cidx > 0 {
+            if !self.past_end() && self.line_cidx > 0 {
                 self.line_cidx -= 1;
             }
         }
@@ -63,7 +62,7 @@ impl Cursor {
         if !rope_is_grapheme_boundary(&trimmed, self.line_cidx) {
             self.line_cidx = rope_next_grapheme_boundary(&trimmed, self.line_cidx);
         }
-        if !self.past_end && self.line_cidx == len_chars && self.line_cidx > 0 {
+        if !self.past_end() && self.line_cidx == len_chars && self.line_cidx > 0 {
             self.line_cidx -= 1;
         }
         let (cidx, gidx) = cidx_gidx_from_cidx(&trimmed, self.line_cidx, tab_width);
@@ -76,7 +75,7 @@ impl Cursor {
     pub(super) fn sync_global_x(&mut self, data: &Rope, tab_width: usize) {
         let trimmed = rope_trim_newlines(data.line(self.line_num));
         let (cidx, gidx) =
-            cidx_gidx_from_global_x(&trimmed, self.line_global_x, tab_width, self.past_end);
+            cidx_gidx_from_global_x(&trimmed, self.line_global_x, tab_width, self.past_end());
         self.line_cidx = cidx;
         self.line_gidx = gidx;
         self.char_idx = data.line_to_char(self.line_num) + self.line_cidx;
@@ -84,7 +83,8 @@ impl Cursor {
 
     pub(super) fn sync_gidx(&mut self, data: &Rope, tab_width: usize) {
         let trimmed = rope_trim_newlines(data.line(self.line_num));
-        let (cidx, gidx) = cidx_gidx_from_gidx(&trimmed, self.line_gidx, tab_width, self.past_end);
+        let (cidx, gidx) =
+            cidx_gidx_from_gidx(&trimmed, self.line_gidx, tab_width, self.past_end());
         self.line_cidx = cidx;
         self.line_gidx = gidx;
         self.line_global_x = self.line_gidx;
@@ -98,9 +98,12 @@ impl Cursor {
             line_cidx: 0,
             line_gidx: 0,
             line_global_x: 0,
-            past_end: true,
-            style: CursorStyle::Block,
+            style: CursorStyle::Line,
         }
+    }
+
+    fn past_end(&self) -> bool {
+        self.style == CursorStyle::Line
     }
 }
 
