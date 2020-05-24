@@ -15,7 +15,11 @@ use crate::painter::WidgetPainter;
 use crate::style::{Color, TextSize, TextStyle};
 use crate::text::{ShapedText, TextShaper};
 
-use super::cursor::Cursor;
+use super::cursor::{Cursor, CursorStyle};
+
+const CURSOR_LINE_WIDTH: i32 = 2;
+const CURSOR_BLOCK_WIDTH: i32 = 10;
+static CURSOR_COLOR: Color = Color::new(0xff, 0x88, 0x22, 0xff);
 
 // All indices here are codepoint indices
 #[derive(Debug)]
@@ -85,8 +89,6 @@ pub(crate) struct BufferViewCreateParams {
     pub(crate) theme: Arc<Theme>,
 }
 
-const CURSOR_WIDTH: i32 = 2;
-
 pub(super) struct BufferView {
     pub(super) cursor: Cursor,
     pub(super) rect: Rect<u32, PixelSize>,
@@ -107,6 +109,8 @@ pub(super) struct BufferView {
     start_line: usize,
     yoff: u32,
     xoff: u32,
+    // Theme
+    theme: Arc<Theme>,
 }
 
 impl BufferView {
@@ -141,6 +145,7 @@ impl BufferView {
             start_line: 0,
             yoff: 0,
             xoff: 0,
+            theme: params.theme,
         };
         view.fill_or_truncate_view(data, styled_lines);
         view
@@ -359,7 +364,7 @@ impl BufferView {
                     gidx += clus.num_graphemes;
                     cursor_x += width;
                 } else {
-                    cursor_x += width * ((cgidx - gidx) as i32) / clus.num_graphemes as i32;
+                    cursor_x += width * ((cgidx + 1 - gidx) as i32) / clus.num_graphemes as i32;
                     break;
                 }
             }
@@ -367,8 +372,8 @@ impl BufferView {
         let cursor_x = if cursor_x < 0 { 0u32 } else { cursor_x as u32 };
         if cursor_x < self.xoff {
             self.xoff = cursor_x;
-        } else if cursor_x + CURSOR_WIDTH as u32 >= self.xoff + self.rect.size.width {
-            self.xoff = cursor_x + CURSOR_WIDTH as u32 - self.rect.size.width;
+        } else if cursor_x >= self.xoff + self.rect.size.width {
+            self.xoff = cursor_x - self.rect.size.width;
         }
         self.needs_redraw = true;
     }
@@ -386,6 +391,15 @@ impl BufferView {
                 self.cursor.line_gidx,
             ))
         };
+        let mut ccolor = self
+            .theme
+            .settings
+            .caret
+            .map(|c| Color::from_syntect(c))
+            .unwrap_or(CURSOR_COLOR);
+        if self.cursor.style == CursorStyle::Block {
+            ccolor = ccolor.opacity(50);
+        }
         for line in &self.shaped_lines {
             pos.y += self.ascender;
             let mut gidx = 0;
@@ -412,15 +426,26 @@ impl BufferView {
                     let width = pos.x - start_x;
                     if let Some((cline, cgidx)) = cursor {
                         if linum == cline && gidx <= cgidx && gidx + cluster.num_graphemes > cgidx {
-                            let cwidth = CURSOR_WIDTH;
-                            let cheight = line.metrics.ascender - line.metrics.descender;
                             let mut cx =
                                 (width * (cgidx - gidx) as i32) / cluster.num_graphemes as i32;
                             cx += start_x;
-                            let cy = pos.y - line.metrics.ascender;
+                            let cwidth = match self.cursor.style {
+                                CursorStyle::Line => CURSOR_LINE_WIDTH,
+                                _ => width / cluster.num_graphemes as i32,
+                            };
+                            let (cy, cheight) = match self.cursor.style {
+                                CursorStyle::Underline => (
+                                    pos.y - line.metrics.underline_position,
+                                    line.metrics.underline_thickness,
+                                ),
+                                _ => (
+                                    pos.y - line.metrics.ascender,
+                                    line.metrics.ascender - line.metrics.descender,
+                                ),
+                            };
                             painter.color_quad(
                                 Rect::new(point2(cx, cy), size2(cwidth, cheight)),
-                                Color::new(0xff, 0x88, 0x22, 0xff),
+                                ccolor,
                             );
                         }
                     }
@@ -438,13 +463,22 @@ impl BufferView {
             }
             if let Some((cline, cgidx)) = cursor {
                 if linum == cline && gidx == cgidx {
-                    let cwidth = 2;
-                    let cheight = line.metrics.ascender - line.metrics.descender;
-                    let cy = pos.y - line.metrics.ascender;
-                    painter.color_quad(
-                        Rect::new(point2(pos.x, cy), size2(cwidth, cheight)),
-                        Color::new(0xff, 0x88, 0x22, 0xff),
-                    );
+                    let cwidth = match self.cursor.style {
+                        CursorStyle::Line => CURSOR_LINE_WIDTH,
+                        _ => CURSOR_BLOCK_WIDTH,
+                    };
+                    let (cy, cheight) = match self.cursor.style {
+                        CursorStyle::Underline => (
+                            pos.y - line.metrics.underline_position,
+                            line.metrics.underline_thickness,
+                        ),
+                        _ => (
+                            pos.y - line.metrics.ascender,
+                            line.metrics.ascender - line.metrics.descender,
+                        ),
+                    };
+                    painter
+                        .color_quad(Rect::new(point2(pos.x, cy), size2(cwidth, cheight)), ccolor);
                 }
             }
             pos.y -= self.descender;

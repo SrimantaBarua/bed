@@ -6,6 +6,13 @@ use crate::common::{
     rope_is_grapheme_boundary, rope_next_grapheme_boundary, rope_trim_newlines, RopeGraphemes,
 };
 
+#[derive(Eq, PartialEq)]
+pub(super) enum CursorStyle {
+    Line,
+    Underline,
+    Block,
+}
+
 pub(super) struct Cursor {
     pub(super) char_idx: usize,
     pub(super) line_num: usize,
@@ -13,6 +20,7 @@ pub(super) struct Cursor {
     pub(super) line_gidx: usize,
     pub(super) line_global_x: usize,
     pub(super) past_end: bool,
+    pub(super) style: CursorStyle,
 }
 
 impl Cursor {
@@ -91,6 +99,7 @@ impl Cursor {
             line_gidx: 0,
             line_global_x: 0,
             past_end: true,
+            style: CursorStyle::Block,
         }
     }
 }

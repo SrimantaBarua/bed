@@ -92,12 +92,12 @@ impl Buffer {
             view.cursor.line_cidx = 0;
             view.cursor.line_gidx = 0;
             view.cursor.line_global_x = 0;
-            return;
-        }
-        if view.cursor.line_num < n {
-            view.cursor.line_num = 0;
         } else {
-            view.cursor.line_num -= n;
+            if view.cursor.line_num < n {
+                view.cursor.line_num = 0;
+            } else {
+                view.cursor.line_num -= n;
+            }
         }
         view.cursor.sync_global_x(&self.data, self.tab_width);
         view.snap_to_cursor(&self.data, &self.styled_lines.lock().unwrap());
