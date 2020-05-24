@@ -229,15 +229,8 @@ impl TextPane {
     }
 
     pub(super) fn draw(&self, painter: &mut Painter) {
-        let mut widget = painter.widget_ctx(
-            self.params.rect.cast(),
-            self.params
-                .theme
-                .settings
-                .background
-                .map(|c| Color::from_syntect(c))
-                .unwrap_or(Color::new(0xff, 0xff, 0xff, 0xff)),
-        );
+        let mut widget =
+            painter.widget_ctx(self.params.rect.cast(), Color::new(0xff, 0xff, 0xff, 0xff));
         self.views[self.active].draw(&mut widget);
     }
 }

@@ -3,11 +3,9 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
-use syntect::highlighting::Theme;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
 use crate::font::FaceKey;
@@ -86,7 +84,6 @@ pub(crate) struct BufferViewCreateParams {
     pub(crate) dpi: Size2D<u32, DPI>,
     pub(crate) text_shaper: Rc<RefCell<TextShaper>>,
     pub(crate) rect: Rect<u32, PixelSize>,
-    pub(crate) theme: Arc<Theme>,
 }
 
 pub(super) struct BufferView {
@@ -109,8 +106,6 @@ pub(super) struct BufferView {
     start_line: usize,
     yoff: u32,
     xoff: u32,
-    // Theme
-    theme: Arc<Theme>,
 }
 
 impl BufferView {
@@ -145,7 +140,6 @@ impl BufferView {
             start_line: 0,
             yoff: 0,
             xoff: 0,
-            theme: params.theme,
         };
         view.fill_or_truncate_view(data, styled_lines);
         view
@@ -242,26 +236,8 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(super) fn rehighlight_to(&mut self, data: &Rope, styled: &[StyledText], linum: usize) {
-        if linum <= self.start_line
-            || self.hl_valid_upto >= self.start_line + self.shaped_lines.len()
-        {
-            self.hl_valid_upto = linum;
-            return;
-        }
-        if self.hl_valid_upto <= self.start_line {
-            self.shaped_lines.clear();
-        } else {
-            self.shaped_lines
-                .truncate(self.hl_valid_upto - self.start_line);
-        }
-        self.fill_or_truncate_view(data, styled);
-        self.hl_valid_upto = linum;
-        self.needs_redraw = true;
-    }
-
     pub(super) fn reshape_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
-        if linum < self.start_line || linum >= self.start_line + self.shaped_lines.len() {
+        if linum < self.start_line || linum >= self.max_line_visible() {
             return;
         }
         let shaper = &mut *self.text_shaper.borrow_mut();
@@ -288,7 +264,7 @@ impl BufferView {
             self.start_line += 1;
             return;
         }
-        if linum >= self.start_line + self.shaped_lines.len() {
+        if linum >= self.max_line_visible() {
             return;
         }
         let shaper = &mut *self.text_shaper.borrow_mut();
@@ -306,8 +282,16 @@ impl BufferView {
             &styled.colors,
             &styled.unders,
         );
-        if self.shaped_lines.len() as u32 * self.height >= self.rect.size.height {
-            self.shaped_lines.pop_back();
+        let height = self.shaped_lines.len() as u32 * self.height;
+        if linum == self.start_line + self.shaped_lines.len() {
+            if height >= self.rect.size.height {
+                self.shaped_lines.pop_front();
+                self.start_line += 1;
+            }
+        } else {
+            if height >= self.rect.size.height {
+                self.shaped_lines.pop_back();
+            }
         }
         self.shaped_lines.insert(linum - self.start_line, shaped);
         self.needs_redraw = true;
@@ -391,12 +375,7 @@ impl BufferView {
                 self.cursor.line_gidx,
             ))
         };
-        let mut ccolor = self
-            .theme
-            .settings
-            .caret
-            .map(|c| Color::from_syntect(c))
-            .unwrap_or(CURSOR_COLOR);
+        let mut ccolor = CURSOR_COLOR;
         if self.cursor.style == CursorStyle::Block {
             ccolor = ccolor.opacity(50);
         }

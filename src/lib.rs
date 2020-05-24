@@ -2,17 +2,12 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::{thread, time};
 
-#[macro_use]
 extern crate crossbeam_channel;
 
-use directories::ProjectDirs;
 use euclid::{size2, vec2, Size2D};
 use glfw::{Action, Key, MouseButtonLeft, WindowEvent};
-use syntect::highlighting::ThemeSet;
-use syntect::parsing::SyntaxSet;
 
 mod buffer;
 mod common;
@@ -23,6 +18,7 @@ mod painter;
 mod style;
 mod text;
 mod textview;
+mod ts;
 mod window;
 
 use buffer::BufferViewCreateParams;
@@ -58,13 +54,12 @@ pub struct Bed {
     painter: painter::Painter,
     _buffer_mgr: buffer::BufferMgr,
     window: window::Window,
-    _syntax_set: Arc<SyntaxSet>,
-    _theme_set: ThemeSet,
 }
 
 impl Bed {
     pub fn run(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) {
         let config = config::Config::load();
+        let ts_core = ts::TsCore::new();
 
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
         let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
@@ -80,18 +75,7 @@ impl Bed {
         let text_size = style::TextSize::from_f32(config.font_size);
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
-        let syntax_set = Arc::new(SyntaxSet::load_defaults_newlines());
-        let theme_set = load_themes();
-
-        let theme = Arc::new(
-            theme_set
-                .themes
-                .get(&config.theme)
-                .unwrap_or_else(|| theme_set.themes.get(FALLBACK_THEME).unwrap())
-                .clone(),
-        );
-
-        let mut buffer_mgr = buffer::BufferMgr::new(Arc::clone(&syntax_set), Arc::clone(&theme));
+        let mut buffer_mgr = buffer::BufferMgr::new(ts_core);
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))
@@ -101,7 +85,6 @@ impl Bed {
 
         let view_id = buffer_mgr.next_view_id();
         let view_params = BufferViewCreateParams {
-            theme: Arc::clone(&theme),
             face_key,
             text_size,
             dpi,
@@ -117,8 +100,6 @@ impl Bed {
             painter: painter,
             _buffer_mgr: buffer_mgr,
             textview_tree: textview_tree,
-            _syntax_set: syntax_set,
-            _theme_set: theme_set,
         };
 
         let mut start = time::Instant::now();
@@ -249,13 +230,4 @@ enum Direction {
     Down,
     Left,
     Right,
-}
-
-fn load_themes() -> ThemeSet {
-    let mut theme_set = ThemeSet::load_defaults();
-    if let Some(proj_dirs) = ProjectDirs::from("", "sbarua", "bed") {
-        let cfg_dir_path = proj_dirs.config_dir();
-        let _ = theme_set.add_from_folder(cfg_dir_path.join("themes"));
-    }
-    theme_set
 }

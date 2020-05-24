@@ -2,7 +2,6 @@
 
 mod buffer;
 mod cursor;
-mod hlpool;
 mod mgr;
 mod view;
 

@@ -6,48 +6,33 @@ use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 use fnv::FnvHashMap;
-use syntect::highlighting::Theme;
-use syntect::parsing::SyntaxSet;
+
+use crate::ts::TsCore;
 
 use super::buffer::Buffer;
-use super::hlpool::HlPool;
 use super::{BufferID, BufferViewID};
 
 pub(crate) struct BufferMgr {
     buffers: FnvHashMap<String, Weak<RefCell<Buffer>>>,
-    syntax_set: Arc<SyntaxSet>,
-    theme: Arc<Theme>,
     next_view_id: usize,
     next_buf_id: usize,
-    hlpool: Rc<RefCell<HlPool>>,
+    ts_core: TsCore,
 }
 
 // TODO: Periodically clear out Weak buffers with a strong count of 0
 
 impl BufferMgr {
-    pub(crate) fn new(syntax_set: Arc<SyntaxSet>, theme: Arc<Theme>) -> BufferMgr {
-        let hlpool = Rc::new(RefCell::new(HlPool::new(
-            Arc::clone(&syntax_set),
-            Arc::clone(&theme),
-            4,
-        )));
+    pub(crate) fn new(ts_core: TsCore) -> BufferMgr {
         BufferMgr {
             buffers: FnvHashMap::default(),
             next_view_id: 0,
             next_buf_id: 0,
-            syntax_set: syntax_set,
-            theme: theme,
-            hlpool: hlpool,
+            ts_core,
         }
     }
 
     pub(crate) fn empty(&mut self) -> Rc<RefCell<Buffer>> {
-        let ret = Rc::new(RefCell::new(Buffer::empty(
-            BufferID(self.next_buf_id),
-            Arc::clone(&self.syntax_set),
-            Arc::clone(&self.theme),
-            self.hlpool.clone(),
-        )));
+        let ret = Rc::new(RefCell::new(Buffer::empty(BufferID(self.next_buf_id))));
         self.next_buf_id += 1;
         ret
     }
@@ -62,14 +47,7 @@ impl BufferMgr {
                     .map(|_| buffer.clone())
             })
             .unwrap_or_else(|| {
-                Buffer::from_file(
-                    BufferID(self.next_buf_id),
-                    path,
-                    Arc::clone(&self.syntax_set),
-                    Arc::clone(&self.theme),
-                    self.hlpool.clone(),
-                )
-                .map(|buffer| {
+                Buffer::from_file(BufferID(self.next_buf_id), path, &self.ts_core).map(|buffer| {
                     self.next_buf_id += 1;
                     let buffer = Rc::new(RefCell::new(buffer));
                     self.buffers.insert(path.to_owned(), Rc::downgrade(&buffer));
