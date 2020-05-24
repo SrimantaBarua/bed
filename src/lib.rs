@@ -49,7 +49,7 @@ pub struct Bed {
     _buffer_mgr: buffer::BufferMgr,
     window: window::Window,
     _syntax_set: Arc<SyntaxSet>,
-    _theme_set: Arc<ThemeSet>,
+    _theme_set: ThemeSet,
 }
 
 impl Bed {
@@ -67,13 +67,17 @@ impl Bed {
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
         let syntax_set = Arc::new(SyntaxSet::load_defaults_newlines());
-        let theme_set = Arc::new(load_themes());
+        let theme_set = load_themes();
 
-        let mut buffer_mgr = buffer::BufferMgr::new(
-            Arc::clone(&syntax_set),
-            Arc::clone(&theme_set),
-            "base16-ocean.light",
+        let theme = Arc::new(
+            theme_set
+                .themes
+                .get("ayu-dark")
+                .unwrap_or_else(|| theme_set.themes.get("base16-ocean.light").unwrap())
+                .clone(),
         );
+
+        let mut buffer_mgr = buffer::BufferMgr::new(Arc::clone(&syntax_set), Arc::clone(&theme));
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))

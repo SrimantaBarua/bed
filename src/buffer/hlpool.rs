@@ -10,7 +10,7 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use fnv::FnvHashMap;
 use ropey::Rope;
 use syntect::highlighting::{
-    FontStyle, HighlightState, Highlighter, RangedHighlightIterator, ThemeSet,
+    FontStyle, HighlightState, Highlighter, RangedHighlightIterator, Theme,
 };
 use syntect::parsing::{ParseState, SyntaxSet};
 
@@ -55,11 +55,9 @@ impl Worker {
         brx: Receiver<WorkerBroadcast>,
         rtx: Sender<WorkerReply>,
         syntax_set: Arc<SyntaxSet>,
-        theme_set: Arc<ThemeSet>,
-        theme: &str,
+        theme: Arc<Theme>,
     ) -> Worker {
         let (wmtx, wmrx) = unbounded();
-        let theme = theme.to_owned();
         let hl_ckpt = Arc::new(Mutex::new(0));
         let hl_ckpt2 = Arc::clone(&hl_ckpt);
 
@@ -79,7 +77,7 @@ impl Worker {
                         pss.truncate(i + 1);
                         ln = i * PARSE_CACHE_DIFF;
                         let mut buf = String::new();
-                        let hl = Highlighter::new(theme_set.themes.get(&theme).unwrap());
+                        let hl = Highlighter::new(&theme);
                         let mut hs = hss[i].clone();
                         let mut ps = pss[i].clone();
 
@@ -224,12 +222,7 @@ pub(super) struct HlPool {
 }
 
 impl HlPool {
-    pub(super) fn new(
-        ss: Arc<SyntaxSet>,
-        ts: Arc<ThemeSet>,
-        theme: &str,
-        num_workers: usize,
-    ) -> HlPool {
+    pub(super) fn new(ss: Arc<SyntaxSet>, th: Arc<Theme>, num_workers: usize) -> HlPool {
         let mut workers = Vec::new();
         let (wbtx, wbrx) = unbounded();
         let (wrtx, wrrx) = unbounded();
@@ -239,8 +232,7 @@ impl HlPool {
                 wbrx.clone(),
                 wrtx.clone(),
                 Arc::clone(&ss),
-                Arc::clone(&ts),
-                theme,
+                Arc::clone(&th),
             ));
         }
         HlPool {

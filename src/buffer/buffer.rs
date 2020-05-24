@@ -11,7 +11,7 @@ use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::{Rope, RopeBuilder};
 use syntect::highlighting::{
-    FontStyle, HighlightState, Highlighter, RangedHighlightIterator, ThemeSet,
+    FontStyle, HighlightState, Highlighter, RangedHighlightIterator, Theme,
 };
 use syntect::parsing::{ParseState, ScopeStack, SyntaxSet};
 
@@ -31,8 +31,7 @@ pub(crate) struct Buffer {
     parse_states: Arc<Mutex<Vec<ParseState>>>,
     styled_lines: Arc<Mutex<Vec<StyledText>>>,
     syntax_set: Arc<SyntaxSet>,
-    theme_set: Arc<ThemeSet>,
-    cur_theme: String,
+    theme: Arc<Theme>,
     tab_width: usize,
     hlpool: Rc<RefCell<HlPool>>,
 }
@@ -332,12 +331,11 @@ impl Buffer {
     pub(super) fn empty(
         buf_id: BufferID,
         syntax_set: Arc<SyntaxSet>,
-        theme_set: Arc<ThemeSet>,
-        cur_theme: &str,
+        theme: Arc<Theme>,
         hlpool: Rc<RefCell<HlPool>>,
     ) -> Buffer {
         let synref = syntax_set.find_syntax_plain_text();
-        let hl = Highlighter::new(theme_set.themes.get(cur_theme).unwrap());
+        let hl = Highlighter::new(&theme);
         let hl_state = HighlightState::new(&hl, ScopeStack::new());
         let parse_state = ParseState::new(synref);
         let mut styled = StyledText::new();
@@ -351,8 +349,7 @@ impl Buffer {
             parse_states: Arc::new(Mutex::new(vec![parse_state])),
             styled_lines: Arc::new(Mutex::new(vec![styled])),
             syntax_set: syntax_set,
-            theme_set: theme_set,
-            cur_theme: cur_theme.to_owned(),
+            theme: theme,
             hlpool: hlpool,
         }
     }
@@ -361,8 +358,7 @@ impl Buffer {
         buf_id: BufferID,
         path: &str,
         syntax_set: Arc<SyntaxSet>,
-        theme_set: Arc<ThemeSet>,
-        cur_theme: &str,
+        theme: Arc<Theme>,
         hlpool: Rc<RefCell<HlPool>>,
     ) -> IOResult<Buffer> {
         File::open(path).and_then(|f| {
@@ -371,7 +367,7 @@ impl Buffer {
                 .unwrap()
                 .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
             let parse_state = ParseState::new(synref);
-            let hl = Highlighter::new(theme_set.themes.get(cur_theme).unwrap());
+            let hl = Highlighter::new(&theme);
             let hl_state = HighlightState::new(&hl, ScopeStack::new());
             let mut ret = Buffer {
                 buf_id: buf_id,
@@ -382,8 +378,7 @@ impl Buffer {
                 parse_states: Arc::new(Mutex::new(vec![parse_state])),
                 styled_lines: Arc::new(Mutex::new(Vec::new())),
                 syntax_set: syntax_set,
-                theme_set: theme_set,
-                cur_theme: cur_theme.to_owned(),
+                theme: theme,
                 hlpool: hlpool,
             };
             ret.load_and_hl_file(f).map(|_| ret)
@@ -437,7 +432,7 @@ impl Buffer {
         parse_states.truncate(1);
         styled_lines.clear();
 
-        let hl = Highlighter::new(self.theme_set.themes.get(&self.cur_theme).unwrap());
+        let hl = Highlighter::new(&self.theme);
         let mut hlstate = hl_states[0].clone();
         let mut parse_state = parse_states[0].clone();
         let mut linum = 0;
