@@ -2,6 +2,7 @@
 
 use std::fs::File;
 use std::io::Result as IOResult;
+use std::path::Path;
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
@@ -298,22 +299,21 @@ impl Buffer {
                     styled.push(lch, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
                     styled_lines.push(styled);
                 }
-                /*
-                let (parser, tree) = Path::from_str(path)
+                let parser = Path::new(path)
                     .extension()
-                    .and_then(|s| s.as_str())
-                    .and_then(|s| ts_core.parser_from_extension(s))
-                    .map(|p| {});
-                */
-                Buffer {
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| ts_core.parser_from_extension(s));
+                let mut ret = Buffer {
                     buf_id: buf_id,
                     tab_width: 8,
                     data: rope,
                     views: FnvHashMap::default(),
                     styled_lines,
-                    parser: None,
+                    parser,
                     tree: None,
-                }
+                };
+                ret.recreate_parse_tree();
+                ret
             })
     }
 
@@ -322,7 +322,32 @@ impl Buffer {
             .and_then(|f| Rope::from_reader(f))
             .map(|rope| {
                 self.data = rope;
+                self.recreate_parse_tree();
             })
+    }
+
+    fn recreate_parse_tree(&mut self) {
+        let rope = self.data.clone();
+        if let Some(parser) = &mut self.parser {
+            let t = parser
+                .parse_with(
+                    &mut |boff, _| {
+                        if boff >= rope.len_bytes() {
+                            ""
+                        } else {
+                            let (ch, cb, _, _) = rope.chunk_at_byte(boff);
+                            if cb >= ch.len() {
+                                ""
+                            } else {
+                                &ch[cb..]
+                            }
+                        }
+                    },
+                    None,
+                )
+                .expect("failed to parse");
+            self.tree = Some(t);
+        }
     }
 
     fn rehighlight_from(&mut self, start_linum: usize, sync_upto: usize) {

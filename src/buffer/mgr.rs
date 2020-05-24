@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::io::Result as IOResult;
 use std::rc::{Rc, Weak};
-use std::sync::Arc;
 
 use fnv::FnvHashMap;
 
