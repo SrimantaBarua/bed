@@ -16,6 +16,7 @@ use syntect::parsing::SyntaxSet;
 
 mod buffer;
 mod common;
+mod config;
 mod font;
 mod opengl;
 mod painter;
@@ -26,6 +27,15 @@ mod window;
 
 use buffer::BufferViewCreateParams;
 use common::PixelSize;
+
+#[cfg(target_os = "linux")]
+static DEFAULT_FONT: &'static str = "monospace";
+#[cfg(target_os = "windows")]
+static DEFAULT_FONT: &'static str = "Consolas";
+
+static DEFAULT_THEME: &'static str = "ayu-mirage";
+static FALLBACK_THEME: &'static str = "base16-ocean.light";
+static DEFAULT_FONT_SIZE: f32 = 8.0;
 
 fn abspath(spath: &str) -> String {
     use std::env;
@@ -54,6 +64,8 @@ pub struct Bed {
 
 impl Bed {
     pub fn run(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) {
+        let config = config::Config::load();
+
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
         let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
         window.set_cursor(Some(glfw::Cursor::standard(glfw::StandardCursor::IBeam)));
@@ -62,8 +74,10 @@ impl Bed {
         let painter = painter::Painter::new(size, viewable_rect, dpi);
 
         let mut font_core = font::FontCore::new().unwrap();
-        let face_key = font_core.find("monospace").unwrap();
-        let text_size = style::TextSize::from_f32(7.5);
+        let face_key = font_core
+            .find(&config.font_family)
+            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
+        let text_size = style::TextSize::from_f32(config.font_size);
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
         let syntax_set = Arc::new(SyntaxSet::load_defaults_newlines());
@@ -72,8 +86,8 @@ impl Bed {
         let theme = Arc::new(
             theme_set
                 .themes
-                .get("ayu-mirage")
-                .unwrap_or_else(|| theme_set.themes.get("base16-ocean.light").unwrap())
+                .get(&config.theme)
+                .unwrap_or_else(|| theme_set.themes.get(FALLBACK_THEME).unwrap())
                 .clone(),
         );
 
