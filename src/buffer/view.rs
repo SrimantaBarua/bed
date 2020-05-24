@@ -3,9 +3,11 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
+use syntect::highlighting::Theme;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
 use crate::font::FaceKey;
@@ -80,6 +82,7 @@ pub(crate) struct BufferViewCreateParams {
     pub(crate) dpi: Size2D<u32, DPI>,
     pub(crate) text_shaper: Rc<RefCell<TextShaper>>,
     pub(crate) rect: Rect<u32, PixelSize>,
+    pub(crate) theme: Arc<Theme>,
 }
 
 const CURSOR_WIDTH: i32 = 2;

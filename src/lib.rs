@@ -72,7 +72,7 @@ impl Bed {
         let theme = Arc::new(
             theme_set
                 .themes
-                .get("ayu-dark")
+                .get("ayu-mirage")
                 .unwrap_or_else(|| theme_set.themes.get("base16-ocean.light").unwrap())
                 .clone(),
         );
@@ -87,6 +87,7 @@ impl Bed {
 
         let view_id = buffer_mgr.next_view_id();
         let view_params = BufferViewCreateParams {
+            theme: Arc::clone(&theme),
             face_key,
             text_size,
             dpi,
