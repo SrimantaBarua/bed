@@ -8,6 +8,7 @@ use std::{thread, time};
 #[macro_use]
 extern crate crossbeam_channel;
 
+use directories::ProjectDirs;
 use euclid::{size2, vec2, Size2D};
 use glfw::{Action, Key, MouseButtonLeft, WindowEvent};
 use syntect::highlighting::ThemeSet;
@@ -66,7 +67,7 @@ impl Bed {
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
         let syntax_set = Arc::new(SyntaxSet::load_defaults_newlines());
-        let theme_set = Arc::new(ThemeSet::load_defaults());
+        let theme_set = Arc::new(load_themes());
 
         let mut buffer_mgr = buffer::BufferMgr::new(
             Arc::clone(&syntax_set),
@@ -229,4 +230,13 @@ enum Direction {
     Down,
     Left,
     Right,
+}
+
+fn load_themes() -> ThemeSet {
+    let mut theme_set = ThemeSet::load_defaults();
+    if let Some(proj_dirs) = ProjectDirs::from("", "sbarua", "bed") {
+        let cfg_dir_path = proj_dirs.config_dir();
+        let _ = theme_set.add_from_folder(cfg_dir_path.join("themes"));
+    }
+    theme_set
 }
