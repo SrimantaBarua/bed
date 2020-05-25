@@ -3,11 +3,12 @@
 use std::fs::File;
 use std::io::Result as IOResult;
 use std::path::Path;
+use std::rc::Rc;
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
-use tree_sitter::{InputEdit, Parser, Point, Tree};
+use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::painter::WidgetPainter;
@@ -24,6 +25,7 @@ pub(crate) struct Buffer {
     styled_lines: Vec<StyledText>,
     tab_width: usize,
     parser: Option<Parser>,
+    hl_query: Option<Rc<Query>>,
     tree: Option<Tree>,
 }
 
@@ -291,6 +293,7 @@ impl Buffer {
             views: FnvHashMap::default(),
             styled_lines: vec![styled],
             parser: None,
+            hl_query: None,
             tree: None,
         }
     }
@@ -306,10 +309,12 @@ impl Buffer {
                     styled.push(lch, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
                     styled_lines.push(styled);
                 }
-                let parser = Path::new(path)
+                let (parser, hl_query) = Path::new(path)
                     .extension()
                     .and_then(|s| s.to_str())
-                    .and_then(|s| ts_core.parser_from_extension(s));
+                    .and_then(|s| ts_core.parser_from_extension(s))
+                    .map(|(p, q)| (Some(p), Some(q)))
+                    .unwrap_or((None, None));
                 let mut ret = Buffer {
                     buf_id: buf_id,
                     tab_width: 8,
@@ -317,6 +322,7 @@ impl Buffer {
                     views: FnvHashMap::default(),
                     styled_lines,
                     parser,
+                    hl_query,
                     tree: None,
                 };
                 ret.recreate_parse_tree();
@@ -324,11 +330,19 @@ impl Buffer {
             })
     }
 
-    pub(super) fn reload_from_file(&mut self, path: &str) -> IOResult<()> {
+    pub(super) fn reload_from_file(&mut self, path: &str, ts_core: &TsCore) -> IOResult<()> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
             .map(|rope| {
                 self.data = rope;
+                let (parser, hl_query) = Path::new(path)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| ts_core.parser_from_extension(s))
+                    .map(|(p, q)| (Some(p), Some(q)))
+                    .unwrap_or((None, None));
+                self.parser = parser;
+                self.hl_query = hl_query;
                 self.recreate_parse_tree();
             })
     }
@@ -343,16 +357,36 @@ impl Buffer {
                             ""
                         } else {
                             let (ch, cb, _, _) = rope.chunk_at_byte(boff);
-                            if cb >= ch.len() {
-                                ""
-                            } else {
-                                &ch[cb..]
-                            }
+                            &ch[boff - cb..]
                         }
                     },
                     None,
                 )
                 .expect("failed to parse");
+
+            if let Some(hl_query) = &self.hl_query {
+                let mut cursor = QueryCursor::new();
+                for (query_match, i) in cursor.captures(hl_query, t.root_node(), |node| {
+                    let range = node.byte_range();
+                    let range = rope.byte_to_char(range.start)..rope.byte_to_char(range.end);
+                    format!("{}", rope.slice(range))
+                }) {
+                    println!("--- match ({}) ---", i);
+                    for capture in query_match.captures {
+                        let node = capture.node;
+                        let idx = capture.index;
+                        let brange = node.byte_range();
+                        let crange = rope.byte_to_char(brange.start)..rope.byte_to_char(brange.end);
+                        println!(
+                            "{:?} -> {} -> {}",
+                            brange,
+                            rope.slice(crange),
+                            hl_query.capture_names()[idx as usize]
+                        );
+                    }
+                }
+            }
+
             self.tree = Some(t);
         }
     }
@@ -390,11 +424,7 @@ impl Buffer {
                             ""
                         } else {
                             let (ch, cb, _, _) = rope.chunk_at_byte(boff);
-                            if cb >= ch.len() {
-                                ""
-                            } else {
-                                &ch[cb..]
-                            }
+                            &ch[boff - cb..]
                         }
                     },
                     Some(&mut tree),

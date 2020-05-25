@@ -42,7 +42,7 @@ impl BufferMgr {
             .and_then(|weak_ref| weak_ref.upgrade())
             .map(|buffer| {
                 (&mut *buffer.borrow_mut())
-                    .reload_from_file(path)
+                    .reload_from_file(path, &self.ts_core)
                     .map(|_| buffer.clone())
             })
             .unwrap_or_else(|| {

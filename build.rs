@@ -4,11 +4,18 @@ use std::path::PathBuf;
 
 fn main() {
     // ---- Tree-sitter --------
-    // tree-sitter-rust
-    let dir = PathBuf::from("res/tree-sitter/rust/src");
+    // tree-sitter-c
+    let cdir = PathBuf::from("res/tree-sitter/c/src");
     cc::Build::new()
-        .include(&dir)
-        .file(dir.join("parser.c"))
-        .file(dir.join("scanner.c"))
+        .include(&cdir)
+        .file(cdir.join("parser.c"))
+        .compile("tree-sitter-c");
+
+    // tree-sitter-rust
+    let rsdir = PathBuf::from("res/tree-sitter/rust/src");
+    cc::Build::new()
+        .include(&rsdir)
+        .file(rsdir.join("parser.c"))
+        .file(rsdir.join("scanner.c"))
         .compile("tree-sitter-rust");
 }
