@@ -1,0 +1,86 @@
+{
+    "ayu-mirage" : {
+        "textview" : {
+            "background" : "#212733",
+            "foreground" : "#D9D7CE",
+            "cursor" : "#FFCC66"
+        },
+
+        "syntax" : {
+            "comment" : {
+                "foreground" : "#5C6773",
+                "slant" : "italic"
+            },
+            "constant" : {
+                "foreground" : "#D4BFFF"
+            },
+            "constructor" : {
+                "foreground" : "#FFD580"
+            },
+            "decorator" : {
+                "foreground" : "#FFD580"
+            },
+            "funccall" : {
+                "foreground" : "#FFD580"
+            },
+            "funccall.macro" : {
+                "foreground" : "#F29E74"
+            },
+            "funcdefn" : {
+                "foreground" : "#FFD580"
+            },
+            "keyword" : {
+                "foreground" : "#FFA759"
+            },
+            "label" : {
+                "foreground" : "#73D0FF"
+            },
+            "literal" : {
+                "foreground" : "#D4BFFF"
+            },
+            "literal.escape" : {
+                "foreground" : "#95E6CB"
+            },
+            "literal.string" : {
+                "foreground" : "#BAE67E"
+            },
+            "macrodefn" : {
+                "foreground" : "#FFD580"
+            },
+            "operator" : {
+                "foreground" : "#F29E74"
+            },
+            "property" : {
+                "foreground" : "#EC5F67"
+            },
+            "punctuation" : {
+                "foreground" : "#D9D7CE"
+            },
+            "punctuation.accessor" : {
+                "foreground" : "#F29E74"
+            },
+            "punctuation.delimiter" : {
+                "foreground" : "#D9D7CECC"
+            },
+            "punctuation.tag" : {
+                "foreground": "#5CCFE690"
+            },
+            "tag" : {
+                "foreground": "#5CCFE6"
+            },
+            "type" : {
+                "foreground" : "#FFA759"
+            },
+            "variable" : {
+                "foreground" : "#D9D7CE"
+            },
+            "variable.builtin" : {
+                "foreground" : "#5CCFE6",
+                "slant" : "italic"
+            },
+            "variable.parameter" : {
+                "foreground" : "#D4BFFF"
+            }
+        }
+    }
+}

@@ -1,30 +1,32 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::convert::TryFrom;
 use std::default::Default;
 
 use euclid::{size2, Size2D};
+use serde::Deserialize;
 
 use crate::common::{PixelSize, DPI};
 
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[serde(try_from = "&str")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
 pub(crate) enum TextWeight {
     Medium,
     Light,
     Bold,
 }
 
-impl TextWeight {
-    /*
-    pub(crate) fn from_str(s: &str) -> Option<TextWeight> {
+impl TryFrom<&str> for TextWeight {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<TextWeight, Self::Error> {
         match s {
-            "medium" => Some(TextWeight::Medium),
-            "light" => Some(TextWeight::Light),
-            "bold" => Some(TextWeight::Bold),
-            _ => None,
+            "medium" => Ok(TextWeight::Medium),
+            "light" => Ok(TextWeight::Light),
+            "bold" => Ok(TextWeight::Bold),
+            _ => Err(format!("invalid text weight: {}", s)),
         }
     }
-    */
 }
 
 impl Default for TextWeight {
@@ -33,25 +35,25 @@ impl Default for TextWeight {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[serde(try_from = "&str")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
 pub(crate) enum TextSlant {
     Roman,
     Italic,
     Oblique,
 }
 
-impl TextSlant {
-    /*
-    pub(crate) fn from_str(s: &str) -> Option<TextSlant> {
+impl TryFrom<&str> for TextSlant {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<TextSlant, Self::Error> {
         match s {
-            "roman" => Some(TextSlant::Roman),
-            "italic" => Some(TextSlant::Italic),
-            "oblique" => Some(TextSlant::Oblique),
-            _ => None,
+            "roman" => Ok(TextSlant::Roman),
+            "italic" => Ok(TextSlant::Italic),
+            "oblique" => Ok(TextSlant::Oblique),
+            _ => Err(format!("invalid text slant: {}", s)),
         }
     }
-    */
 }
 
 impl Default for TextSlant {

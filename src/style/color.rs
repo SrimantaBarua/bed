@@ -1,6 +1,11 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+use std::convert::TryFrom;
+
+use serde::Deserialize;
+
+#[serde(try_from = "&str")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 pub(crate) struct Color {
     pub(crate) r: u8,
     pub(crate) g: u8,
@@ -18,22 +23,6 @@ impl Color {
         }
     }
 
-    pub(crate) fn parse(s: &str) -> Option<Color> {
-        if (s.len() != 7 && s.len() != 9) || s.as_bytes()[0] != b'#' {
-            return None;
-        }
-        let mut val = u32::from_str_radix(&s[1..], 16).ok()?;
-        if s.len() == 7 {
-            val = (val << 8) | 0xff;
-        }
-        Some(Color {
-            r: ((val >> 24) & 0xff) as u8,
-            g: ((val >> 16) & 0xff) as u8,
-            b: ((val >> 8) & 0xff) as u8,
-            a: (val & 0xff) as u8,
-        })
-    }
-
     pub(crate) fn opacity(mut self, percentage: u8) -> Color {
         self.a = ((((self.a as u16) * (percentage as u16)) / 100) & 0xff) as u8;
         self
@@ -46,5 +35,26 @@ impl Color {
             (self.b as f32) / 255.0,
             (self.a as f32) / 255.0,
         )
+    }
+}
+
+impl TryFrom<&str> for Color {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Color, Self::Error> {
+        if (s.len() != 7 && s.len() != 9) || s.as_bytes()[0] != b'#' {
+            return Err(format!("invalid hex-formatted color: {}", s));
+        }
+        let mut val = u32::from_str_radix(&s[1..], 16)
+            .map_err(|_| format!("failed to parse hex-formatted color: {}", s))?;
+        if s.len() == 7 {
+            val = (val << 8) | 0xff;
+        }
+        Ok(Color {
+            r: ((val >> 24) & 0xff) as u8,
+            g: ((val >> 16) & 0xff) as u8,
+            b: ((val >> 8) & 0xff) as u8,
+            a: (val & 0xff) as u8,
+        })
     }
 }

@@ -20,32 +20,32 @@
 ; Function calls
 
 (call_expression
-  function: (identifier) @function)
+  function: (identifier) @funccall)
 (call_expression
   function: (field_expression
-    field: (field_identifier) @function.method))
+    field: (field_identifier) @funccall.method))
 (call_expression
   function: (scoped_identifier
     "::"
-    name: (identifier) @function))
+    name: (identifier) @funccall))
 
 (generic_function
-  function: (identifier) @function)
+  function: (identifier) @funccall)
 (generic_function
   function: (scoped_identifier
-    name: (identifier) @function))
+    name: (identifier) @funccall))
 (generic_function
   function: (field_expression
-    field: (field_identifier) @function.method))
+    field: (field_identifier) @funccall.method))
 
 (macro_invocation
-  macro: (identifier) @function.macro
+  macro: (identifier) @funccall.macro
   "!" @function.macro)
 
 ; Function definitions
 
-(function_item (identifier) @function)
-(function_signature_item (identifier) @function)
+(function_item (identifier) @funcdefn)
+(function_signature_item (identifier) @funcdefn)
 
 ; Other identifiers
 
@@ -116,18 +116,18 @@
 
 (self) @variable.builtin
 
-(char_literal) @string
-(string_literal) @string
-(raw_string_literal) @string
+(char_literal) @literal.string
+(string_literal) @literal.string
+(raw_string_literal) @literal.string
 
-(boolean_literal) @constant.builtin
-(integer_literal) @constant.builtin
-(float_literal) @constant.builtin
+(boolean_literal) @literal.boolean
+(integer_literal) @literal.numeric
+(float_literal) @literal.numeric
 
-(escape_sequence) @escape
+(escape_sequence) @literal.escape
 
-(attribute_item) @attribute
-(inner_attribute_item) @attribute
+(attribute_item) @decorator
+(inner_attribute_item) @decorator
 
 "as" @operator
 "*" @operator

@@ -18,6 +18,7 @@ mod painter;
 mod style;
 mod text;
 mod textview;
+mod theme;
 mod ts;
 mod window;
 
@@ -30,7 +31,6 @@ static DEFAULT_FONT: &'static str = "monospace";
 static DEFAULT_FONT: &'static str = "Consolas";
 
 static DEFAULT_THEME: &'static str = "ayu-mirage";
-static FALLBACK_THEME: &'static str = "base16-ocean.light";
 static DEFAULT_FONT_SIZE: f32 = 8.0;
 
 fn abspath(spath: &str) -> String {
@@ -60,6 +60,7 @@ impl Bed {
     pub fn run(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) {
         let config = config::Config::load();
         let ts_core = ts::TsCore::new();
+        let theme_set = theme::ThemeSet::load();
 
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
         let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");

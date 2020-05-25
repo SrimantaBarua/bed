@@ -45,25 +45,25 @@
 ">" @operator
 "||" @operator
 
-"." @delimiter
-";" @delimiter
+"." @punctuation.delimiter
+";" @punctuation.delimiter
 
-(string_literal) @string
-(system_lib_string) @string
+(string_literal) @literal.string
+(system_lib_string) @literal.string
 
-(null) @constant
-(number_literal) @number
-(char_literal) @number
+(null) @literal.numeric
+(number_literal) @literal.numeric
+(char_literal) @literal.string
 
 (call_expression
-  function: (identifier) @function)
+  function: (identifier) @funccall)
 (call_expression
   function: (field_expression
-    field: (field_identifier) @function))
+    field: (field_identifier) @funccall))
 (function_declarator
-  declarator: (identifier) @function)
+  declarator: (identifier) @funcdefn)
 (preproc_function_def
-  name: (identifier) @function.special)
+  name: (identifier) @macrodefn)
 
 (field_identifier) @property
 (statement_identifier) @label

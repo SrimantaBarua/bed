@@ -371,18 +371,19 @@ impl Buffer {
                     let range = rope.byte_to_char(range.start)..rope.byte_to_char(range.end);
                     format!("{}", rope.slice(range))
                 }) {
-                    println!("--- match ({}) ---", i);
                     for capture in query_match.captures {
                         let node = capture.node;
                         let idx = capture.index;
                         let brange = node.byte_range();
                         let crange = rope.byte_to_char(brange.start)..rope.byte_to_char(brange.end);
+                        /*
                         println!(
                             "{:?} -> {} -> {}",
                             brange,
                             rope.slice(crange),
                             hl_query.capture_names()[idx as usize]
                         );
+                        */
                     }
                 }
             }
