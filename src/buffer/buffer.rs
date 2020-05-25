@@ -7,7 +7,7 @@ use std::path::Path;
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
-use tree_sitter::{Parser, Tree};
+use tree_sitter::{InputEdit, Parser, Point, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::painter::WidgetPainter;
@@ -132,6 +132,7 @@ impl Buffer {
         let cidx = view.cursor.char_idx;
         let linum = view.cursor.line_num;
         let mut end_linum = linum;
+        let mut end_cidx = cidx + 1;
         match c {
             // Insert pair
             '[' | '{' | '(' => {
@@ -143,6 +144,7 @@ impl Buffer {
                         '(' => self.data.insert_char(cidx + 1, ')'),
                         _ => unreachable!(),
                     }
+                    end_cidx += 1;
                 }
             }
             // Maybe insert pair, maybe skip
@@ -150,6 +152,7 @@ impl Buffer {
                 if self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                     self.data.insert_char(cidx + 1, c);
+                    end_cidx += 1;
                 } else {
                     return self.move_view_cursor_right(id, 1);
                 }
@@ -179,11 +182,13 @@ impl Buffer {
                         if c == '\n' {
                             end_linum += 1;
                         }
+                        end_cidx += 1;
                     }
                 }
             }
             c => self.data.insert_char(cidx, c),
         }
+        self.edit_tree(cidx, cidx, end_cidx);
         let lch = rope_trim_newlines(self.data.line(linum)).len_chars();
         let mut styled = StyledText::new();
         styled.push(lch, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
@@ -222,6 +227,7 @@ impl Buffer {
             self.styled_lines.remove(linum);
             linum -= 1;
         }
+        self.edit_tree(cidx - 1, cidx, cidx - 1);
         let lch = rope_trim_newlines(self.data.line(linum)).len_chars();
         let mut styled = StyledText::new();
         styled.push(lch, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
@@ -253,6 +259,7 @@ impl Buffer {
         if del_end {
             self.styled_lines.remove(linum + 1);
         }
+        self.edit_tree(cidx, cidx + 1, cidx);
         let lch = rope_trim_newlines(self.data.line(linum)).len_chars();
         let mut styled = StyledText::new();
         styled.push(lch, TextStyle::default(), Color::new(0, 0, 0, 0xff), None);
@@ -344,6 +351,53 @@ impl Buffer {
                         }
                     },
                     None,
+                )
+                .expect("failed to parse");
+            self.tree = Some(t);
+        }
+    }
+
+    fn edit_tree(&mut self, start_cidx: usize, old_end_cidx: usize, new_end_cidx: usize) {
+        if self.tree.is_none() {
+            return;
+        }
+        let start_bidx = self.data.char_to_byte(start_cidx);
+        let old_end_bidx = self.data.char_to_byte(old_end_cidx);
+        let new_end_bidx = self.data.char_to_byte(new_end_cidx);
+        let start_linum = self.data.byte_to_line(start_bidx);
+        let start_linoff = start_bidx - self.data.line_to_byte(start_linum);
+        let old_end_linum = self.data.byte_to_line(old_end_bidx);
+        let old_end_linoff = old_end_bidx - self.data.line_to_byte(old_end_linum);
+        let new_end_linum = self.data.byte_to_line(new_end_bidx);
+        let new_end_linoff = new_end_bidx - self.data.line_to_byte(new_end_linum);
+
+        let mut tree = self.tree.take().unwrap();
+        tree.edit(&InputEdit {
+            start_byte: start_bidx,
+            old_end_byte: old_end_bidx,
+            new_end_byte: new_end_bidx,
+            start_position: Point::new(start_linum, start_linoff),
+            old_end_position: Point::new(old_end_linum, old_end_linoff),
+            new_end_position: Point::new(new_end_linum, new_end_linoff),
+        });
+
+        let rope = self.data.clone();
+        if let Some(parser) = &mut self.parser {
+            let t = parser
+                .parse_with(
+                    &mut |boff, _| {
+                        if boff >= rope.len_bytes() {
+                            ""
+                        } else {
+                            let (ch, cb, _, _) = rope.chunk_at_byte(boff);
+                            if cb >= ch.len() {
+                                ""
+                            } else {
+                                &ch[cb..]
+                            }
+                        }
+                    },
+                    Some(&mut tree),
                 )
                 .expect("failed to parse");
             self.tree = Some(t);
