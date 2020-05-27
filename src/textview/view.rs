@@ -9,8 +9,7 @@ use euclid::{vec2, Point2D, Rect, Vector2D};
 
 use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
-use crate::painter::{Painter, WidgetPainter};
-use crate::style::Color;
+use crate::painter::Painter;
 
 struct TextView {
     buffer: Rc<RefCell<Buffer>>,
@@ -107,7 +106,7 @@ impl TextView {
         }
     }
 
-    fn draw(&self, painter: &mut WidgetPainter) {
+    fn draw(&self, painter: &mut Painter) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.draw_view(&self.id, painter);
@@ -229,8 +228,6 @@ impl TextPane {
     }
 
     pub(super) fn draw(&self, painter: &mut Painter) {
-        let mut widget =
-            painter.widget_ctx(self.params.rect.cast(), Color::new(0xff, 0xff, 0xff, 0xff));
-        self.views[self.active].draw(&mut widget);
+        self.views[self.active].draw(painter);
     }
 }

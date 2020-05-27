@@ -28,7 +28,7 @@ impl Default for ThemeTextview {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Copy, Deserialize)]
 pub(crate) struct ThemeSyntaxElem {
     pub(crate) foreground: Color,
     #[serde(default)]
@@ -81,9 +81,6 @@ impl ThemeSet {
                     }
                 }
             }
-        }
-        for k in ret_theme_set.0.keys() {
-            println!("{}", k);
         }
         ret_theme_set
     }

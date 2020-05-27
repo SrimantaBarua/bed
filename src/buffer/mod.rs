@@ -14,9 +14,6 @@ impl BufferViewID {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-struct BufferID(usize);
-
 pub(crate) use buffer::Buffer;
 pub(crate) use mgr::BufferMgr;
 pub(crate) use view::BufferViewCreateParams;

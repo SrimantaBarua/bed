@@ -30,7 +30,7 @@ static DEFAULT_FONT: &'static str = "monospace";
 #[cfg(target_os = "windows")]
 static DEFAULT_FONT: &'static str = "Consolas";
 
-static DEFAULT_THEME: &'static str = "ayu-mirage";
+static DEFAULT_THEME: &str = "default";
 static DEFAULT_FONT_SIZE: f32 = 8.0;
 
 fn abspath(spath: &str) -> String {
@@ -76,7 +76,13 @@ impl Bed {
         let text_size = style::TextSize::from_f32(config.font_size);
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
-        let mut buffer_mgr = buffer::BufferMgr::new(ts_core);
+        let theme = theme_set
+            .0
+            .get(&config.theme)
+            .unwrap_or_else(|| theme_set.0.get(DEFAULT_THEME).unwrap())
+            .clone();
+
+        let mut buffer_mgr = buffer::BufferMgr::new(ts_core, theme);
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))

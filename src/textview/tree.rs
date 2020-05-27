@@ -8,12 +8,10 @@ use euclid::{size2, Point2D, Rect};
 use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
 use crate::painter::Painter;
-use crate::style::Color;
 
 use super::TextPane;
 
 pub(crate) struct TextTree {
-    bg_color: Color,
     rect: Rect<u32, PixelSize>,
     border_width: u32,
     root: Node,
@@ -26,7 +24,6 @@ impl TextTree {
         view_id: BufferViewID,
     ) -> TextTree {
         TextTree {
-            bg_color: Color::new(0, 0, 0, 0xff),
             rect: view_params.rect,
             border_width: 1,
             root: Node::new_leaf(view_params, buf, view_id),

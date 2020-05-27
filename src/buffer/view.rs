@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::ops::Range;
 use std::rc::Rc;
 
 use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
@@ -9,15 +10,15 @@ use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
 use crate::font::FaceKey;
-use crate::painter::WidgetPainter;
+use crate::painter::Painter;
 use crate::style::{Color, TextSize, TextStyle};
 use crate::text::{ShapedText, TextShaper};
+use crate::theme::Theme;
 
 use super::cursor::{Cursor, CursorStyle};
 
 const CURSOR_LINE_WIDTH: i32 = 2;
 const CURSOR_BLOCK_WIDTH: i32 = 10;
-static CURSOR_COLOR: Color = Color::new(0xff, 0x88, 0x22, 0xff);
 
 // All indices here are codepoint indices
 #[derive(Debug)]
@@ -75,6 +76,81 @@ impl StyledText {
             self.unders[under_len - 1].0 += len;
         }
     }
+
+    // TODO: Cut down on code duplication
+    pub(super) fn set(
+        &mut self,
+        range: Range<usize>,
+        style: TextStyle,
+        color: Color,
+        under: Option<Color>,
+    ) {
+        self.set_style(range.clone(), style);
+        self.set_color(range.clone(), color);
+        self.set_under(range, under);
+    }
+
+    // TODO: Merge adjacent if required
+    fn set_style(&mut self, range: Range<usize>, style: TextStyle) {
+        let mut i = match self.styles.binary_search_by_key(&range.start, |x| x.0) {
+            Ok(i) => i + 1,
+            Err(i) => i,
+        };
+        assert!(i < self.styles.len());
+        if range.start == 0 || (i > 0 && range.start == self.styles[i - 1].0) {
+            self.styles.insert(i, (range.end, style));
+            i += 1;
+        } else {
+            self.styles.insert(i, (range.start, self.styles[i].1));
+            self.styles.insert(i + 1, (range.end, style));
+            i += 2;
+        }
+        // Remove everything after this that is completely covered
+        while i < self.styles.len() && self.styles[i].0 <= range.end {
+            self.styles.remove(i);
+        }
+    }
+
+    fn set_color(&mut self, range: Range<usize>, color: Color) {
+        assert!(self.colors.len() > 0 && range.start < self.colors[self.colors.len() - 1].0);
+        let mut i = match self.colors.binary_search_by_key(&range.start, |x| x.0) {
+            Ok(i) => i + 1,
+            Err(i) => i,
+        };
+        assert!(i < self.colors.len());
+        if range.start == 0 || (i > 0 && range.start == self.colors[i - 1].0) {
+            self.colors.insert(i, (range.end, color));
+            i += 1;
+        } else {
+            self.colors.insert(i, (range.start, self.colors[i].1));
+            self.colors.insert(i + 1, (range.end, color));
+            i += 2;
+        }
+        // Remove everything after this that is completely covered
+        while i < self.colors.len() && self.colors[i].0 <= range.end {
+            self.colors.remove(i);
+        }
+    }
+
+    fn set_under(&mut self, range: Range<usize>, under: Option<Color>) {
+        let mut i = match self.unders.binary_search_by_key(&range.start, |x| x.0) {
+            Ok(i) => i + 1,
+            Err(i) => i,
+        };
+        assert!(i < self.unders.len());
+        if range.start == 0 || (i > 0 && range.start == self.unders[i - 1].0) {
+            self.unders.insert(i, (range.end, under));
+            i += 1;
+        } else {
+            self.unders.insert(i, (range.start, self.unders[i].1));
+            self.unders.insert(i + 1, (range.end, under));
+            i += 2;
+        }
+        // Remove everything after this that is completely covered
+        while i < self.unders.len() && self.unders[i].0 <= range.end {
+            self.unders.remove(i);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -106,11 +182,14 @@ pub(super) struct BufferView {
     start_line: usize,
     yoff: u32,
     xoff: u32,
+    // Misc.
+    theme: Rc<Theme>,
 }
 
 impl BufferView {
     pub(super) fn new(
         params: BufferViewCreateParams,
+        theme: Rc<Theme>,
         data: &Rope,
         styled_lines: &[StyledText],
         tab_width: usize,
@@ -140,6 +219,7 @@ impl BufferView {
             start_line: 0,
             yoff: 0,
             xoff: 0,
+            theme: theme,
         };
         view.fill_or_truncate_view(data, styled_lines);
         view
@@ -236,26 +316,9 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(super) fn reshape_line(&mut self, data: &Rope, styled_lines: &[StyledText], linum: usize) {
-        if linum < self.start_line || linum >= self.max_line_visible() {
-            return;
-        }
-        let shaper = &mut *self.text_shaper.borrow_mut();
-        let line = data.line(linum);
-        let styled = &styled_lines[linum];
-        let trimmed = rope_trim_newlines(line);
-        let len_chars = trimmed.len_chars();
-        let shaped = shaper.shape_line_rope(
-            trimmed,
-            self.dpi,
-            self.tab_width,
-            &[(len_chars, self.face_key)],
-            &styled.styles,
-            &[(len_chars, self.text_size)],
-            &styled.colors,
-            &styled.unders,
-        );
-        self.shaped_lines[linum - self.start_line] = shaped;
+    pub(super) fn reshape(&mut self, data: &Rope, styled_lines: &[StyledText]) {
+        self.shaped_lines.clear();
+        self.fill_or_truncate_view(data, styled_lines);
         self.needs_redraw = true;
     }
 
@@ -362,7 +425,8 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(super) fn draw(&mut self, painter: &mut WidgetPainter) {
+    pub(super) fn draw(&mut self, painter: &mut Painter) {
+        let mut painter = painter.widget_ctx(self.rect.cast(), self.theme.textview.background);
         self.needs_redraw = false;
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut pos = point2(-(self.xoff as i32), -(self.yoff as i32));
@@ -375,7 +439,7 @@ impl BufferView {
                 self.cursor.line_gidx,
             ))
         };
-        let mut ccolor = CURSOR_COLOR;
+        let mut ccolor = self.theme.textview.cursor;
         if self.cursor.style == CursorStyle::Block {
             ccolor = ccolor.opacity(50);
         }
