@@ -220,7 +220,7 @@ impl Buffer {
             self.styled_lines.insert(i + 1, styled);
         }
 
-        self.edit_tree(cidx, cidx, end_cidx);
+        self.edit_tree(self.data.clone(), cidx, cidx, end_cidx);
         let (end_byte, end_col) = {
             let llen = self.data.line(end_linum).len_bytes();
             let lb = self.data.line_to_byte(end_linum);
@@ -252,6 +252,7 @@ impl Buffer {
         if view.cursor.char_idx == 0 {
             return;
         }
+        let old_rope = self.data.clone();
         let cidx = view.cursor.char_idx;
         let len_lines = self.data.len_lines();
         self.data.remove(cidx - 1..cidx);
@@ -271,7 +272,7 @@ impl Buffer {
         );
         self.styled_lines[linum] = styled;
 
-        self.edit_tree(cidx - 1, cidx, cidx - 1);
+        self.edit_tree(old_rope, cidx - 1, cidx, cidx - 1);
         let (start_byte, end_byte) = {
             let llen = self.data.line(linum).len_bytes();
             let lb = self.data.line_to_byte(linum);
@@ -303,6 +304,7 @@ impl Buffer {
         if view.cursor.char_idx == self.data.len_chars() {
             return;
         }
+        let old_rope = self.data.clone();
         let cidx = view.cursor.char_idx;
         let linum = view.cursor.line_num;
         let len_lines = self.data.len_lines();
@@ -321,7 +323,7 @@ impl Buffer {
         );
         self.styled_lines[linum] = styled;
 
-        self.edit_tree(cidx, cidx + 1, cidx);
+        self.edit_tree(old_rope, cidx, cidx + 1, cidx);
         let (start_byte, end_byte) = {
             let llen = self.data.line(linum).len_bytes();
             let lb = self.data.line_to_byte(linum);
@@ -456,19 +458,25 @@ impl Buffer {
         }
     }
 
-    fn edit_tree(&mut self, start_cidx: usize, old_end_cidx: usize, new_end_cidx: usize) {
+    fn edit_tree(
+        &mut self,
+        rope: Rope,
+        start_cidx: usize,
+        old_end_cidx: usize,
+        new_end_cidx: usize,
+    ) {
         if self.tree.is_none() {
             return;
         }
-        let start_bidx = self.data.char_to_byte(start_cidx);
-        let old_end_bidx = self.data.char_to_byte(old_end_cidx);
-        let new_end_bidx = self.data.char_to_byte(new_end_cidx);
-        let start_linum = self.data.byte_to_line(start_bidx);
-        let start_linoff = start_bidx - self.data.line_to_byte(start_linum);
-        let old_end_linum = self.data.byte_to_line(old_end_bidx);
-        let old_end_linoff = old_end_bidx - self.data.line_to_byte(old_end_linum);
-        let new_end_linum = self.data.byte_to_line(new_end_bidx);
-        let new_end_linoff = new_end_bidx - self.data.line_to_byte(new_end_linum);
+        let start_bidx = rope.char_to_byte(start_cidx);
+        let old_end_bidx = rope.char_to_byte(old_end_cidx);
+        let new_end_bidx = rope.char_to_byte(new_end_cidx);
+        let start_linum = rope.byte_to_line(start_bidx);
+        let start_linoff = start_bidx - rope.line_to_byte(start_linum);
+        let old_end_linum = rope.byte_to_line(old_end_bidx);
+        let old_end_linoff = old_end_bidx - rope.line_to_byte(old_end_linum);
+        let new_end_linum = rope.byte_to_line(new_end_bidx);
+        let new_end_linoff = new_end_bidx - rope.line_to_byte(new_end_linum);
 
         let mut tree = self.tree.take().unwrap();
         tree.edit(&InputEdit {

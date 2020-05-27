@@ -37,10 +37,6 @@ impl StyledText {
         }
     }
 
-    pub(super) fn is_empty(&self) -> bool {
-        self.styles.len() == 0
-    }
-
     pub(super) fn push(
         &mut self,
         len: usize,
