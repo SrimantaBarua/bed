@@ -33,10 +33,6 @@ directwrite = "0.3.0-alpha4"
 winapi = "0.3.8"
 
 
-[build-dependencies]
-cc = "1.0"
-
-
 [profile.dev]
 opt-level = 0
 debug = 2

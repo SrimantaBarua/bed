@@ -7,6 +7,7 @@ specification is matched.
  - constructor                  # constructor
  - decorator                    # decorators, attributes (e.g. Rust attributes, Python decorators)
  - funccall                     # function call
+ - funccall.builtin             # built-in language function
  - funccall.macro               # macro call
  - funccall.method              # method call
  - funcdefn                     # function definition
@@ -14,7 +15,7 @@ specification is matched.
  - label                        # labels (e.g. loop labels, Rust lifetimes)
  - literal                      # constant literals
  - literal.boolean              # 'true' and 'false' (specific to language)
- - literal.escape               # escape characters
+ - literal.escape               # escape characters and regexes
  - literal.numeric              # numbers
  - literal.string               # string literals
  - macrodefn                    # macro / preprocessor definition
