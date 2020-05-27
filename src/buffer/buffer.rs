@@ -549,7 +549,9 @@ impl Buffer {
                             let slc = sl.byte_to_char(start.column);
                             let elc = self.data.line(end.row).byte_to_char(end.column);
                             if start.row == end.row {
-                                self.styled_lines[start.row].set(slc..elc, style, fg, None);
+                                if elc > slc {
+                                    self.styled_lines[start.row].set(slc..elc, style, fg, None);
+                                }
                             } else {
                                 self.styled_lines[start.row].set(
                                     slc..sl.len_chars(),

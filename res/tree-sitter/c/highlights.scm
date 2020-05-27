@@ -62,6 +62,11 @@
     field: (field_identifier) @funccall))
 (function_declarator
   declarator: (identifier) @funcdefn)
+
+(preproc_ifdef
+  name: (identifier) @macrodefn)
+(preproc_def
+  name: (identifier) @macrodefn)
 (preproc_function_def
   name: (identifier) @macrodefn)
 
