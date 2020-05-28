@@ -554,7 +554,18 @@ impl Buffer {
         }
     }
 
-    fn rehighlight_range(&mut self, range: tree_sitter::Range) {
+    fn rehighlight_range(&mut self, mut range: tree_sitter::Range) {
+        self.expand_rehighlight_range(&mut range);
+
+        let mut linum = range.start_point.row;
+        for line in self.data.lines_at(range.start_point.row) {
+            self.styled_lines[linum] = default_hl_for_line(line, self.theme.textview.foreground);
+            linum += 1;
+            if linum >= range.end_point.row {
+                break;
+            }
+        }
+
         if let Some(t) = &self.tree {
             if let Some(hl_query) = &self.hl_query {
                 let rope = self.data.clone();
@@ -628,5 +639,16 @@ impl Buffer {
                 }
             }
         }
+    }
+
+    fn expand_rehighlight_range(&self, range: &mut tree_sitter::Range) {
+        range.start_point.column = 0;
+        range.start_byte = self.data.line_to_byte(range.start_point.row);
+        if range.end_point.row == self.data.len_lines() {
+            return;
+        }
+        let end_line = self.data.line(range.end_point.row);
+        range.end_point.column = end_line.len_bytes();
+        range.end_byte = self.data.line_to_byte(range.end_point.row) + range.end_point.column;
     }
 }
