@@ -6,7 +6,7 @@ use crate::common::{
     rope_is_grapheme_boundary, rope_next_grapheme_boundary, rope_trim_newlines, RopeGraphemes,
 };
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) enum CursorStyle {
     Line,
     Underline,

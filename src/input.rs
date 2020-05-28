@@ -2,6 +2,8 @@
 
 use glfw::{Key, Modifiers};
 
+use crate::buffer::CursorStyle;
+
 pub(crate) enum Mode {
     Normal,
     Input,
@@ -15,8 +17,7 @@ pub(crate) enum Action {
     InsertChar(char),
     DeleteLeft,
     DeleteRight,
-    UpdateCursorStyle,
-    None,
+    UpdateCursorStyle(CursorStyle),
 }
 
 pub(crate) struct State {
@@ -32,50 +33,58 @@ impl State {
         self.mode = Mode::Normal;
     }
 
-    pub(crate) fn handle_key(&mut self, key: Key, md: Modifiers) -> Action {
+    pub(crate) fn handle_key(&mut self, key: Key, md: Modifiers, actions: &mut Vec<Action>) {
         match self.mode {
             Mode::Normal => match key {
-                Key::Up => Action::CursorUp,
-                Key::Down => Action::CursorDown,
-                Key::Left => Action::CursorLeft,
-                Key::Right => Action::CursorRight,
-                Key::Enter => Action::CursorDown,
-                Key::Backspace => Action::CursorLeft,
-                Key::Delete => Action::DeleteRight,
-                _ => Action::None,
+                Key::Up => actions.push(Action::CursorUp),
+                Key::Down => actions.push(Action::CursorDown),
+                Key::Left => actions.push(Action::CursorLeft),
+                Key::Right => actions.push(Action::CursorRight),
+                Key::Enter => actions.push(Action::CursorDown),
+                Key::Backspace => actions.push(Action::CursorLeft),
+                Key::Delete => actions.push(Action::DeleteRight),
+                _ => {}
             },
             Mode::Input => match key {
-                Key::Up => Action::CursorUp,
-                Key::Down => Action::CursorDown,
-                Key::Left => Action::CursorLeft,
-                Key::Right => Action::CursorRight,
-                Key::Enter => Action::InsertChar('\n'),
-                Key::Tab => Action::InsertChar('\t'),
-                Key::Backspace => Action::DeleteLeft,
-                Key::Delete => Action::DeleteRight,
+                Key::Up => actions.push(Action::CursorUp),
+                Key::Down => actions.push(Action::CursorDown),
+                Key::Left => actions.push(Action::CursorLeft),
+                Key::Right => actions.push(Action::CursorRight),
+                Key::Enter => actions.push(Action::InsertChar('\n')),
+                Key::Tab => actions.push(Action::InsertChar('\t')),
+                Key::Backspace => actions.push(Action::DeleteLeft),
+                Key::Delete => actions.push(Action::DeleteRight),
                 Key::Escape => {
                     self.mode = Mode::Normal;
-                    Action::UpdateCursorStyle
+                    actions.push(Action::CursorLeft);
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
                 }
-                _ => Action::None,
+                _ => {}
             },
         }
     }
 
-    pub(crate) fn handle_char(&mut self, c: char) -> Action {
+    pub(crate) fn handle_char(&mut self, c: char, actions: &mut Vec<Action>) {
         match self.mode {
             Mode::Normal => match c {
-                'h' => Action::CursorLeft,
-                'j' => Action::CursorDown,
-                'k' => Action::CursorUp,
-                'l' => Action::CursorRight,
+                // Basic movement
+                'h' => actions.push(Action::CursorLeft),
+                'j' => actions.push(Action::CursorDown),
+                'k' => actions.push(Action::CursorUp),
+                'l' => actions.push(Action::CursorRight),
+                // Enter insert mode
                 'i' => {
                     self.mode = Mode::Input;
-                    Action::UpdateCursorStyle
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
                 }
-                _ => Action::None,
+                'a' => {
+                    self.mode = Mode::Input;
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
+                    actions.push(Action::CursorRight);
+                }
+                _ => {}
             },
-            Mode::Input => Action::InsertChar(c),
+            Mode::Input => actions.push(Action::InsertChar(c)),
         }
     }
 }

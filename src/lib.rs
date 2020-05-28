@@ -23,7 +23,7 @@ mod theme;
 mod ts;
 mod window;
 
-use buffer::{BufferViewCreateParams, CursorStyle};
+use buffer::BufferViewCreateParams;
 use common::PixelSize;
 use input::Action as BedAction;
 
@@ -66,6 +66,7 @@ impl Bed {
         let theme_set = theme::ThemeSet::load();
 
         let input_state = input::State::new();
+        let mut input_actions = Vec::new();
 
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
         let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
@@ -122,6 +123,7 @@ impl Bed {
 
         while !bed.window.should_close() {
             let mut scroll_amt = (0.0, 0.0);
+            input_actions.clear();
 
             for (_, event) in glfw::flush_messages(&events) {
                 match event {
@@ -132,12 +134,12 @@ impl Bed {
                     }
                     WindowEvent::Key(k, _, Action::Press, md)
                     | WindowEvent::Key(k, _, Action::Repeat, md) => {
-                        let action = bed.input_state.handle_key(k, md);
-                        bed.process_input_action(action);
+                        bed.input_state.handle_key(k, md, &mut input_actions);
+                        bed.process_input_actions(&input_actions);
                     }
                     WindowEvent::Char(c) => {
-                        let action = bed.input_state.handle_char(c);
-                        bed.process_input_action(action);
+                        bed.input_state.handle_char(c, &mut input_actions);
+                        bed.process_input_actions(&input_actions);
                     }
                     WindowEvent::MouseButton(MouseButtonLeft, Action::Press, _) => {
                         bed.input_state.set_normal_mode();
@@ -167,26 +169,20 @@ impl Bed {
         }
     }
 
-    fn process_input_action(&mut self, action: BedAction) {
-        match action {
-            BedAction::CursorUp => self.move_cursor(Direction::Up),
-            BedAction::CursorDown => self.move_cursor(Direction::Down),
-            BedAction::CursorLeft => self.move_cursor(Direction::Left),
-            BedAction::CursorRight => self.move_cursor(Direction::Right),
-            BedAction::InsertChar(c) => self.insert_char(c),
-            BedAction::DeleteLeft => self.delete_left(),
-            BedAction::DeleteRight => self.delete_right(),
-            BedAction::UpdateCursorStyle => match self.input_state.mode {
-                input::Mode::Input => self
-                    .textview_tree
-                    .active_mut()
-                    .set_cursor_style(CursorStyle::Line),
-                input::Mode::Normal => self
-                    .textview_tree
-                    .active_mut()
-                    .set_cursor_style(CursorStyle::Block),
-            },
-            BedAction::None => {}
+    fn process_input_actions(&mut self, actions: &[BedAction]) {
+        for action in actions {
+            match action {
+                BedAction::CursorUp => self.move_cursor(Direction::Up),
+                BedAction::CursorDown => self.move_cursor(Direction::Down),
+                BedAction::CursorLeft => self.move_cursor(Direction::Left),
+                BedAction::CursorRight => self.move_cursor(Direction::Right),
+                BedAction::InsertChar(c) => self.insert_char(*c),
+                BedAction::DeleteLeft => self.delete_left(),
+                BedAction::DeleteRight => self.delete_right(),
+                BedAction::UpdateCursorStyle(style) => {
+                    self.textview_tree.active_mut().set_cursor_style(*style)
+                }
+            }
         }
     }
 
