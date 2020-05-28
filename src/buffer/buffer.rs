@@ -8,17 +8,22 @@ use std::rc::Rc;
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
-use ropey::Rope;
+use ropey::{Rope, RopeSlice};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::painter::Painter;
-use crate::style::TextStyle;
+use crate::style::{Color, TextStyle};
 use crate::theme::Theme;
 use crate::ts::TsCore;
 
 use super::view::{BufferView, BufferViewCreateParams, StyledText};
 use super::{BufferViewID, CursorStyle};
+
+fn default_hl_for_line(line: RopeSlice, color: Color) -> StyledText {
+    let lch = rope_trim_newlines(line).len_chars();
+    StyledText::new(lch, TextStyle::default(), color, None)
+}
 
 pub(crate) struct Buffer {
     data: Rope,
@@ -234,25 +239,11 @@ impl Buffer {
             c => self.data.insert_char(cidx, c),
         }
 
-        let lch = rope_trim_newlines(self.data.line(linum)).len_chars();
-        let mut styled = StyledText::new();
-        styled.push(
-            lch,
-            TextStyle::default(),
-            self.theme.textview.foreground,
-            None,
-        );
-        self.styled_lines[linum] = styled;
+        let fgcol = self.theme.textview.foreground;
+        self.styled_lines[linum] = default_hl_for_line(self.data.line(linum), fgcol);
         for i in linum..end_linum {
-            let lch = rope_trim_newlines(self.data.line(i + 1)).len_chars();
-            let mut styled = StyledText::new();
-            styled.push(
-                lch,
-                TextStyle::default(),
-                self.theme.textview.foreground,
-                None,
-            );
-            self.styled_lines.insert(i + 1, styled);
+            self.styled_lines
+                .insert(i + 1, default_hl_for_line(self.data.line(i + 1), fgcol));
         }
 
         self.edit_tree(self.data.clone(), cidx, cidx, end_cidx);
@@ -294,15 +285,8 @@ impl Buffer {
             self.styled_lines.remove(linum);
             linum -= 1;
         }
-        let lch = rope_trim_newlines(self.data.line(linum)).len_chars();
-        let mut styled = StyledText::new();
-        styled.push(
-            lch,
-            TextStyle::default(),
-            self.theme.textview.foreground,
-            None,
-        );
-        self.styled_lines[linum] = styled;
+        self.styled_lines[linum] =
+            default_hl_for_line(self.data.line(linum), self.theme.textview.foreground);
 
         self.edit_tree(old_rope, cidx - 1, cidx, cidx - 1);
         let (start_byte, end_byte) = {
@@ -342,15 +326,8 @@ impl Buffer {
         if del_end {
             self.styled_lines.remove(linum + 1);
         }
-        let lch = rope_trim_newlines(self.data.line(linum)).len_chars();
-        let mut styled = StyledText::new();
-        styled.push(
-            lch,
-            TextStyle::default(),
-            self.theme.textview.foreground,
-            None,
-        );
-        self.styled_lines[linum] = styled;
+        self.styled_lines[linum] =
+            default_hl_for_line(self.data.line(linum), self.theme.textview.foreground);
 
         self.edit_tree(old_rope, cidx, cidx + 1, cidx);
         let (start_byte, end_byte) = {
@@ -401,6 +378,17 @@ impl Buffer {
             self.styled_lines.remove(linum);
         }
         self.edit_tree(old_rope, start_cidx, end_cidx, start_cidx);
+        let (start_byte, end_byte) = {
+            let llen = self.data.line(target_linum).len_bytes();
+            let lb = self.data.line_to_byte(target_linum);
+            (lb, lb + llen)
+        };
+        self.rehighlight_range(tree_sitter::Range {
+            start_byte: start_byte,
+            end_byte: end_byte,
+            start_point: Point::new(target_linum, 0),
+            end_point: Point::new(target_linum, end_byte - start_byte),
+        });
 
         for view in self.views.values_mut() {
             if view.cursor.line_num >= end_cidx {
@@ -420,8 +408,7 @@ impl Buffer {
 
     // -------- Create buffer ----------------
     pub(super) fn empty(theme: Rc<Theme>) -> Buffer {
-        let mut styled = StyledText::new();
-        styled.push(0, TextStyle::default(), theme.textview.foreground, None);
+        let styled = StyledText::new(0, TextStyle::default(), theme.textview.foreground, None);
         Buffer {
             tab_width: 8,
             data: Rope::new(),
@@ -440,10 +427,7 @@ impl Buffer {
             .map(|rope| {
                 let mut styled_lines = Vec::new();
                 for line in rope.lines() {
-                    let lch = rope_trim_newlines(line).len_chars();
-                    let mut styled = StyledText::new();
-                    styled.push(lch, TextStyle::default(), theme.textview.foreground, None);
-                    styled_lines.push(styled);
+                    styled_lines.push(default_hl_for_line(line, theme.textview.foreground));
                 }
                 let (parser, hl_query) = Path::new(path)
                     .extension()
@@ -473,15 +457,8 @@ impl Buffer {
                 self.data = rope;
                 self.styled_lines.clear();
                 for line in self.data.lines() {
-                    let lch = rope_trim_newlines(line).len_chars();
-                    let mut styled = StyledText::new();
-                    styled.push(
-                        lch,
-                        TextStyle::default(),
-                        self.theme.textview.foreground,
-                        None,
-                    );
-                    self.styled_lines.push(styled);
+                    self.styled_lines
+                        .push(default_hl_for_line(line, self.theme.textview.foreground));
                 }
                 let (parser, hl_query) = Path::new(path)
                     .extension()
@@ -641,9 +618,7 @@ impl Buffer {
                                         break;
                                     }
                                     let lc = rope_trim_newlines(line).len_chars();
-                                    let mut styled = StyledText::new();
-                                    styled.push(lc, style, fg, None);
-                                    self.styled_lines[linum] = styled;
+                                    self.styled_lines[linum] = StyledText::new(lc, style, fg, None);
                                     linum += 1;
                                 }
                             }

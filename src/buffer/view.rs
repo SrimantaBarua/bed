@@ -29,11 +29,24 @@ pub(super) struct StyledText {
 }
 
 impl StyledText {
-    pub(super) fn new() -> StyledText {
+    pub(super) fn empty() -> StyledText {
         StyledText {
             styles: Vec::new(),
             colors: Vec::new(),
             unders: Vec::new(),
+        }
+    }
+
+    pub(super) fn new(
+        len: usize,
+        style: TextStyle,
+        color: Color,
+        under: Option<Color>,
+    ) -> StyledText {
+        StyledText {
+            styles: vec![(len, style)],
+            colors: vec![(len, color)],
+            unders: vec![(len, under)],
         }
     }
 
