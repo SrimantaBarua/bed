@@ -23,7 +23,7 @@ mod theme;
 mod ts;
 mod window;
 
-use buffer::BufferViewCreateParams;
+use buffer::{BufferViewCreateParams, CursorStyle};
 use common::PixelSize;
 use input::Action as BedAction;
 
@@ -123,9 +123,10 @@ impl Bed {
 
         while !bed.window.should_close() {
             let mut scroll_amt = (0.0, 0.0);
-            input_actions.clear();
 
             for (_, event) in glfw::flush_messages(&events) {
+                input_actions.clear();
+
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
                         let viewable_rect = bed.window.viewable_rect();
@@ -176,12 +177,12 @@ impl Bed {
                 BedAction::CursorDown => self.move_cursor(Direction::Down),
                 BedAction::CursorLeft => self.move_cursor(Direction::Left),
                 BedAction::CursorRight => self.move_cursor(Direction::Right),
+                BedAction::CursorLineStart => self.move_cursor_start_of_line(),
+                BedAction::CursorLineEnd => self.move_cursor_end_of_line(),
                 BedAction::InsertChar(c) => self.insert_char(*c),
                 BedAction::DeleteLeft => self.delete_left(),
                 BedAction::DeleteRight => self.delete_right(),
-                BedAction::UpdateCursorStyle(style) => {
-                    self.textview_tree.active_mut().set_cursor_style(*style)
-                }
+                BedAction::UpdateCursorStyle(style) => self.set_cursor_style(*style),
             }
         }
     }
@@ -219,6 +220,18 @@ impl Bed {
             Direction::Left => textpane.move_cursor_left(1),
             Direction::Right => textpane.move_cursor_right(1),
         }
+    }
+
+    fn move_cursor_start_of_line(&mut self) {
+        self.textview_tree.active_mut().move_cursor_start_of_line();
+    }
+
+    fn move_cursor_end_of_line(&mut self) {
+        self.textview_tree.active_mut().move_cursor_end_of_line();
+    }
+
+    fn set_cursor_style(&mut self, style: CursorStyle) {
+        self.textview_tree.active_mut().set_cursor_style(style)
     }
 
     fn move_cursor_to_mouse(&mut self) {

@@ -45,6 +45,20 @@ impl TextView {
         }
     }
 
+    fn move_cursor_start_of_line(&mut self) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.move_view_cursor_start_of_line(&self.id);
+        }
+    }
+
+    fn move_cursor_end_of_line(&mut self) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.move_view_cursor_end_of_line(&self.id);
+        }
+    }
+
     fn move_cursor_to_point(&mut self, point: Point2D<u32, PixelSize>) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
@@ -150,6 +164,14 @@ impl TextPane {
 
     pub(crate) fn move_cursor_right(&mut self, n: usize) {
         self.views[self.active].move_cursor_right(n);
+    }
+
+    pub(crate) fn move_cursor_start_of_line(&mut self) {
+        self.views[self.active].move_cursor_start_of_line();
+    }
+
+    pub(crate) fn move_cursor_end_of_line(&mut self) {
+        self.views[self.active].move_cursor_end_of_line();
     }
 
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<u32, PixelSize>) {

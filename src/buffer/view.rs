@@ -399,6 +399,7 @@ impl BufferView {
         let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
         let mut gidx = 0;
         let mut cursor_x = 0;
+        let mut cursor_width = 0;
         let cgidx = self.cursor.line_gidx;
         for (clusters, _, _, _, _, _) in line.styled_iter() {
             for clus in clusters {
@@ -407,16 +408,25 @@ impl BufferView {
                     gidx += clus.num_graphemes;
                     cursor_x += width;
                 } else {
-                    cursor_x += width * ((cgidx + 1 - gidx) as i32) / clus.num_graphemes as i32;
+                    cursor_x += width * ((cgidx - gidx) as i32) / clus.num_graphemes as i32;
+                    cursor_width = width * clus.num_graphemes as i32;
                     break;
                 }
             }
         }
         let cursor_x = if cursor_x < 0 { 0u32 } else { cursor_x as u32 };
+        let cursor_width = if cursor_width <= 0 {
+            match self.cursor.style {
+                CursorStyle::Line => CURSOR_LINE_WIDTH as u32,
+                _ => CURSOR_BLOCK_WIDTH as u32,
+            }
+        } else {
+            cursor_width as u32
+        };
         if cursor_x < self.xoff {
             self.xoff = cursor_x;
-        } else if cursor_x >= self.xoff + self.rect.size.width {
-            self.xoff = cursor_x - self.rect.size.width;
+        } else if cursor_x + cursor_width >= self.xoff + self.rect.size.width {
+            self.xoff = cursor_x + cursor_width - self.rect.size.width;
         }
         self.needs_redraw = true;
     }

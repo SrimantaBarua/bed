@@ -126,6 +126,23 @@ impl Buffer {
         view.snap_to_cursor(&self.data, &self.styled_lines);
     }
 
+    pub(crate) fn move_view_cursor_start_of_line(&mut self, id: &BufferViewID) {
+        let view = self.views.get_mut(id).unwrap();
+        view.cursor.line_cidx = 0;
+        view.cursor
+            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+        view.snap_to_cursor(&self.data, &self.styled_lines);
+    }
+
+    pub(crate) fn move_view_cursor_end_of_line(&mut self, id: &BufferViewID) {
+        let view = self.views.get_mut(id).unwrap();
+        let lc = rope_trim_newlines(self.data.line(view.cursor.line_num)).len_chars();
+        view.cursor.line_cidx = lc;
+        view.cursor
+            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+        view.snap_to_cursor(&self.data, &self.styled_lines);
+    }
+
     pub(crate) fn move_view_cursor_to_point(
         &mut self,
         id: &BufferViewID,
