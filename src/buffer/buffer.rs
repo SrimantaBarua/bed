@@ -381,9 +381,13 @@ impl Buffer {
     pub(crate) fn view_delete_lines_down(&mut self, id: &BufferViewID, mut n: usize) {
         let old_rope = self.data.clone();
         let view = self.views.get_mut(id).unwrap();
+        let mut target_linum = view.cursor.line_num;
         let linum = view.cursor.line_num;
-        let start_cidx = self.data.line_to_char(linum);
+        let mut start_cidx = self.data.line_to_char(linum);
         let end_cidx = if linum + n >= self.data.len_lines() {
+            target_linum -= 1;
+            start_cidx = self.data.line_to_char(target_linum)
+                + rope_trim_newlines(self.data.line(target_linum)).len_chars();
             self.data.len_chars()
         } else {
             self.data.line_to_char(linum + n)
@@ -399,14 +403,15 @@ impl Buffer {
         self.edit_tree(old_rope, start_cidx, end_cidx, start_cidx);
 
         for view in self.views.values_mut() {
-            if view.cursor.char_idx >= end_cidx {
+            if view.cursor.line_num >= end_cidx {
                 view.cursor.char_idx -= end_cidx - start_cidx;
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             } else if view.cursor.char_idx >= start_cidx {
-                view.cursor.char_idx = start_cidx;
+                view.cursor.line_num = target_linum;
+                view.cursor.line_cidx = 0;
                 view.cursor
-                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+                    .sync_line_cidx_gidx_left(&self.data, self.tab_width);
             }
             view.reshape(&self.data, &self.styled_lines);
             view.snap_to_cursor(&self.data, &self.styled_lines);
@@ -490,6 +495,7 @@ impl Buffer {
             })
     }
 
+    // -------- Parsing stuff ----------------
     fn recreate_parse_tree(&mut self) {
         let rope = self.data.clone();
         if let Some(parser) = &mut self.parser {
