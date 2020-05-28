@@ -173,10 +173,11 @@ impl Bed {
     fn process_input_actions(&mut self, actions: &[BedAction]) {
         for action in actions {
             match action {
-                BedAction::CursorUp => self.move_cursor(Direction::Up),
-                BedAction::CursorDown => self.move_cursor(Direction::Down),
-                BedAction::CursorLeft => self.move_cursor(Direction::Left),
-                BedAction::CursorRight => self.move_cursor(Direction::Right),
+                BedAction::CursorUp(n) => self.move_cursor(Direction::Up, *n),
+                BedAction::CursorDown(n) => self.move_cursor(Direction::Down, *n),
+                BedAction::CursorLeft(n) => self.move_cursor(Direction::Left, *n),
+                BedAction::CursorRight(n) => self.move_cursor(Direction::Right, *n),
+                BedAction::CursorToLine(n) => self.move_cursor_to_line(*n),
                 BedAction::CursorLineStart => self.move_cursor_start_of_line(),
                 BedAction::CursorLineEnd => self.move_cursor_end_of_line(),
                 BedAction::InsertChar(c) => self.insert_char(*c),
@@ -212,13 +213,13 @@ impl Bed {
         textpane.delete_right();
     }
 
-    fn move_cursor(&mut self, dirn: Direction) {
+    fn move_cursor(&mut self, dirn: Direction, n: usize) {
         let textpane = self.textview_tree.active_mut();
         match dirn {
-            Direction::Up => textpane.move_cursor_up(1),
-            Direction::Down => textpane.move_cursor_down(1),
-            Direction::Left => textpane.move_cursor_left(1),
-            Direction::Right => textpane.move_cursor_right(1),
+            Direction::Up => textpane.move_cursor_up(n),
+            Direction::Down => textpane.move_cursor_down(n),
+            Direction::Left => textpane.move_cursor_left(n),
+            Direction::Right => textpane.move_cursor_right(n),
         }
     }
 
@@ -228,6 +229,10 @@ impl Bed {
 
     fn move_cursor_end_of_line(&mut self) {
         self.textview_tree.active_mut().move_cursor_end_of_line();
+    }
+
+    fn move_cursor_to_line(&mut self, linum: usize) {
+        self.textview_tree.active_mut().move_cursor_to_line(linum);
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {

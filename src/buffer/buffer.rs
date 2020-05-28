@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cmp::min;
 use std::fs::File;
 use std::io::Result as IOResult;
 use std::path::Path;
@@ -138,6 +139,15 @@ impl Buffer {
         let view = self.views.get_mut(id).unwrap();
         let lc = rope_trim_newlines(self.data.line(view.cursor.line_num)).len_chars();
         view.cursor.line_cidx = lc;
+        view.cursor
+            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+        view.snap_to_cursor(&self.data, &self.styled_lines);
+    }
+
+    pub(crate) fn move_view_cursor_to_line(&mut self, id: &BufferViewID, linum: usize) {
+        let view = self.views.get_mut(id).unwrap();
+        view.cursor.line_num = min(linum, self.data.len_lines() - 1);
+        view.cursor.line_cidx = 0;
         view.cursor
             .sync_line_cidx_gidx_right(&self.data, self.tab_width);
         view.snap_to_cursor(&self.data, &self.styled_lines);
