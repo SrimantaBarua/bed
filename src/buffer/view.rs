@@ -636,6 +636,7 @@ impl BufferView {
         let mut new_shaped_lines = Vec::new();
         let mut lines = data.lines_at(self.cursor.line_num + 1);
         let mut linum = self.cursor.line_num + 1;
+
         // TODO
         while let Some(line) = lines.prev() {
             linum -= 1;

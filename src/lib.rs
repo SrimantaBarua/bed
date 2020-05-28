@@ -183,6 +183,7 @@ impl Bed {
                 BedAction::InsertChar(c) => self.insert_char(*c),
                 BedAction::DeleteLeft => self.delete_left(),
                 BedAction::DeleteRight => self.delete_right(),
+                BedAction::DeleteLinesDown(n) => self.delete_lines_down(*n),
                 BedAction::UpdateCursorStyle(style) => self.set_cursor_style(*style),
             }
         }
@@ -199,18 +200,19 @@ impl Bed {
     }
 
     fn insert_char(&mut self, c: char) {
-        let textpane = self.textview_tree.active_mut();
-        textpane.insert_char(c);
+        self.textview_tree.active_mut().insert_char(c);
     }
 
     fn delete_left(&mut self) {
-        let textpane = self.textview_tree.active_mut();
-        textpane.delete_left();
+        self.textview_tree.active_mut().delete_left();
     }
 
     fn delete_right(&mut self) {
-        let textpane = self.textview_tree.active_mut();
-        textpane.delete_right();
+        self.textview_tree.active_mut().delete_right();
+    }
+
+    fn delete_lines_down(&mut self, n: usize) {
+        self.textview_tree.active_mut().delete_lines_down(n);
     }
 
     fn move_cursor(&mut self, dirn: Direction, n: usize) {

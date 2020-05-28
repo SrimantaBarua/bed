@@ -274,9 +274,6 @@ impl Buffer {
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
-            for i in linum..end_linum {
-                view.insert_line(&self.data, &self.styled_lines, i + 1);
-            }
             view.reshape(&self.data, &self.styled_lines);
             view.snap_to_cursor(&self.data, &self.styled_lines);
         }
@@ -325,9 +322,6 @@ impl Buffer {
                 view.cursor.char_idx -= 1;
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
-            }
-            if is_beg {
-                view.delete_line(&self.data, &self.styled_lines, linum + 1);
             }
             view.reshape(&self.data, &self.styled_lines);
             view.snap_to_cursor(&self.data, &self.styled_lines);
@@ -379,8 +373,40 @@ impl Buffer {
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
-            if del_end {
-                view.delete_line(&self.data, &self.styled_lines, linum + 1);
+            view.reshape(&self.data, &self.styled_lines);
+            view.snap_to_cursor(&self.data, &self.styled_lines);
+        }
+    }
+
+    pub(crate) fn view_delete_lines_down(&mut self, id: &BufferViewID, mut n: usize) {
+        let old_rope = self.data.clone();
+        let view = self.views.get_mut(id).unwrap();
+        let linum = view.cursor.line_num;
+        let start_cidx = self.data.line_to_char(linum);
+        let end_cidx = if linum + n >= self.data.len_lines() {
+            self.data.len_chars()
+        } else {
+            self.data.line_to_char(linum + n)
+        };
+        if linum + n > self.data.len_lines() {
+            n = self.data.len_lines() - linum;
+        }
+        self.data.remove(start_cidx..end_cidx);
+
+        for _ in 0..n {
+            self.styled_lines.remove(linum);
+        }
+        self.edit_tree(old_rope, start_cidx, end_cidx, start_cidx);
+
+        for view in self.views.values_mut() {
+            if view.cursor.char_idx >= end_cidx {
+                view.cursor.char_idx -= end_cidx - start_cidx;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+            } else if view.cursor.char_idx >= start_cidx {
+                view.cursor.char_idx = start_cidx;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
             view.reshape(&self.data, &self.styled_lines);
             view.snap_to_cursor(&self.data, &self.styled_lines);

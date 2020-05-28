@@ -8,6 +8,7 @@ pub(crate) enum Mode {
     Normal,
     Input,
     GPressed(usize),
+    DPressed(usize),
 }
 
 pub(crate) enum Action {
@@ -21,6 +22,7 @@ pub(crate) enum Action {
     InsertChar(char),
     DeleteLeft,
     DeleteRight,
+    DeleteLinesDown(usize),
     UpdateCursorStyle(CursorStyle),
 }
 
@@ -87,6 +89,13 @@ impl State {
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
                 }
             },
+            Mode::DPressed(_) => match key {
+                Key::D => return,
+                _ => {
+                    self.mode = Mode::Normal;
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                }
+            },
         }
         self.verb_count.clear();
     }
@@ -131,9 +140,13 @@ impl State {
                     actions.push(Action::InsertChar('\n'));
                     actions.push(Action::CursorUp(1));
                 }
-                // G is a special key
+                // Go into other states
                 'g' => {
                     self.mode = Mode::GPressed(verb_count);
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Underline));
+                }
+                'd' => {
+                    self.mode = Mode::DPressed(verb_count);
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Underline));
                 }
                 _ => return,
@@ -144,6 +157,17 @@ impl State {
                     self.mode = Mode::Normal;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
                     actions.push(Action::CursorToLine(n - 1));
+                }
+                _ => {
+                    self.mode = Mode::Normal;
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                }
+            },
+            Mode::DPressed(n) => match c {
+                'd' => {
+                    self.mode = Mode::Normal;
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                    actions.push(Action::DeleteLinesDown(n));
                 }
                 _ => {
                     self.mode = Mode::Normal;

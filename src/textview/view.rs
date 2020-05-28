@@ -101,6 +101,13 @@ impl TextView {
         }
     }
 
+    fn delete_lines_down(&mut self, n: usize) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.view_delete_lines_down(&self.id, n);
+        }
+    }
+
     fn set_cursor_style(&mut self, style: CursorStyle) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
@@ -226,6 +233,10 @@ impl TextPane {
 
     pub(crate) fn delete_right(&mut self) {
         self.views[self.active].delete_right();
+    }
+
+    pub(crate) fn delete_lines_down(&mut self, n: usize) {
+        self.views[self.active].delete_lines_down(n);
     }
 
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
