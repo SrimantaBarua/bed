@@ -13,12 +13,12 @@
   - [ ] Open a new file
 - [ ] Cursor rendering
   - [x] Line
-  - [ ] Block
-  - [ ] Underline
+  - [x] Block
+  - [x] Underline
 - [ ] Cursor motion
   - [x] Basic 1-unit movement
   - [ ] PageUp / PageDown
-  - [ ] Start / End of line
+  - [x] Start / End of line
   - [ ] Go to line
 - [ ] FS notifications to reload file
   - [ ] inotify for Linux
@@ -33,15 +33,19 @@
   - [x] Basic characters
   - [x] Tab
   - [x] Newline
+  - [x] Pairs
 - [x] Delete character
   - [x] Backspace
   - [x] Delete
+  - [ ] Pairs
 - [ ] Selection
   - [ ] View-level expression of selection
   - [ ] Rendering of selection
 - [ ] Cut + Copy
 - [ ] Paste
 - [ ] Modal editing
+  - [x] Store input state
+  - [x] Normal and Insert mode
   - [ ] Actions, text objects, motions
 - [ ] Prompt
 - [ ] Status bar
@@ -52,19 +56,15 @@
   - [ ] Syntect - cache scope stack, not entire HighlightState
 - [x] Scroll wheel
 - [ ] Config file
-  - [ ] What format? Declarative (YAML)? Or programmatic?
+  - [x] JSON
+  - [x] Theme
+  - [x] Font family
+  - [x] Font size
 - [ ] Popups (completion, tooltip)
 - [ ] Render in "layers". This will make it easy to implement shadows
-- [ ] Syntax highlighting - Syntect
+- [ ] Syntax highlighting - Tree Sitter
   - [x] Initial highlight should be synchronous
-  - [ ] Spawn a thread to load a buffer
   - [x] Rehighlight on each keypress
-  - [x] Check if views need to update
-  - [x] Highlighter threadpool
-    - [x] Worker threads. One manager thread.
-    - [x] One bounded channel from manager to each worker. One general work queue. One queue for manager.
-  - [x] Fill dummy highlighting and start thread. Signal views when they need to be updated
-  - [ ] CSS theme for entire editor. Replace Syntect (TextMate) themes.
   - [ ] Clear shaping and highlighting information for "inactive" views
 - [ ]  Plugins. API? Scripting? Related to config
   - [ ] LSP for completion
