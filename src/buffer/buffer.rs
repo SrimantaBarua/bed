@@ -17,7 +17,7 @@ use crate::theme::Theme;
 use crate::ts::TsCore;
 
 use super::view::{BufferView, BufferViewCreateParams, StyledText};
-use super::BufferViewID;
+use super::{BufferViewID, CursorStyle};
 
 pub(crate) struct Buffer {
     data: Rope,
@@ -71,7 +71,7 @@ impl Buffer {
             .scroll(vec, &self.data, &self.styled_lines);
     }
 
-    // -------- View cursor motion ----------------
+    // -------- View cursor manipulation ----------------
     pub(crate) fn move_view_cursor_up(&mut self, id: &BufferViewID, n: usize) {
         let view = self.views.get_mut(id).unwrap();
         if view.cursor.line_num == 0 {
@@ -133,6 +133,14 @@ impl Buffer {
     ) {
         let view = self.views.get_mut(id).unwrap();
         view.move_cursor_to_point(point, &self.data, &self.styled_lines, self.tab_width);
+    }
+
+    pub(crate) fn set_view_cursor_style(&mut self, id: &BufferViewID, style: CursorStyle) {
+        let view = self.views.get_mut(id).unwrap();
+        view.cursor.style = style;
+        view.cursor
+            .sync_line_cidx_gidx_left(&self.data, self.tab_width);
+        view.snap_to_cursor(&self.data, &self.styled_lines);
     }
 
     // -------- View edits -----------------

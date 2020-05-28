@@ -7,7 +7,7 @@ use crate::common::{
 };
 
 #[derive(Eq, PartialEq)]
-pub(super) enum CursorStyle {
+pub(crate) enum CursorStyle {
     Line,
     Underline,
     Block,
@@ -98,7 +98,7 @@ impl Cursor {
             line_cidx: 0,
             line_gidx: 0,
             line_global_x: 0,
-            style: CursorStyle::Line,
+            style: CursorStyle::Block,
         }
     }
 

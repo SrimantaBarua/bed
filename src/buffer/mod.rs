@@ -15,5 +15,6 @@ impl BufferViewID {
 }
 
 pub(crate) use buffer::Buffer;
+pub(crate) use cursor::CursorStyle;
 pub(crate) use mgr::BufferMgr;
 pub(crate) use view::BufferViewCreateParams;

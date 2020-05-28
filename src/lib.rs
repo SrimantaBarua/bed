@@ -7,12 +7,13 @@ use std::{thread, time};
 extern crate crossbeam_channel;
 
 use euclid::{size2, vec2, Size2D};
-use glfw::{Action, Key, MouseButtonLeft, WindowEvent};
+use glfw::{Action, MouseButtonLeft, WindowEvent};
 
 mod buffer;
 mod common;
 mod config;
 mod font;
+mod input;
 mod opengl;
 mod painter;
 mod style;
@@ -22,8 +23,9 @@ mod theme;
 mod ts;
 mod window;
 
-use buffer::BufferViewCreateParams;
+use buffer::{BufferViewCreateParams, CursorStyle};
 use common::PixelSize;
+use input::Action as BedAction;
 
 #[cfg(target_os = "linux")]
 static DEFAULT_FONT: &'static str = "monospace";
@@ -52,6 +54,7 @@ fn abspath(spath: &str) -> String {
 pub struct Bed {
     textview_tree: textview::TextTree,
     painter: painter::Painter,
+    input_state: input::State,
     _buffer_mgr: buffer::BufferMgr,
     window: window::Window,
 }
@@ -61,6 +64,8 @@ impl Bed {
         let config = config::Config::load();
         let ts_core = ts::TsCore::new();
         let theme_set = theme::ThemeSet::load();
+
+        let input_state = input::State::new();
 
         let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("failed to initialize GLFW");
         let (mut window, dpi, events) = window::Window::new(&mut glfw, size, "bed");
@@ -105,6 +110,7 @@ impl Bed {
         let mut bed = Bed {
             window: window,
             painter: painter,
+            input_state,
             _buffer_mgr: buffer_mgr,
             textview_tree: textview_tree,
         };
@@ -124,32 +130,17 @@ impl Bed {
                         bed.painter.resize(size2(w, h).cast(), viewable_rect);
                         bed.textview_tree.set_rect(viewable_rect);
                     }
-                    WindowEvent::Key(Key::Up, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Up, _, Action::Repeat, _) => {
-                        bed.move_cursor(Direction::Up)
+                    WindowEvent::Key(k, _, Action::Press, md)
+                    | WindowEvent::Key(k, _, Action::Repeat, md) => {
+                        let action = bed.input_state.handle_key(k, md);
+                        bed.process_input_action(action);
                     }
-                    WindowEvent::Key(Key::Down, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Down, _, Action::Repeat, _) => {
-                        bed.move_cursor(Direction::Down)
+                    WindowEvent::Char(c) => {
+                        let action = bed.input_state.handle_char(c);
+                        bed.process_input_action(action);
                     }
-                    WindowEvent::Key(Key::Left, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Left, _, Action::Repeat, _) => {
-                        bed.move_cursor(Direction::Left)
-                    }
-                    WindowEvent::Key(Key::Right, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Right, _, Action::Repeat, _) => {
-                        bed.move_cursor(Direction::Right)
-                    }
-                    WindowEvent::Key(Key::Enter, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Enter, _, Action::Repeat, _) => bed.insert_char('\n'),
-                    WindowEvent::Key(Key::Tab, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Tab, _, Action::Repeat, _) => bed.insert_char('\t'),
-                    WindowEvent::Char(c) => bed.insert_char(c),
-                    WindowEvent::Key(Key::Backspace, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Backspace, _, Action::Repeat, _) => bed.delete_left(),
-                    WindowEvent::Key(Key::Delete, _, Action::Press, _)
-                    | WindowEvent::Key(Key::Delete, _, Action::Repeat, _) => bed.delete_right(),
                     WindowEvent::MouseButton(MouseButtonLeft, Action::Press, _) => {
+                        bed.input_state.set_normal_mode();
                         bed.move_cursor_to_mouse()
                     }
                     WindowEvent::Scroll(xsc, ysc) => {
@@ -173,6 +164,29 @@ impl Bed {
                 thread::sleep(target - diff);
             }
             glfw.poll_events();
+        }
+    }
+
+    fn process_input_action(&mut self, action: BedAction) {
+        match action {
+            BedAction::CursorUp => self.move_cursor(Direction::Up),
+            BedAction::CursorDown => self.move_cursor(Direction::Down),
+            BedAction::CursorLeft => self.move_cursor(Direction::Left),
+            BedAction::CursorRight => self.move_cursor(Direction::Right),
+            BedAction::InsertChar(c) => self.insert_char(c),
+            BedAction::DeleteLeft => self.delete_left(),
+            BedAction::DeleteRight => self.delete_right(),
+            BedAction::UpdateCursorStyle => match self.input_state.mode {
+                input::Mode::Input => self
+                    .textview_tree
+                    .active_mut()
+                    .set_cursor_style(CursorStyle::Line),
+                input::Mode::Normal => self
+                    .textview_tree
+                    .active_mut()
+                    .set_cursor_style(CursorStyle::Block),
+            },
+            BedAction::None => {}
         }
     }
 

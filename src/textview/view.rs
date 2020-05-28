@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use euclid::{vec2, Point2D, Rect, Vector2D};
 
-use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
+use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID, CursorStyle};
 use crate::common::PixelSize;
 use crate::painter::Painter;
 
@@ -77,6 +77,13 @@ impl TextView {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.view_delete_right(&self.id);
+        }
+    }
+
+    fn set_cursor_style(&mut self, style: CursorStyle) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.set_view_cursor_style(&self.id, style);
         }
     }
 
@@ -186,6 +193,10 @@ impl TextPane {
 
     pub(crate) fn delete_right(&mut self) {
         self.views[self.active].delete_right();
+    }
+
+    pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
+        self.views[self.active].set_cursor_style(style);
     }
 
     pub(crate) fn rect(&self) -> Rect<u32, PixelSize> {
