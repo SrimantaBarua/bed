@@ -64,7 +64,7 @@ impl TsCore {
             ),
             Rc::new(
                 Query::new(languages[5], PYTHON_HIGHLIGHTS)
-                    .expect("failed to load highlight queries for Rust"),
+                    .expect("failed to load highlight queries for Python"),
             ),
             Rc::new(
                 Query::new(languages[6], RUST_HIGHLIGHTS)
