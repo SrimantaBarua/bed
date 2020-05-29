@@ -116,8 +116,9 @@ impl Bed {
             textview_tree: textview_tree,
         };
 
-        let mut start = time::Instant::now();
-        let target = time::Duration::from_nanos(1_000_000_000 / 60);
+        let mut start_time = time::Instant::now();
+        let mut last_scroll_time = time::Instant::now();
+        let target_duration = time::Duration::from_nanos(1_000_000_000 / 60);
 
         bed.draw();
 
@@ -154,18 +155,20 @@ impl Bed {
                 }
             }
 
-            let mut redraw = bed.scroll(scroll_amt, target);
-            redraw |= bed.check_redraw();
+            let cur_time = time::Instant::now();
+            let mut redraw = bed.scroll(scroll_amt, cur_time - last_scroll_time);
+            last_scroll_time = cur_time;
 
-            let diff = start.elapsed();
-            start = time::Instant::now();
+            redraw |= bed.check_redraw();
             if redraw {
                 bed.draw();
             }
 
-            if diff < target {
-                thread::sleep(target - diff);
+            let tdiff = start_time.elapsed();
+            if tdiff < target_duration {
+                thread::sleep(target_duration - tdiff);
             }
+            start_time = time::Instant::now();
             glfw.poll_events();
         }
     }
@@ -250,12 +253,12 @@ impl Bed {
 
     fn scroll(&mut self, amt: (f64, f64), duration: time::Duration) -> bool {
         let pos = self.window.cursor_pos();
-        let vec = vec2(amt.0, -amt.1).cast();
+        let vec = vec2(amt.0, -amt.1);
         let redraw = self.textview_tree.map(|pane| {
             if pane.rect().contains(pos) {
                 pane.scroll(vec, duration)
             } else {
-                pane.scroll(vec2(0, 0), duration)
+                pane.scroll(vec2(0.0, 0.0), duration)
             }
         });
         redraw

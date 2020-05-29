@@ -157,7 +157,7 @@ impl Drop for TextView {
 }
 
 pub(crate) struct TextPane {
-    scroll_vel: Vector2D<i32, PixelSize>,
+    scroll_vel: Vector2D<f64, PixelSize>,
     params: BufferViewCreateParams,
     views: Vec<TextView>,
     active: usize,
@@ -200,22 +200,22 @@ impl TextPane {
         self.views[self.active].check_redraw()
     }
 
-    pub(crate) fn scroll(
-        &mut self,
-        mut acc: Vector2D<i32, PixelSize>,
-        _duration: Duration,
-    ) -> bool {
+    pub(crate) fn scroll(&mut self, mut acc: Vector2D<f64, PixelSize>, duration: Duration) -> bool {
+        // Base is for 60fps, so calculate t as a scale on that
+        let target = std::time::Duration::from_nanos(1_000_000_000 / 60);
+        let t = duration.as_secs_f64() / target.as_secs_f64();
         // TODO: update logic if duration varies. Currently assuming a const 60fps
         acc.x *= acc.x.abs();
         acc.y *= acc.y.abs();
-        let dist = (self.scroll_vel + acc) * 2;
-        self.scroll_vel += acc;
-        if acc.x == 0 {
-            self.scroll_vel.x /= 2;
+        let dist = ((self.scroll_vel * t) + (acc * 0.5 * t * t)) * 2.0;
+        self.scroll_vel += acc * t;
+        if acc.x == 0.0 {
+            self.scroll_vel.x /= 2.0;
         }
-        if acc.y == 0 {
-            self.scroll_vel.y /= 2;
+        if acc.y == 0.0 {
+            self.scroll_vel.y /= 2.0;
         }
+        let dist = dist.cast();
         if dist.x != 0 || dist.y != 0 {
             self.views[self.active].scroll(dist);
             return true;
@@ -255,7 +255,7 @@ impl TextPane {
         let views = vec![TextView::new(view_params.clone(), buffer, view_id)];
         TextPane {
             views,
-            scroll_vel: vec2(0, 0),
+            scroll_vel: vec2(0.0, 0.0),
             active: 0,
             params: view_params,
         }
@@ -270,7 +270,7 @@ impl TextPane {
         TextPane {
             views,
             active: 0,
-            scroll_vel: vec2(0, 0),
+            scroll_vel: vec2(0.0, 0.0),
             params: self.params.clone(),
         }
     }
