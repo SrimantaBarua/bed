@@ -105,4 +105,153 @@ impl StyledText {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::*;
+
+    #[test]
+    fn test_new_styled() {
+        let styled = StyledText::new(5, TextStyle::default(), Color::new(0, 0, 0, 0), None);
+        assert_eq!(styled.colors, vec![(5, Color::new(0, 0, 0, 0))]);
+        assert_eq!(styled.unders, vec![(5, None)]);
+        assert_eq!(styled.styles, vec![(5, TextStyle::default())]);
+    }
+
+    #[test]
+    fn test_set() {
+        let mut styled = StyledText::new(10, TextStyle::default(), Color::new(0, 0, 0, 0), None);
+
+        styled.set(
+            1..4,
+            TextStyle::new(TextWeight::Bold, TextSlant::Italic),
+            Color::new(0xff, 0, 0, 0),
+            None,
+        );
+        assert_eq!(
+            styled.colors,
+            vec![
+                (1, Color::new(0, 0, 0, 0)),
+                (4, Color::new(0xff, 0, 0, 0)),
+                (10, Color::new(0, 0, 0, 0))
+            ]
+        );
+        assert_eq!(styled.unders, vec![(1, None), (4, None), (10, None)]);
+        assert_eq!(
+            styled.styles,
+            vec![
+                (1, TextStyle::default()),
+                (4, TextStyle::new(TextWeight::Bold, TextSlant::Italic)),
+                (10, TextStyle::default())
+            ]
+        );
+
+        styled.set(
+            5..8,
+            TextStyle::default(),
+            Color::new(0xff, 0, 0, 0),
+            Some(Color::new(0, 0, 0, 0xff)),
+        );
+        assert_eq!(
+            styled.colors,
+            vec![
+                (1, Color::new(0, 0, 0, 0)),
+                (4, Color::new(0xff, 0, 0, 0)),
+                (5, Color::new(0, 0, 0, 0)),
+                (8, Color::new(0xff, 0, 0, 0)),
+                (10, Color::new(0, 0, 0, 0))
+            ]
+        );
+        assert_eq!(
+            styled.unders,
+            vec![
+                (1, None),
+                (4, None),
+                (5, None),
+                (8, Some(Color::new(0, 0, 0, 0xff))),
+                (10, None)
+            ]
+        );
+        assert_eq!(
+            styled.styles,
+            vec![
+                (1, TextStyle::default()),
+                (4, TextStyle::new(TextWeight::Bold, TextSlant::Italic)),
+                (5, TextStyle::default()),
+                (8, TextStyle::default()),
+                (10, TextStyle::default())
+            ]
+        );
+
+        styled.set(
+            4..5,
+            TextStyle::new(TextWeight::Light, TextSlant::Oblique),
+            Color::new(0xff, 0, 0, 0),
+            Some(Color::new(0xff, 0, 0, 0)),
+        );
+        assert_eq!(
+            styled.colors,
+            vec![
+                (1, Color::new(0, 0, 0, 0)),
+                (4, Color::new(0xff, 0, 0, 0)),
+                (5, Color::new(0xff, 0, 0, 0)),
+                (8, Color::new(0xff, 0, 0, 0)),
+                (10, Color::new(0, 0, 0, 0))
+            ]
+        );
+        assert_eq!(
+            styled.unders,
+            vec![
+                (1, None),
+                (4, None),
+                (5, Some(Color::new(0xff, 0, 0, 0))),
+                (8, Some(Color::new(0, 0, 0, 0xff))),
+                (10, None)
+            ]
+        );
+        assert_eq!(
+            styled.styles,
+            vec![
+                (1, TextStyle::default()),
+                (4, TextStyle::new(TextWeight::Bold, TextSlant::Italic)),
+                (5, TextStyle::new(TextWeight::Light, TextSlant::Oblique)),
+                (8, TextStyle::default()),
+                (10, TextStyle::default())
+            ]
+        );
+
+        styled.set(
+            3..7,
+            TextStyle::new(TextWeight::Light, TextSlant::Oblique),
+            Color::new(0xff, 0, 0, 0),
+            None,
+        );
+        assert_eq!(
+            styled.colors,
+            vec![
+                (1, Color::new(0, 0, 0, 0)),
+                (3, Color::new(0xff, 0, 0, 0)),
+                (7, Color::new(0xff, 0, 0, 0)),
+                (8, Color::new(0xff, 0, 0, 0)),
+                (10, Color::new(0, 0, 0, 0))
+            ]
+        );
+        assert_eq!(
+            styled.unders,
+            vec![
+                (1, None),
+                (3, None),
+                (7, None),
+                (8, Some(Color::new(0, 0, 0, 0xff))),
+                (10, None)
+            ]
+        );
+        assert_eq!(
+            styled.styles,
+            vec![
+                (1, TextStyle::default()),
+                (3, TextStyle::new(TextWeight::Bold, TextSlant::Italic)),
+                (7, TextStyle::new(TextWeight::Light, TextSlant::Oblique)),
+                (8, TextStyle::default()),
+                (10, TextStyle::default())
+            ]
+        );
+    }
 }
