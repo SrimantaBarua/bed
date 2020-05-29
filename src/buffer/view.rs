@@ -2,7 +2,6 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::ops::Range;
 use std::rc::Rc;
 
 use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
@@ -11,156 +10,15 @@ use ropey::Rope;
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
 use crate::font::FaceKey;
 use crate::painter::Painter;
-use crate::style::{Color, TextSize, TextStyle};
+use crate::style::{TextSize, TextStyle};
 use crate::text::{ShapedText, TextShaper};
 use crate::theme::Theme;
 
 use super::cursor::{Cursor, CursorStyle};
+use super::styled::StyledText;
 
 const CURSOR_LINE_WIDTH: i32 = 2;
 const CURSOR_BLOCK_WIDTH: i32 = 10;
-
-// All indices here are codepoint indices
-#[derive(Debug)]
-pub(super) struct StyledText {
-    styles: Vec<(usize, TextStyle)>,
-    colors: Vec<(usize, Color)>,
-    unders: Vec<(usize, Option<Color>)>,
-}
-
-impl StyledText {
-    pub(super) fn empty() -> StyledText {
-        StyledText {
-            styles: Vec::new(),
-            colors: Vec::new(),
-            unders: Vec::new(),
-        }
-    }
-
-    pub(super) fn new(
-        len: usize,
-        style: TextStyle,
-        color: Color,
-        under: Option<Color>,
-    ) -> StyledText {
-        StyledText {
-            styles: vec![(len, style)],
-            colors: vec![(len, color)],
-            unders: vec![(len, under)],
-        }
-    }
-
-    pub(super) fn push(
-        &mut self,
-        len: usize,
-        style: TextStyle,
-        color: Color,
-        under: Option<Color>,
-    ) {
-        let style_len = self.styles.len();
-        let color_len = self.colors.len();
-        let under_len = self.unders.len();
-        if style_len == 0 {
-            self.styles.push((len, style));
-        } else if self.styles[style_len - 1].1 != style {
-            self.styles
-                .push((self.styles[style_len - 1].0 + len, style));
-        } else {
-            self.styles[style_len - 1].0 += len;
-        }
-        if color_len == 0 {
-            self.colors.push((len, color));
-        } else if self.colors[color_len - 1].1 != color {
-            self.colors
-                .push((self.colors[color_len - 1].0 + len, color));
-        } else {
-            self.colors[color_len - 1].0 += len;
-        }
-        if under_len == 0 {
-            self.unders.push((len, under));
-        } else if self.unders[under_len - 1].1 != under {
-            self.unders
-                .push((self.unders[under_len - 1].0 + len, under));
-        } else {
-            self.unders[under_len - 1].0 += len;
-        }
-    }
-
-    // TODO: Cut down on code duplication
-    pub(super) fn set(
-        &mut self,
-        range: Range<usize>,
-        style: TextStyle,
-        color: Color,
-        under: Option<Color>,
-    ) {
-        self.set_style(range.clone(), style);
-        self.set_color(range.clone(), color);
-        self.set_under(range, under);
-    }
-
-    // TODO: Merge adjacent if required
-    fn set_style(&mut self, range: Range<usize>, style: TextStyle) {
-        let mut i = match self.styles.binary_search_by_key(&range.start, |x| x.0) {
-            Ok(i) => i + 1,
-            Err(i) => i,
-        };
-        assert!(i < self.styles.len());
-        if range.start == 0 || (i > 0 && range.start == self.styles[i - 1].0) {
-            self.styles.insert(i, (range.end, style));
-            i += 1;
-        } else {
-            self.styles.insert(i, (range.start, self.styles[i].1));
-            self.styles.insert(i + 1, (range.end, style));
-            i += 2;
-        }
-        // Remove everything after this that is completely covered
-        while i < self.styles.len() && self.styles[i].0 <= range.end {
-            self.styles.remove(i);
-        }
-    }
-
-    fn set_color(&mut self, range: Range<usize>, color: Color) {
-        assert!(self.colors.len() > 0 && range.start < self.colors[self.colors.len() - 1].0);
-        let mut i = match self.colors.binary_search_by_key(&range.start, |x| x.0) {
-            Ok(i) => i + 1,
-            Err(i) => i,
-        };
-        assert!(i < self.colors.len());
-        if range.start == 0 || (i > 0 && range.start == self.colors[i - 1].0) {
-            self.colors.insert(i, (range.end, color));
-            i += 1;
-        } else {
-            self.colors.insert(i, (range.start, self.colors[i].1));
-            self.colors.insert(i + 1, (range.end, color));
-            i += 2;
-        }
-        // Remove everything after this that is completely covered
-        while i < self.colors.len() && self.colors[i].0 <= range.end {
-            self.colors.remove(i);
-        }
-    }
-
-    fn set_under(&mut self, range: Range<usize>, under: Option<Color>) {
-        let mut i = match self.unders.binary_search_by_key(&range.start, |x| x.0) {
-            Ok(i) => i + 1,
-            Err(i) => i,
-        };
-        assert!(i < self.unders.len());
-        if range.start == 0 || (i > 0 && range.start == self.unders[i - 1].0) {
-            self.unders.insert(i, (range.end, under));
-            i += 1;
-        } else {
-            self.unders.insert(i, (range.start, self.unders[i].1));
-            self.unders.insert(i + 1, (range.end, under));
-            i += 2;
-        }
-        // Remove everything after this that is completely covered
-        while i < self.unders.len() && self.unders[i].0 <= range.end {
-            self.unders.remove(i);
-        }
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct BufferViewCreateParams {
@@ -174,7 +32,6 @@ pub(crate) struct BufferViewCreateParams {
 pub(super) struct BufferView {
     pub(super) cursor: Cursor,
     pub(super) rect: Rect<u32, PixelSize>,
-    pub(super) hl_valid_upto: usize,
     pub(super) needs_redraw: bool,
     tab_width: usize,
     // Text shaping
@@ -214,7 +71,6 @@ impl BufferView {
         let mut view = BufferView {
             cursor: Cursor::default(),
             rect: params.rect,
-            hl_valid_upto: 0,
             needs_redraw: true,
             tab_width,
             face_key: params.face_key,

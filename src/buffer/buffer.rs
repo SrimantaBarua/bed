@@ -17,7 +17,8 @@ use crate::style::{Color, TextStyle};
 use crate::theme::Theme;
 use crate::ts::TsCore;
 
-use super::view::{BufferView, BufferViewCreateParams, StyledText};
+use super::styled::StyledText;
+use super::view::{BufferView, BufferViewCreateParams};
 use super::{BufferViewID, CursorStyle};
 
 fn default_hl_for_line(line: RopeSlice, color: Color) -> StyledText {

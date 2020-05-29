@@ -3,6 +3,7 @@
 mod buffer;
 mod cursor;
 mod mgr;
+mod styled;
 mod view;
 
 #[derive(Eq, Hash, PartialEq)]
