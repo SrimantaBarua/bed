@@ -83,6 +83,20 @@ impl Buffer {
     pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mov: Motion) {
         let view = self.views.get_mut(id).unwrap();
         match mov {
+            Motion::Left(n) => {
+                if view.cursor.line_cidx <= n {
+                    view.cursor.line_cidx = 0;
+                } else {
+                    view.cursor.line_cidx -= n;
+                }
+                view.cursor
+                    .sync_line_cidx_gidx_left(&self.data, self.tab_width);
+            }
+            Motion::Right(n) => {
+                view.cursor.line_cidx += n;
+                view.cursor
+                    .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+            }
             Motion::Up(n) => {
                 if view.cursor.line_num == 0 {
                     view.cursor.char_idx = 0;
@@ -107,20 +121,6 @@ impl Buffer {
                 } else {
                     view.cursor.sync_global_x(&self.data, self.tab_width);
                 }
-            }
-            Motion::Left(n) => {
-                if view.cursor.line_cidx <= n {
-                    view.cursor.line_cidx = 0;
-                } else {
-                    view.cursor.line_cidx -= n;
-                }
-                view.cursor
-                    .sync_line_cidx_gidx_left(&self.data, self.tab_width);
-            }
-            Motion::Right(n) => {
-                view.cursor.line_cidx += n;
-                view.cursor
-                    .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
             Motion::LineStart => {
                 view.cursor.line_cidx = 0;
@@ -286,29 +286,63 @@ impl Buffer {
                 }
                 (cidx, end_cidx)
             }
-            Motion::Down(mut n) => {
-                let start_linum = view.cursor.line_num;
+            Motion::Up(n) => {
+                let start_linum = if linum < n { 0 } else { linum - n };
+                let start_cidx = self.data.line_to_char(start_linum);
+                let end_cidx = self.data.line_to_char(linum + 1);
+                for _ in start_linum..linum {
+                    self.styled_lines.remove(start_linum + 1);
+                }
+                if self.data.char_to_line(end_cidx) > linum {
+                    self.styled_lines.remove(start_linum + 1);
+                }
+                linum = start_linum;
+                move_to_start = true;
+                (start_cidx, end_cidx)
+            }
+            Motion::Down(n) => {
+                let start_linum = linum;
                 let (start_cidx, end_cidx) = if start_linum + n >= self.data.len_lines() {
                     linum -= 1;
+                    self.styled_lines.truncate(start_linum);
                     (
                         self.data.line_to_char(linum)
                             + rope_trim_newlines(self.data.line(linum)).len_chars(),
                         self.data.len_chars(),
                     )
                 } else {
+                    for _ in 0..n {
+                        self.styled_lines.remove(start_linum + 1);
+                    }
+                    if start_linum + n + 1 < self.data.len_lines() {
+                        self.styled_lines.remove(start_linum + 1);
+                    }
                     (
                         cidx - view.cursor.line_cidx,
-                        self.data.line_to_char(start_linum + n),
+                        self.data.line_to_char(start_linum + n + 1),
                     )
                 };
-                if start_linum + n > self.data.len_lines() {
-                    n = self.data.len_lines() - start_linum;
-                }
-                for _ in 0..n {
-                    self.styled_lines.remove(start_linum);
-                }
                 move_to_start = true;
                 (start_cidx, end_cidx)
+            }
+            Motion::LineStart => {
+                if view.cursor.line_cidx == 0 {
+                    return;
+                }
+                (
+                    view.cursor.char_idx - view.cursor.line_cidx,
+                    view.cursor.char_idx,
+                )
+            }
+            Motion::LineEnd => {
+                let lc = rope_trim_newlines(self.data.line(view.cursor.line_num)).len_chars();
+                if view.cursor.line_cidx == lc {
+                    return;
+                }
+                (
+                    view.cursor.char_idx,
+                    view.cursor.char_idx + (lc - view.cursor.line_cidx),
+                )
             }
             _ => unimplemented!(),
         };

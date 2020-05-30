@@ -93,11 +93,11 @@ impl State {
                 }
             },
             Mode::DPressed(_) => match key {
-                Key::D => return,
-                _ => {
+                Key::Escape => {
                     self.mode = Mode::Normal;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
                 }
+                _ => return,
             },
         }
         self.verb_count.clear();
@@ -166,17 +166,34 @@ impl State {
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
                 }
             },
-            Mode::DPressed(n) => match c {
-                'd' => {
-                    self.mode = Mode::Normal;
-                    actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
-                    actions.push(Action::Delete(Motion::Down(n)));
+            Mode::DPressed(n) => {
+                match c {
+                    // Basic movement
+                    'h' => actions.push(Action::Delete(Motion::Left(n * verb_count))),
+                    'j' => actions.push(Action::Delete(Motion::Down(n * verb_count))),
+                    'k' => actions.push(Action::Delete(Motion::Up(n * verb_count))),
+                    'l' => actions.push(Action::Delete(Motion::Right(n * verb_count))),
+                    '0' if self.verb_count.len() == 0 => {
+                        actions.push(Action::Delete(Motion::LineStart))
+                    }
+                    '$' => actions.push(Action::Delete(Motion::LineEnd)),
+                    // Counts
+                    c if c.is_ascii_digit() => {
+                        self.verb_count.push(c);
+                        return;
+                    }
+                    /*
+                    'd' => {
+                        self.mode = Mode::Normal;
+                        actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                        actions.push(Action::Delete(Motion::Down(n)));
+                    }
+                    */
+                    _ => {}
                 }
-                _ => {
-                    self.mode = Mode::Normal;
-                    actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
-                }
-            },
+                self.mode = Mode::Normal;
+                actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+            }
         }
         self.verb_count.clear();
     }
