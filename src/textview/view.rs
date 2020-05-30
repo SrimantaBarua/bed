@@ -53,6 +53,13 @@ impl TextView {
         }
     }
 
+    fn set_cursor_visible(&mut self, visible: bool) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.set_view_cursor_visible(&self.id, visible);
+        }
+    }
+
     fn set_cursor_style(&mut self, style: CursorStyle) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
@@ -150,6 +157,10 @@ impl TextPane {
             return true;
         }
         return false;
+    }
+
+    pub(crate) fn set_cursor_visible(&mut self, visible: bool) {
+        self.views[self.active].set_cursor_visible(visible);
     }
 
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {

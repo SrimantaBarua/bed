@@ -14,6 +14,7 @@ pub(crate) enum CursorStyle {
 }
 
 pub(super) struct Cursor {
+    pub(super) visible: bool,
     pub(super) char_idx: usize,
     pub(super) line_num: usize,
     pub(super) line_cidx: usize,
@@ -93,6 +94,7 @@ impl Cursor {
 
     pub(super) fn default() -> Cursor {
         Cursor {
+            visible: true,
             char_idx: 0,
             line_num: 0,
             line_cidx: 0,

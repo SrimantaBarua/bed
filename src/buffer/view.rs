@@ -227,7 +227,7 @@ impl BufferView {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut pos = point2(-(self.xoff as i32), -(self.yoff as i32));
         let mut linum = 0;
-        let cursor = if self.cursor.line_num < self.start_line {
+        let cursor = if !self.cursor.visible || self.cursor.line_num < self.start_line {
             None
         } else {
             Some((

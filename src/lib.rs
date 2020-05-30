@@ -118,7 +118,11 @@ impl Bed {
 
         let mut start_time = time::Instant::now();
         let mut last_scroll_time = time::Instant::now();
+        let mut last_blink_time = time::Instant::now();
+        let mut cursor_blink_visible = true;
+
         let target_duration = time::Duration::from_nanos(1_000_000_000 / 60);
+        let blink_duration = time::Duration::from_millis(500);
 
         bed.draw();
 
@@ -160,6 +164,16 @@ impl Bed {
             last_scroll_time = cur_time;
 
             redraw |= bed.check_redraw();
+            if redraw {
+                last_blink_time = time::Instant::now();
+                cursor_blink_visible = true;
+                bed.set_cursor_visible(cursor_blink_visible);
+            } else if last_blink_time.elapsed() >= blink_duration {
+                last_blink_time = time::Instant::now();
+                cursor_blink_visible = !cursor_blink_visible;
+                bed.set_cursor_visible(cursor_blink_visible);
+                redraw = true;
+            }
             if redraw {
                 bed.draw();
             }
@@ -204,6 +218,10 @@ impl Bed {
 
     fn move_cursor(&mut self, mov: BedMotion) {
         self.textview_tree.active_mut().move_cursor(mov);
+    }
+
+    fn set_cursor_visible(&mut self, visible: bool) {
+        self.textview_tree.active_mut().set_cursor_visible(visible)
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {

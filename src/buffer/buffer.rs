@@ -152,6 +152,12 @@ impl Buffer {
         view.move_cursor_to_point(point, &self.data, &self.styled_lines, self.tab_width);
     }
 
+    pub(crate) fn set_view_cursor_visible(&mut self, id: &BufferViewID, visible: bool) {
+        let view = self.views.get_mut(id).unwrap();
+        view.needs_redraw = view.cursor.visible != visible;
+        view.cursor.visible = visible;
+    }
+
     pub(crate) fn set_view_cursor_style(&mut self, id: &BufferViewID, style: CursorStyle) {
         let view = self.views.get_mut(id).unwrap();
         view.cursor.style = style;
