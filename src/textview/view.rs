@@ -9,6 +9,7 @@ use euclid::{vec2, Point2D, Rect, Vector2D};
 
 use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID, CursorStyle};
 use crate::common::PixelSize;
+use crate::input::Motion;
 use crate::painter::Painter;
 
 struct TextView {
@@ -17,52 +18,24 @@ struct TextView {
 }
 
 impl TextView {
-    fn move_cursor_up(&mut self, n: usize) {
+    fn move_cursor(&mut self, mov: Motion) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor_up(&self.id, n);
+            buffer.move_view_cursor(&self.id, mov);
         }
     }
 
-    fn move_cursor_down(&mut self, n: usize) {
+    fn insert_char(&mut self, c: char) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor_down(&self.id, n);
+            buffer.view_insert_char(&self.id, c);
         }
     }
 
-    fn move_cursor_left(&mut self, n: usize) {
+    fn delete(&mut self, mov: Motion) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor_left(&self.id, n);
-        }
-    }
-
-    fn move_cursor_right(&mut self, n: usize) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor_right(&self.id, n);
-        }
-    }
-
-    fn move_cursor_start_of_line(&mut self) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor_start_of_line(&self.id);
-        }
-    }
-
-    fn move_cursor_end_of_line(&mut self) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor_end_of_line(&self.id);
-        }
-    }
-
-    fn move_cursor_to_line(&mut self, linum: usize) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor_to_line(&self.id, linum);
+            buffer.view_delete(&self.id, mov);
         }
     }
 
@@ -77,34 +50,6 @@ impl TextView {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.scroll_view(&self.id, vec);
-        }
-    }
-
-    fn insert_char(&mut self, c: char) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.view_insert_char(&self.id, c);
-        }
-    }
-
-    fn delete_left(&mut self) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.view_delete_left(&self.id);
-        }
-    }
-
-    fn delete_right(&mut self) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.view_delete_right(&self.id);
-        }
-    }
-
-    fn delete_lines_down(&mut self, n: usize) {
-        {
-            let buffer = &mut *self.buffer.borrow_mut();
-            buffer.view_delete_lines_down(&self.id, n);
         }
     }
 
@@ -164,36 +109,20 @@ pub(crate) struct TextPane {
 }
 
 impl TextPane {
-    pub(crate) fn move_cursor_up(&mut self, n: usize) {
-        self.views[self.active].move_cursor_up(n);
-    }
-
-    pub(crate) fn move_cursor_down(&mut self, n: usize) {
-        self.views[self.active].move_cursor_down(n);
-    }
-
-    pub(crate) fn move_cursor_left(&mut self, n: usize) {
-        self.views[self.active].move_cursor_left(n);
-    }
-
-    pub(crate) fn move_cursor_right(&mut self, n: usize) {
-        self.views[self.active].move_cursor_right(n);
-    }
-
-    pub(crate) fn move_cursor_start_of_line(&mut self) {
-        self.views[self.active].move_cursor_start_of_line();
-    }
-
-    pub(crate) fn move_cursor_end_of_line(&mut self) {
-        self.views[self.active].move_cursor_end_of_line();
-    }
-
-    pub(crate) fn move_cursor_to_line(&mut self, linum: usize) {
-        self.views[self.active].move_cursor_to_line(linum);
+    pub(crate) fn move_cursor(&mut self, mov: Motion) {
+        self.views[self.active].move_cursor(mov);
     }
 
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<u32, PixelSize>) {
         self.views[self.active].move_cursor_to_point(point);
+    }
+
+    pub(crate) fn insert_char(&mut self, c: char) {
+        self.views[self.active].insert_char(c);
+    }
+
+    pub(crate) fn delete(&mut self, mov: Motion) {
+        self.views[self.active].delete(mov);
     }
 
     pub(crate) fn check_redraw(&mut self) -> bool {
@@ -221,22 +150,6 @@ impl TextPane {
             return true;
         }
         return false;
-    }
-
-    pub(crate) fn insert_char(&mut self, c: char) {
-        self.views[self.active].insert_char(c);
-    }
-
-    pub(crate) fn delete_left(&mut self) {
-        self.views[self.active].delete_left();
-    }
-
-    pub(crate) fn delete_right(&mut self) {
-        self.views[self.active].delete_right();
-    }
-
-    pub(crate) fn delete_lines_down(&mut self, n: usize) {
-        self.views[self.active].delete_lines_down(n);
     }
 
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {

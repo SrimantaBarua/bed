@@ -4,25 +4,28 @@ use glfw::{Key, Modifiers};
 
 use crate::buffer::CursorStyle;
 
-pub(crate) enum Mode {
+pub enum Mode {
     Normal,
     Input,
     GPressed(usize),
     DPressed(usize),
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum Motion {
+    Up(usize),
+    Down(usize),
+    Left(usize),
+    Right(usize),
+    ToLine(usize),
+    LineStart,
+    LineEnd,
+}
+
 pub(crate) enum Action {
-    CursorUp(usize),
-    CursorDown(usize),
-    CursorLeft(usize),
-    CursorRight(usize),
-    CursorToLine(usize),
-    CursorLineStart,
-    CursorLineEnd,
+    Move(Motion),
+    Delete(Motion),
     InsertChar(char),
-    DeleteLeft,
-    DeleteRight,
-    DeleteLinesDown(usize),
     UpdateCursorStyle(CursorStyle),
 }
 
@@ -48,36 +51,36 @@ impl State {
         match self.mode {
             Mode::Normal => match key {
                 // Basic movement
-                Key::Up => actions.push(Action::CursorUp(verb_count)),
-                Key::Down => actions.push(Action::CursorDown(verb_count)),
-                Key::Left => actions.push(Action::CursorLeft(verb_count)),
-                Key::Right => actions.push(Action::CursorRight(verb_count)),
-                Key::Enter => actions.push(Action::CursorDown(verb_count)),
-                Key::Backspace => actions.push(Action::CursorLeft(verb_count)),
-                Key::Home => actions.push(Action::CursorLineStart),
-                Key::End => actions.push(Action::CursorLineEnd),
+                Key::Up => actions.push(Action::Move(Motion::Up(verb_count))),
+                Key::Down => actions.push(Action::Move(Motion::Down(verb_count))),
+                Key::Left => actions.push(Action::Move(Motion::Left(verb_count))),
+                Key::Right => actions.push(Action::Move(Motion::Right(verb_count))),
+                Key::Enter => actions.push(Action::Move(Motion::Down(verb_count))),
+                Key::Backspace => actions.push(Action::Move(Motion::Left(verb_count))),
+                Key::Home => actions.push(Action::Move(Motion::LineStart)),
+                Key::End => actions.push(Action::Move(Motion::LineEnd)),
                 // Delete
-                Key::Delete => actions.push(Action::DeleteRight),
+                Key::Delete => actions.push(Action::Delete(Motion::Right(verb_count))),
                 _ => return,
             },
             Mode::Input => match key {
                 // Basic movement
-                Key::Up => actions.push(Action::CursorUp(1)),
-                Key::Down => actions.push(Action::CursorDown(1)),
-                Key::Left => actions.push(Action::CursorLeft(1)),
-                Key::Right => actions.push(Action::CursorRight(1)),
-                Key::Home => actions.push(Action::CursorLineStart),
-                Key::End => actions.push(Action::CursorLineEnd),
+                Key::Up => actions.push(Action::Move(Motion::Up(1))),
+                Key::Down => actions.push(Action::Move(Motion::Down(1))),
+                Key::Left => actions.push(Action::Move(Motion::Left(1))),
+                Key::Right => actions.push(Action::Move(Motion::Right(1))),
+                Key::Home => actions.push(Action::Move(Motion::LineStart)),
+                Key::End => actions.push(Action::Move(Motion::LineEnd)),
                 // Insert
                 Key::Enter => actions.push(Action::InsertChar('\n')),
                 Key::Tab => actions.push(Action::InsertChar('\t')),
                 // Delete
-                Key::Backspace => actions.push(Action::DeleteLeft),
-                Key::Delete => actions.push(Action::DeleteRight),
+                Key::Backspace => actions.push(Action::Delete(Motion::Left(1))),
+                Key::Delete => actions.push(Action::Delete(Motion::Right(1))),
                 // Exit insert mode
                 Key::Escape => {
                     self.mode = Mode::Normal;
-                    actions.push(Action::CursorLeft(1));
+                    actions.push(Action::Move(Motion::Left(1)));
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
                 }
                 _ => return,
@@ -105,13 +108,13 @@ impl State {
         match self.mode {
             Mode::Normal => match c {
                 // Basic movement
-                'h' => actions.push(Action::CursorLeft(verb_count)),
-                'j' => actions.push(Action::CursorDown(verb_count)),
-                'k' => actions.push(Action::CursorUp(verb_count)),
-                'l' => actions.push(Action::CursorRight(verb_count)),
-                '0' if self.verb_count.len() == 0 => actions.push(Action::CursorLineStart),
-                '$' => actions.push(Action::CursorLineEnd),
-                'G' => actions.push(Action::CursorToLine(std::usize::MAX)),
+                'h' => actions.push(Action::Move(Motion::Left(verb_count))),
+                'j' => actions.push(Action::Move(Motion::Down(verb_count))),
+                'k' => actions.push(Action::Move(Motion::Up(verb_count))),
+                'l' => actions.push(Action::Move(Motion::Right(verb_count))),
+                '0' if self.verb_count.len() == 0 => actions.push(Action::Move(Motion::LineStart)),
+                '$' => actions.push(Action::Move(Motion::LineEnd)),
+                'G' => actions.push(Action::Move(Motion::ToLine(std::usize::MAX))),
                 // Counts
                 c if c.is_ascii_digit() => {
                     self.verb_count.push(c);
@@ -125,20 +128,20 @@ impl State {
                 'a' => {
                     self.mode = Mode::Input;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
-                    actions.push(Action::CursorRight(1));
+                    actions.push(Action::Move(Motion::Right(1)));
                 }
                 'o' => {
                     self.mode = Mode::Input;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
-                    actions.push(Action::CursorLineEnd);
+                    actions.push(Action::Move(Motion::LineEnd));
                     actions.push(Action::InsertChar('\n'));
                 }
                 'O' => {
                     self.mode = Mode::Input;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
-                    actions.push(Action::CursorLineStart);
+                    actions.push(Action::Move(Motion::LineStart));
                     actions.push(Action::InsertChar('\n'));
-                    actions.push(Action::CursorUp(1));
+                    actions.push(Action::Move(Motion::Up(1)));
                 }
                 // Go into other states
                 'g' => {
@@ -156,7 +159,7 @@ impl State {
                 'g' => {
                     self.mode = Mode::Normal;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
-                    actions.push(Action::CursorToLine(n - 1));
+                    actions.push(Action::Move(Motion::ToLine(n - 1)));
                 }
                 _ => {
                     self.mode = Mode::Normal;
@@ -167,7 +170,7 @@ impl State {
                 'd' => {
                     self.mode = Mode::Normal;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
-                    actions.push(Action::DeleteLinesDown(n));
+                    actions.push(Action::Delete(Motion::Down(n)));
                 }
                 _ => {
                     self.mode = Mode::Normal;

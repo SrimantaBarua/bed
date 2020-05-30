@@ -12,6 +12,7 @@ use ropey::{Rope, RopeSlice};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
+use crate::input::Motion;
 use crate::painter::Painter;
 use crate::style::{Color, TextStyle};
 use crate::theme::Theme;
@@ -79,83 +80,66 @@ impl Buffer {
     }
 
     // -------- View cursor manipulation ----------------
-    pub(crate) fn move_view_cursor_up(&mut self, id: &BufferViewID, n: usize) {
+    pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mov: Motion) {
         let view = self.views.get_mut(id).unwrap();
-        if view.cursor.line_num == 0 {
-            view.cursor.char_idx = 0;
-            view.cursor.line_cidx = 0;
-            view.cursor.line_gidx = 0;
-            view.cursor.line_global_x = 0;
-        } else {
-            if view.cursor.line_num < n {
-                view.cursor.line_num = 0;
-            } else {
-                view.cursor.line_num -= n;
+        match mov {
+            Motion::Up(n) => {
+                if view.cursor.line_num == 0 {
+                    view.cursor.char_idx = 0;
+                    view.cursor.line_cidx = 0;
+                    view.cursor.line_gidx = 0;
+                    view.cursor.line_global_x = 0;
+                } else {
+                    if view.cursor.line_num < n {
+                        view.cursor.line_num = 0;
+                    } else {
+                        view.cursor.line_num -= n;
+                    }
+                }
+                view.cursor.sync_global_x(&self.data, self.tab_width);
+            }
+            Motion::Down(n) => {
+                view.cursor.line_num += n;
+                if view.cursor.line_num >= self.data.len_lines() {
+                    view.cursor.char_idx = self.data.len_chars();
+                    view.cursor
+                        .sync_and_update_char_idx_left(&self.data, self.tab_width);
+                } else {
+                    view.cursor.sync_global_x(&self.data, self.tab_width);
+                }
+            }
+            Motion::Left(n) => {
+                if view.cursor.line_cidx <= n {
+                    view.cursor.line_cidx = 0;
+                } else {
+                    view.cursor.line_cidx -= n;
+                }
+                view.cursor
+                    .sync_line_cidx_gidx_left(&self.data, self.tab_width);
+            }
+            Motion::Right(n) => {
+                view.cursor.line_cidx += n;
+                view.cursor
+                    .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+            }
+            Motion::LineStart => {
+                view.cursor.line_cidx = 0;
+                view.cursor
+                    .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+            }
+            Motion::LineEnd => {
+                let lc = rope_trim_newlines(self.data.line(view.cursor.line_num)).len_chars();
+                view.cursor.line_cidx = lc;
+                view.cursor
+                    .sync_line_cidx_gidx_right(&self.data, self.tab_width);
+            }
+            Motion::ToLine(linum) => {
+                view.cursor.line_num = min(linum, self.data.len_lines() - 1);
+                view.cursor.line_cidx = 0;
+                view.cursor
+                    .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
         }
-        view.cursor.sync_global_x(&self.data, self.tab_width);
-        view.snap_to_cursor(&self.data, &self.styled_lines);
-    }
-
-    pub(crate) fn move_view_cursor_down(&mut self, id: &BufferViewID, n: usize) {
-        let view = self.views.get_mut(id).unwrap();
-        view.cursor.line_num += n;
-        if view.cursor.line_num >= self.data.len_lines() {
-            view.cursor.char_idx = self.data.len_chars();
-            view.cursor
-                .sync_and_update_char_idx_left(&self.data, self.tab_width);
-        } else {
-            view.cursor.sync_global_x(&self.data, self.tab_width);
-        }
-        view.snap_to_cursor(&self.data, &self.styled_lines);
-    }
-
-    pub(crate) fn move_view_cursor_left(&mut self, id: &BufferViewID, n: usize) {
-        let view = self.views.get_mut(id).unwrap();
-        if view.cursor.line_cidx <= n {
-            view.cursor.char_idx -= view.cursor.line_cidx;
-            view.cursor.line_cidx = 0;
-            view.cursor.line_gidx = 0;
-            view.cursor.line_global_x = 0;
-        } else {
-            view.cursor.line_cidx -= n;
-            view.cursor
-                .sync_line_cidx_gidx_left(&self.data, self.tab_width);
-        }
-        view.snap_to_cursor(&self.data, &self.styled_lines);
-    }
-
-    pub(crate) fn move_view_cursor_right(&mut self, id: &BufferViewID, n: usize) {
-        let view = self.views.get_mut(id).unwrap();
-        view.cursor.line_cidx += n;
-        view.cursor
-            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
-        view.snap_to_cursor(&self.data, &self.styled_lines);
-    }
-
-    pub(crate) fn move_view_cursor_start_of_line(&mut self, id: &BufferViewID) {
-        let view = self.views.get_mut(id).unwrap();
-        view.cursor.line_cidx = 0;
-        view.cursor
-            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
-        view.snap_to_cursor(&self.data, &self.styled_lines);
-    }
-
-    pub(crate) fn move_view_cursor_end_of_line(&mut self, id: &BufferViewID) {
-        let view = self.views.get_mut(id).unwrap();
-        let lc = rope_trim_newlines(self.data.line(view.cursor.line_num)).len_chars();
-        view.cursor.line_cidx = lc;
-        view.cursor
-            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
-        view.snap_to_cursor(&self.data, &self.styled_lines);
-    }
-
-    pub(crate) fn move_view_cursor_to_line(&mut self, id: &BufferViewID, linum: usize) {
-        let view = self.views.get_mut(id).unwrap();
-        view.cursor.line_num = min(linum, self.data.len_lines() - 1);
-        view.cursor.line_cidx = 0;
-        view.cursor
-            .sync_line_cidx_gidx_right(&self.data, self.tab_width);
         view.snap_to_cursor(&self.data, &self.styled_lines);
     }
 
@@ -180,6 +164,7 @@ impl Buffer {
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
         let view = self.views.get_mut(id).unwrap();
         let cidx = view.cursor.char_idx;
+        let lc = self.data.len_chars();
         let linum = view.cursor.line_num;
         let mut end_linum = linum;
         let mut end_cidx = cidx + 1;
@@ -188,7 +173,7 @@ impl Buffer {
             // Insert pair
             '[' | '{' | '(' => {
                 self.data.insert_char(cidx, c);
-                if cidx + 1 == self.data.len_chars() || self.data.char(cidx + 1).is_whitespace() {
+                if cidx + 1 == lc || self.data.char(cidx + 1).is_whitespace() {
                     match c {
                         '[' => self.data.insert_char(cidx + 1, ']'),
                         '{' => self.data.insert_char(cidx + 1, '}'),
@@ -200,20 +185,20 @@ impl Buffer {
             }
             // Maybe insert pair, maybe skip
             '"' | '\'' => {
-                if self.data.char(cidx) != c {
+                if cidx == lc || self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                     self.data.insert_char(cidx + 1, c);
                     end_cidx += 1;
                 } else {
-                    return self.move_view_cursor_right(id, 1);
+                    return self.move_view_cursor(id, Motion::Right(1));
                 }
             }
             // Maybe skip insert
             ']' | '}' | ')' => {
-                if self.data.char(cidx) != c {
+                if cidx == lc || self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                 } else {
-                    return self.move_view_cursor_right(id, 1);
+                    return self.move_view_cursor(id, Motion::Right(1));
                 }
             }
             // Maybe insert twice?
@@ -222,7 +207,7 @@ impl Buffer {
                 if c == '\n' {
                     end_linum += 1;
                 }
-                if cidx > 0 && cidx + 1 < self.data.len_chars() {
+                if cidx > 0 && cidx + 1 < lc {
                     let c0 = self.data.char(cidx - 1);
                     let c1 = self.data.char(cidx + 1);
                     if (c0 == '(' && c1 == ')')
@@ -271,136 +256,99 @@ impl Buffer {
         }
     }
 
-    pub(crate) fn view_delete_left(&mut self, id: &BufferViewID) {
+    pub(crate) fn view_delete(&mut self, id: &BufferViewID, mov: Motion) {
         let view = self.views.get_mut(id).unwrap();
-        if view.cursor.char_idx == 0 {
-            return;
-        }
-        let old_rope = self.data.clone();
         let cidx = view.cursor.char_idx;
-        let len_lines = self.data.len_lines();
-        self.data.remove(cidx - 1..cidx);
+        let lc = self.data.len_chars();
         let mut linum = view.cursor.line_num;
-        let is_beg = view.cursor.line_cidx == 0 && self.data.len_lines() < len_lines;
-        if is_beg {
-            self.styled_lines.remove(linum);
-            linum -= 1;
-        }
-        self.styled_lines[linum] =
-            default_hl_for_line(self.data.line(linum), self.theme.textview.foreground);
-
-        self.edit_tree(old_rope, cidx - 1, cidx, cidx - 1);
-        let (start_byte, end_byte) = {
-            let llen = self.data.line(linum).len_bytes();
-            let lb = self.data.line_to_byte(linum);
-            (lb, lb + llen)
-        };
-        self.rehighlight_range(tree_sitter::Range {
-            start_byte: start_byte,
-            end_byte: end_byte,
-            start_point: Point::new(linum, 0),
-            end_point: Point::new(linum, end_byte - start_byte),
-        });
-
-        for view in self.views.values_mut() {
-            if view.cursor.char_idx >= cidx {
-                view.cursor.char_idx -= 1;
-                view.cursor
-                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+        let mut move_to_start = false;
+        let (start_cidx, end_cidx) = match mov {
+            Motion::Left(n) => {
+                if cidx == 0 {
+                    return;
+                }
+                let start_cidx = if cidx <= n { 0 } else { cidx - n };
+                let start_line = self.data.char_to_line(start_cidx);
+                for _ in start_line..linum {
+                    self.styled_lines.remove(start_line + 1);
+                }
+                linum = start_line;
+                (start_cidx, cidx)
             }
-            view.reshape(&self.data, &self.styled_lines);
-            view.snap_to_cursor(&self.data, &self.styled_lines);
-        }
-    }
+            Motion::Right(n) => {
+                if cidx == self.data.len_chars() {
+                    return;
+                }
+                let end_cidx = if cidx + n >= lc { lc } else { cidx + n };
+                let end_line = self.data.char_to_line(end_cidx);
+                for _ in linum..end_line {
+                    self.styled_lines.remove(linum + 1);
+                }
+                (cidx, end_cidx)
+            }
+            Motion::Down(mut n) => {
+                let start_linum = view.cursor.line_num;
+                let (start_cidx, end_cidx) = if start_linum + n >= self.data.len_lines() {
+                    linum -= 1;
+                    (
+                        self.data.line_to_char(linum)
+                            + rope_trim_newlines(self.data.line(linum)).len_chars(),
+                        self.data.len_chars(),
+                    )
+                } else {
+                    (
+                        cidx - view.cursor.line_cidx,
+                        self.data.line_to_char(start_linum + n),
+                    )
+                };
+                if start_linum + n > self.data.len_lines() {
+                    n = self.data.len_lines() - start_linum;
+                }
+                for _ in 0..n {
+                    self.styled_lines.remove(start_linum);
+                }
+                move_to_start = true;
+                (start_cidx, end_cidx)
+            }
+            _ => unimplemented!(),
+        };
 
-    pub(crate) fn view_delete_right(&mut self, id: &BufferViewID) {
-        let view = self.views.get_mut(id).unwrap();
-        if view.cursor.char_idx == self.data.len_chars() {
-            return;
-        }
         let old_rope = self.data.clone();
-        let cidx = view.cursor.char_idx;
-        let linum = view.cursor.line_num;
-        let len_lines = self.data.len_lines();
-        self.data.remove(cidx..cidx + 1);
-        let del_end = self.data.len_lines() < len_lines;
-        if del_end {
-            self.styled_lines.remove(linum + 1);
-        }
-        self.styled_lines[linum] =
-            default_hl_for_line(self.data.line(linum), self.theme.textview.foreground);
 
-        self.edit_tree(old_rope, cidx, cidx + 1, cidx);
-        let (start_byte, end_byte) = {
-            let llen = self.data.line(linum).len_bytes();
-            let lb = self.data.line_to_byte(linum);
-            (lb, lb + llen)
-        };
-        self.rehighlight_range(tree_sitter::Range {
-            start_byte: start_byte,
-            end_byte: end_byte,
-            start_point: Point::new(linum, 0),
-            end_point: Point::new(linum, end_byte - start_byte),
-        });
-
-        for view in self.views.values_mut() {
-            if view.cursor.char_idx > cidx {
-                view.cursor.char_idx -= 1;
-            }
-            if view.cursor.char_idx >= cidx {
-                view.cursor
-                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
-            }
-            view.reshape(&self.data, &self.styled_lines);
-            view.snap_to_cursor(&self.data, &self.styled_lines);
-        }
-    }
-
-    pub(crate) fn view_delete_lines_down(&mut self, id: &BufferViewID, mut n: usize) {
-        let old_rope = self.data.clone();
-        let view = self.views.get_mut(id).unwrap();
-        let mut target_linum = view.cursor.line_num;
-        let linum = view.cursor.line_num;
-        let mut start_cidx = self.data.line_to_char(linum);
-        let end_cidx = if linum + n >= self.data.len_lines() {
-            target_linum -= 1;
-            start_cidx = self.data.line_to_char(target_linum)
-                + rope_trim_newlines(self.data.line(target_linum)).len_chars();
-            self.data.len_chars()
-        } else {
-            self.data.line_to_char(linum + n)
-        };
-        if linum + n > self.data.len_lines() {
-            n = self.data.len_lines() - linum;
-        }
         self.data.remove(start_cidx..end_cidx);
+        self.styled_lines[linum] =
+            default_hl_for_line(self.data.line(linum), self.theme.textview.foreground);
 
-        for _ in 0..n {
-            self.styled_lines.remove(linum);
-        }
         self.edit_tree(old_rope, start_cidx, end_cidx, start_cidx);
+
         let (start_byte, end_byte) = {
-            let llen = self.data.line(target_linum).len_bytes();
-            let lb = self.data.line_to_byte(target_linum);
+            let llen = self.data.line(linum).len_bytes();
+            let lb = self.data.line_to_byte(linum);
             (lb, lb + llen)
         };
         self.rehighlight_range(tree_sitter::Range {
             start_byte: start_byte,
             end_byte: end_byte,
-            start_point: Point::new(target_linum, 0),
-            end_point: Point::new(target_linum, end_byte - start_byte),
+            start_point: Point::new(linum, 0),
+            end_point: Point::new(linum, end_byte - start_byte),
         });
 
-        for view in self.views.values_mut() {
-            if view.cursor.line_num >= end_cidx {
+        for (vid, view) in self.views.iter_mut() {
+            if view.cursor.char_idx >= end_cidx {
                 view.cursor.char_idx -= end_cidx - start_cidx;
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             } else if view.cursor.char_idx >= start_cidx {
-                view.cursor.line_num = target_linum;
-                view.cursor.line_cidx = 0;
-                view.cursor
-                    .sync_line_cidx_gidx_left(&self.data, self.tab_width);
+                if move_to_start && vid == id {
+                    view.cursor.line_num = linum;
+                    view.cursor.line_cidx = 0;
+                    view.cursor
+                        .sync_line_cidx_gidx_left(&self.data, self.tab_width);
+                } else {
+                    view.cursor.char_idx = start_cidx;
+                    view.cursor
+                        .sync_and_update_char_idx_left(&self.data, self.tab_width);
+                }
             }
             view.reshape(&self.data, &self.styled_lines);
             view.snap_to_cursor(&self.data, &self.styled_lines);

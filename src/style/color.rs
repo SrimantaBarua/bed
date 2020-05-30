@@ -65,8 +65,14 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        assert_eq!(Color::try_from("#aabbcc").unwrap(), Color::new(0xaa, 0xbb, 0xcc, 0xff));
-        assert_eq!(Color::try_from("#aabbccdd").unwrap(), Color::new(0xaa, 0xbb, 0xcc, 0xdd));
+        assert_eq!(
+            Color::try_from("#aabbcc").unwrap(),
+            Color::new(0xaa, 0xbb, 0xcc, 0xff)
+        );
+        assert_eq!(
+            Color::try_from("#aabbccdd").unwrap(),
+            Color::new(0xaa, 0xbb, 0xcc, 0xdd)
+        );
         assert!(Color::try_from("aabbcc").is_err());
         assert!(Color::try_from("#aabb").is_err());
         assert!(Color::try_from("#aabbccdde").is_err());

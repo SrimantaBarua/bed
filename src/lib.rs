@@ -25,7 +25,7 @@ mod window;
 
 use buffer::{BufferViewCreateParams, CursorStyle};
 use common::PixelSize;
-use input::Action as BedAction;
+use input::{Action as BedAction, Motion as BedMotion};
 
 #[cfg(target_os = "linux")]
 static DEFAULT_FONT: &'static str = "monospace";
@@ -176,17 +176,9 @@ impl Bed {
     fn process_input_actions(&mut self, actions: &[BedAction]) {
         for action in actions {
             match action {
-                BedAction::CursorUp(n) => self.move_cursor(Direction::Up, *n),
-                BedAction::CursorDown(n) => self.move_cursor(Direction::Down, *n),
-                BedAction::CursorLeft(n) => self.move_cursor(Direction::Left, *n),
-                BedAction::CursorRight(n) => self.move_cursor(Direction::Right, *n),
-                BedAction::CursorToLine(n) => self.move_cursor_to_line(*n),
-                BedAction::CursorLineStart => self.move_cursor_start_of_line(),
-                BedAction::CursorLineEnd => self.move_cursor_end_of_line(),
+                BedAction::Move(mov) => self.move_cursor(*mov),
                 BedAction::InsertChar(c) => self.insert_char(*c),
-                BedAction::DeleteLeft => self.delete_left(),
-                BedAction::DeleteRight => self.delete_right(),
-                BedAction::DeleteLinesDown(n) => self.delete_lines_down(*n),
+                BedAction::Delete(mov) => self.delete(*mov),
                 BedAction::UpdateCursorStyle(style) => self.set_cursor_style(*style),
             }
         }
@@ -206,38 +198,12 @@ impl Bed {
         self.textview_tree.active_mut().insert_char(c);
     }
 
-    fn delete_left(&mut self) {
-        self.textview_tree.active_mut().delete_left();
+    fn delete(&mut self, mov: BedMotion) {
+        self.textview_tree.active_mut().delete(mov);
     }
 
-    fn delete_right(&mut self) {
-        self.textview_tree.active_mut().delete_right();
-    }
-
-    fn delete_lines_down(&mut self, n: usize) {
-        self.textview_tree.active_mut().delete_lines_down(n);
-    }
-
-    fn move_cursor(&mut self, dirn: Direction, n: usize) {
-        let textpane = self.textview_tree.active_mut();
-        match dirn {
-            Direction::Up => textpane.move_cursor_up(n),
-            Direction::Down => textpane.move_cursor_down(n),
-            Direction::Left => textpane.move_cursor_left(n),
-            Direction::Right => textpane.move_cursor_right(n),
-        }
-    }
-
-    fn move_cursor_start_of_line(&mut self) {
-        self.textview_tree.active_mut().move_cursor_start_of_line();
-    }
-
-    fn move_cursor_end_of_line(&mut self) {
-        self.textview_tree.active_mut().move_cursor_end_of_line();
-    }
-
-    fn move_cursor_to_line(&mut self, linum: usize) {
-        self.textview_tree.active_mut().move_cursor_to_line(linum);
+    fn move_cursor(&mut self, mov: BedMotion) {
+        self.textview_tree.active_mut().move_cursor(mov);
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {
@@ -263,11 +229,4 @@ impl Bed {
         });
         redraw
     }
-}
-
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
 }
