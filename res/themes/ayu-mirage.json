@@ -1,9 +1,13 @@
 {
     "ayu-mirage" : {
         "textview" : {
-            "background" : "#212733",
-            "foreground" : "#D9D7CE",
+            "background" : "#1F2430",
+            "foreground" : "#CBCCC6",
             "cursor" : "#FFCC66"
+        },
+        "gutter" : {
+            "background" : "#1F2430",
+            "foreground" : "#707A8C66"
         },
 
         "syntax" : {

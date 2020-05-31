@@ -39,6 +39,14 @@ impl ShapedText {
         }
     }
 
+    pub(crate) fn width(&self) -> i32 {
+        let mut width = 0;
+        for g in &self.glyphs {
+            width += g.advance.width;
+        }
+        width
+    }
+
     fn default() -> ShapedText {
         ShapedText {
             metrics: ShapedTextMetrics::default(),

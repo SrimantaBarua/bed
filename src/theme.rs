@@ -28,6 +28,21 @@ impl Default for ThemeTextview {
     }
 }
 
+#[derive(Deserialize)]
+pub(crate) struct ThemeGutter {
+    pub(crate) background: Color,
+    pub(crate) foreground: Color,
+}
+
+impl Default for ThemeGutter {
+    fn default() -> ThemeGutter {
+        ThemeGutter {
+            background: Color::new(0xff, 0xff, 0xff, 0xff),
+            foreground: Color::new(0, 0, 0, 0x80),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Deserialize)]
 pub(crate) struct ThemeSyntaxElem {
     pub(crate) foreground: Color,
@@ -40,6 +55,7 @@ pub(crate) struct ThemeSyntaxElem {
 #[derive(Deserialize)]
 pub(crate) struct Theme {
     pub(crate) textview: ThemeTextview,
+    pub(crate) gutter: ThemeGutter,
     pub(crate) syntax: FnvHashMap<String, ThemeSyntaxElem>,
 }
 
@@ -47,6 +63,7 @@ impl Default for Theme {
     fn default() -> Theme {
         Theme {
             textview: ThemeTextview::default(),
+            gutter: ThemeGutter::default(),
             syntax: FnvHashMap::default(),
         }
     }

@@ -3,8 +3,9 @@
 use std::ffi::CStr;
 use std::ops::Drop;
 
-use euclid::{Point2D, Rect, Size2D};
+use euclid::{point2, size2, Point2D, Rect, Size2D};
 
+use crate::buffer::CursorStyle;
 use crate::common::{PixelSize, DPI};
 use crate::font::{FaceKey, RasterFace};
 use crate::opengl::{
@@ -12,6 +13,8 @@ use crate::opengl::{
     gl_set_stencil_writing, gl_viewport, ElemArr, Mat4, ShaderProgram,
 };
 use crate::style::{Color, TextSize, TextStyle};
+use crate::text::{ShapedText, TextShaper};
+use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
 
 mod glyphrender;
 mod quad;
@@ -137,6 +140,89 @@ impl<'a> WidgetPainter<'a> {
             raster,
             &mut self.painter.tcq_arr,
         );
+    }
+
+    pub(crate) fn draw_shaped_text(
+        &mut self,
+        shaper: &mut TextShaper,
+        mut pos: Point2D<i32, PixelSize>,
+        line: &ShapedText,
+        cursor: Option<(usize, Color, CursorStyle)>,
+        width: u32,
+    ) {
+        let mut gidx = 0;
+        for (cluters, face, style, size, color, opt_under) in line.styled_iter() {
+            for cluster in cluters {
+                if pos.x >= width as i32 {
+                    break;
+                }
+                let raster = shaper.get_raster(face, style).unwrap();
+                let start_x = pos.x;
+                for gi in cluster.glyph_infos {
+                    if pos.x + gi.offset.width + gi.advance.width <= 0 {
+                        pos.x += gi.advance.width;
+                        continue;
+                    }
+                    self.glyph(pos + gi.offset, face, gi.gid, size, color, style, raster);
+                    pos.x += gi.advance.width;
+                }
+                if pos.x <= 0 {
+                    gidx += cluster.num_graphemes;
+                    continue;
+                }
+                let width = pos.x - start_x;
+                if let Some((cgidx, ccolor, cstyle)) = cursor {
+                    if gidx <= cgidx && gidx + cluster.num_graphemes > cgidx {
+                        let mut cx = (width * (cgidx - gidx) as i32) / cluster.num_graphemes as i32;
+                        cx += start_x;
+                        let cwidth = match cstyle {
+                            CursorStyle::Line => CURSOR_LINE_WIDTH,
+                            _ => width / cluster.num_graphemes as i32,
+                        };
+                        let (cy, cheight) = match cstyle {
+                            CursorStyle::Underline => (
+                                pos.y - line.metrics.underline_position,
+                                line.metrics.underline_thickness,
+                            ),
+                            _ => (
+                                pos.y - line.metrics.ascender,
+                                line.metrics.ascender - line.metrics.descender,
+                            ),
+                        };
+                        self.color_quad(Rect::new(point2(cx, cy), size2(cwidth, cheight)), ccolor);
+                    }
+                }
+                if let Some(under) = opt_under {
+                    self.color_quad(
+                        Rect::new(
+                            point2(start_x, pos.y - line.metrics.underline_position),
+                            size2(width, line.metrics.underline_thickness),
+                        ),
+                        under,
+                    );
+                }
+                gidx += cluster.num_graphemes;
+            }
+        }
+        if let Some((cgidx, ccolor, cstyle)) = cursor {
+            if gidx == cgidx {
+                let cwidth = match cstyle {
+                    CursorStyle::Line => CURSOR_LINE_WIDTH,
+                    _ => CURSOR_BLOCK_WIDTH,
+                };
+                let (cy, cheight) = match cstyle {
+                    CursorStyle::Underline => (
+                        pos.y - line.metrics.underline_position,
+                        line.metrics.underline_thickness,
+                    ),
+                    _ => (
+                        pos.y - line.metrics.ascender,
+                        line.metrics.ascender - line.metrics.descender,
+                    ),
+                };
+                self.color_quad(Rect::new(point2(pos.x, cy), size2(cwidth, cheight)), ccolor);
+            }
+        }
     }
 
     fn draw_bg_stencil(&mut self) {

@@ -93,6 +93,10 @@ impl TextSize {
         (self.0 as f32) / TextSize::SCALE
     }
 
+    pub(crate) fn scale(self, scale: f32) -> TextSize {
+        TextSize::from_f32(self.to_f32() * scale)
+    }
+
     pub(crate) fn to_64th_point(self) -> i64 {
         (self.0 as i64) << (6 - TextSize::SHIFT)
     }

@@ -33,7 +33,9 @@ static DEFAULT_FONT: &'static str = "monospace";
 static DEFAULT_FONT: &'static str = "Consolas";
 
 static DEFAULT_THEME: &str = "default";
-static DEFAULT_FONT_SIZE: f32 = 8.0;
+
+static CURSOR_LINE_WIDTH: i32 = 2;
+static CURSOR_BLOCK_WIDTH: i32 = 10;
 
 fn abspath(spath: &str) -> String {
     use std::env;
@@ -79,7 +81,12 @@ impl Bed {
         let face_key = font_core
             .find(&config.font_family)
             .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
+        let gutter_face_key = font_core
+            .find(&config.gutter_font_family)
+            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
         let text_size = style::TextSize::from_f32(config.font_size);
+        let gutter_text_size = text_size.scale(config.gutter_font_scale);
+
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
         let theme = theme_set
@@ -103,6 +110,9 @@ impl Bed {
             dpi,
             text_shaper,
             rect: viewable_rect,
+            gutter_face_key: gutter_face_key,
+            gutter_text_size: gutter_text_size,
+            gutter_padding: config.gutter_padding,
         };
         let textview_tree = textview::TextTree::new(view_params, buf, view_id);
 
