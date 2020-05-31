@@ -8,7 +8,8 @@ use serde::Deserialize;
 use super::{DEFAULT_FONT, DEFAULT_THEME};
 
 static DEFAULT_FONT_SIZE: f32 = 8.0;
-static DEFAULT_GUTTER_FONT_SCALE: f32 = 0.8;
+
+static DEFAULT_GUTTER_FONT_SCALE: f32 = 1.0;
 static DEFAULT_GUTTER_PADDING: u32 = 8;
 
 pub(crate) struct Config {
@@ -18,6 +19,8 @@ pub(crate) struct Config {
     pub(crate) gutter_font_family: String,
     pub(crate) gutter_font_scale: f32,
     pub(crate) gutter_padding: u32,
+    pub(crate) prompt_font_family: String,
+    pub(crate) prompt_font_size: f32,
 }
 
 impl Config {
@@ -45,6 +48,8 @@ impl Default for Config {
             gutter_font_family: DEFAULT_FONT.to_owned(),
             gutter_font_scale: DEFAULT_GUTTER_FONT_SCALE,
             gutter_padding: DEFAULT_GUTTER_PADDING,
+            prompt_font_family: DEFAULT_FONT.to_owned(),
+            prompt_font_size: DEFAULT_FONT_SIZE,
         }
     }
 }
@@ -57,6 +62,8 @@ struct ConfigInner {
     gutter_font_family: Option<String>,
     gutter_font_scale: Option<f32>,
     gutter_padding: Option<u32>,
+    prompt_font_family: Option<String>,
+    prompt_font_size: Option<f32>,
 }
 
 impl ConfigInner {
@@ -65,13 +72,17 @@ impl ConfigInner {
         if gutter_scale > 1.0 {
             gutter_scale = 1.0;
         }
+        let font_family = self.font_family.unwrap_or(DEFAULT_FONT.to_owned());
+        let font_size = self.font_size.unwrap_or(DEFAULT_FONT_SIZE.to_owned());
         Config {
             theme: self.theme.unwrap_or(DEFAULT_THEME.to_owned()),
-            font_family: self.font_family.unwrap_or(DEFAULT_FONT.to_owned()),
-            font_size: self.font_size.unwrap_or(DEFAULT_FONT_SIZE.to_owned()),
-            gutter_font_family: self.gutter_font_family.unwrap_or(DEFAULT_FONT.to_owned()),
+            font_family: font_family.clone(),
+            font_size: font_size,
+            gutter_font_family: self.gutter_font_family.unwrap_or(font_family.clone()),
             gutter_font_scale: gutter_scale,
             gutter_padding: self.gutter_padding.unwrap_or(DEFAULT_GUTTER_PADDING),
+            prompt_font_family: self.prompt_font_family.unwrap_or(font_family.clone()),
+            prompt_font_size: self.prompt_font_size.unwrap_or(font_size),
         }
     }
 }

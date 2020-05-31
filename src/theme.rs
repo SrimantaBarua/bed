@@ -43,6 +43,23 @@ impl Default for ThemeGutter {
     }
 }
 
+#[derive(Deserialize)]
+pub(crate) struct ThemePrompt {
+    pub(crate) background: Color,
+    pub(crate) foreground: Color,
+    pub(crate) cursor: Color,
+}
+
+impl Default for ThemePrompt {
+    fn default() -> ThemePrompt {
+        ThemePrompt {
+            background: Color::new(0xff, 0xff, 0xff, 0xff),
+            foreground: Color::new(0, 0, 0, 0xff),
+            cursor: Color::new(0xff, 0x88, 0x22, 0xff),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Deserialize)]
 pub(crate) struct ThemeSyntaxElem {
     pub(crate) foreground: Color,
@@ -56,6 +73,7 @@ pub(crate) struct ThemeSyntaxElem {
 pub(crate) struct Theme {
     pub(crate) textview: ThemeTextview,
     pub(crate) gutter: ThemeGutter,
+    pub(crate) prompt: ThemePrompt,
     pub(crate) syntax: FnvHashMap<String, ThemeSyntaxElem>,
 }
 
@@ -64,6 +82,7 @@ impl Default for Theme {
         Theme {
             textview: ThemeTextview::default(),
             gutter: ThemeGutter::default(),
+            prompt: ThemePrompt::default(),
             syntax: FnvHashMap::default(),
         }
     }

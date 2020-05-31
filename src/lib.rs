@@ -6,10 +6,11 @@ use std::{thread, time};
 
 extern crate crossbeam_channel;
 
-use euclid::{size2, vec2, Size2D};
+use euclid::{size2, vec2, Rect, Size2D};
 use glfw::{Action, MouseButtonLeft, WindowEvent};
 
 mod buffer;
+mod cmdprompt;
 mod common;
 mod config;
 mod font;
@@ -58,6 +59,7 @@ pub struct Bed {
     painter: painter::Painter,
     input_state: input::State,
     _buffer_mgr: buffer::BufferMgr,
+    cmd_prompt: cmdprompt::CmdPrompt,
     window: window::Window,
 }
 
@@ -84,8 +86,12 @@ impl Bed {
         let gutter_face_key = font_core
             .find(&config.gutter_font_family)
             .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
+        let prompt_face_key = font_core
+            .find(&config.prompt_font_family)
+            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
         let text_size = style::TextSize::from_f32(config.font_size);
         let gutter_text_size = text_size.scale(config.gutter_font_scale);
+        let prompt_text_size = style::TextSize::from_f32(config.prompt_font_size);
 
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
@@ -95,7 +101,7 @@ impl Bed {
             .unwrap_or_else(|| theme_set.0.get(DEFAULT_THEME).unwrap())
             .clone();
 
-        let mut buffer_mgr = buffer::BufferMgr::new(ts_core, theme);
+        let mut buffer_mgr = buffer::BufferMgr::new(ts_core, theme.clone());
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))
@@ -103,13 +109,30 @@ impl Bed {
             _ => buffer_mgr.empty(),
         };
 
+        let cmd_prompt = cmdprompt::CmdPrompt::new(
+            prompt_face_key,
+            prompt_text_size,
+            dpi,
+            text_shaper.clone(),
+            viewable_rect,
+            theme,
+        );
+
+        let textview_rect = Rect::new(
+            viewable_rect.origin,
+            size2(
+                viewable_rect.size.width,
+                viewable_rect.size.height - cmd_prompt.rect.size.height,
+            ),
+        );
+
         let view_id = buffer_mgr.next_view_id();
         let view_params = BufferViewCreateParams {
             face_key,
             text_size,
             dpi,
             text_shaper,
-            rect: viewable_rect,
+            rect: textview_rect,
             gutter_face_key: gutter_face_key,
             gutter_text_size: gutter_text_size,
             gutter_padding: config.gutter_padding,
@@ -123,6 +146,7 @@ impl Bed {
             painter: painter,
             input_state,
             _buffer_mgr: buffer_mgr,
+            cmd_prompt,
             textview_tree: textview_tree,
         };
 
@@ -146,7 +170,8 @@ impl Bed {
                     WindowEvent::FramebufferSize(w, h) => {
                         let viewable_rect = bed.window.viewable_rect();
                         bed.painter.resize(size2(w, h).cast(), viewable_rect);
-                        bed.textview_tree.set_rect(viewable_rect);
+                        let textview_rect = bed.cmd_prompt.resize(viewable_rect);
+                        bed.textview_tree.set_rect(textview_rect);
                     }
                     WindowEvent::Key(k, _, Action::Press, md)
                     | WindowEvent::Key(k, _, Action::Repeat, md) => {
@@ -215,7 +240,10 @@ impl Bed {
 
     fn draw(&mut self) {
         self.painter.clear(style::Color::new(0, 0, 0, 0xff));
+
         self.textview_tree.draw(&mut self.painter);
+        self.cmd_prompt.draw(&mut self.painter);
+
         self.window.swap_buffers();
     }
 
