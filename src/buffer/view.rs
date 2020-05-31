@@ -250,8 +250,8 @@ impl BufferView {
         };
         if cursor_x < self.xoff {
             self.xoff = cursor_x;
-        } else if cursor_x + cursor_width >= self.xoff + self.rect.size.width {
-            self.xoff = cursor_x + cursor_width - self.rect.size.width;
+        } else if cursor_x + cursor_width + self.gutter_width >= self.xoff + self.rect.size.width {
+            self.xoff = cursor_x + cursor_width + self.gutter_width - self.rect.size.width;
         }
         self.update_gutter_width(data);
         self.needs_redraw = true;
