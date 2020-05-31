@@ -231,7 +231,10 @@ impl Bed {
         for action in actions {
             if self.in_cmd_mode {
                 match action {
-                    BedAction::GetCmd => println!("{}", self.cmd_prompt.get_command()),
+                    BedAction::GetCmd => {
+                        let command = self.cmd_prompt.get_command();
+                        self.handle_command(command)
+                    }
                     BedAction::StopCmdPrompt => {
                         self.cmd_prompt.clear();
                         self.in_cmd_mode = false;
@@ -252,6 +255,13 @@ impl Bed {
                     BedAction::StopCmdPrompt => unreachable!(),
                 }
             }
+        }
+    }
+
+    fn handle_command(&mut self, cmd: String) {
+        match cmd.as_ref() {
+            "q" | "quit" => self.window.set_should_close(),
+            _ => {}
         }
     }
 

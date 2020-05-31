@@ -61,6 +61,11 @@ impl Window {
         self.window.should_close()
     }
 
+    // Indicate that the window should close
+    pub(crate) fn set_should_close(&mut self) {
+        self.window.set_should_close(true);
+    }
+
     // Get actual viewable rectable. Cleaning up Windows' mess
     #[cfg(target_os = "windows")]
     pub(crate) fn viewable_rect(&mut self) -> Rect<u32, PixelSize> {
