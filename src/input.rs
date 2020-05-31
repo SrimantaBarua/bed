@@ -4,9 +4,11 @@ use glfw::{Key, Modifiers};
 
 use crate::buffer::CursorStyle;
 
+#[derive(Eq, PartialEq)]
 pub enum Mode {
     Normal,
     Input,
+    Command,
     GPressed(usize),
     DPressed(usize),
 }
@@ -27,6 +29,9 @@ pub(crate) enum Action {
     Delete(Motion),
     InsertChar(char),
     UpdateCursorStyle(CursorStyle),
+    StartCmdPrompt(String),
+    StopCmdPrompt,
+    GetCmd,
 }
 
 pub(crate) struct State {
@@ -99,6 +104,29 @@ impl State {
                 }
                 _ => return,
             },
+            Mode::Command => match key {
+                // Basic movement
+                Key::Up => actions.push(Action::Move(Motion::Up(1))),
+                Key::Down => actions.push(Action::Move(Motion::Down(1))),
+                Key::Left => actions.push(Action::Move(Motion::Left(1))),
+                Key::Right => actions.push(Action::Move(Motion::Right(1))),
+                Key::Home => actions.push(Action::Move(Motion::LineStart)),
+                Key::End => actions.push(Action::Move(Motion::LineEnd)),
+                // Delete
+                Key::Backspace => actions.push(Action::Delete(Motion::Left(1))),
+                Key::Delete => actions.push(Action::Delete(Motion::Right(1))),
+                // Exit command
+                Key::Enter => {
+                    self.mode = Mode::Normal;
+                    actions.push(Action::GetCmd);
+                    actions.push(Action::StopCmdPrompt);
+                }
+                Key::Escape => {
+                    self.mode = Mode::Normal;
+                    actions.push(Action::StopCmdPrompt);
+                }
+                _ => return,
+            },
         }
         self.verb_count.clear();
     }
@@ -152,6 +180,10 @@ impl State {
                     self.mode = Mode::DPressed(verb_count);
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Underline));
                 }
+                ':' => {
+                    self.mode = Mode::Command;
+                    actions.push(Action::StartCmdPrompt(":".to_owned()));
+                }
                 _ => return,
             },
             Mode::Input => actions.push(Action::InsertChar(c)),
@@ -194,6 +226,7 @@ impl State {
                 self.mode = Mode::Normal;
                 actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
             }
+            Mode::Command => actions.push(Action::InsertChar(c)),
         }
         self.verb_count.clear();
     }

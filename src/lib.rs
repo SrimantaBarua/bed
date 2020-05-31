@@ -61,6 +61,7 @@ pub struct Bed {
     _buffer_mgr: buffer::BufferMgr,
     cmd_prompt: cmdprompt::CmdPrompt,
     window: window::Window,
+    in_cmd_mode: bool,
 }
 
 impl Bed {
@@ -148,6 +149,7 @@ impl Bed {
             _buffer_mgr: buffer_mgr,
             cmd_prompt,
             textview_tree: textview_tree,
+            in_cmd_mode: false,
         };
 
         let mut start_time = time::Instant::now();
@@ -162,9 +164,11 @@ impl Bed {
 
         while !bed.window.should_close() {
             let mut scroll_amt = (0.0, 0.0);
+            let mut redraw = false;
 
             for (_, event) in glfw::flush_messages(&events) {
                 input_actions.clear();
+                redraw = true;
 
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
@@ -196,17 +200,17 @@ impl Bed {
             }
 
             let cur_time = time::Instant::now();
-            let mut redraw = bed.scroll(scroll_amt, cur_time - last_scroll_time);
+            redraw |= bed.scroll(scroll_amt, cur_time - last_scroll_time);
             last_scroll_time = cur_time;
 
             redraw |= bed.check_redraw();
             if redraw {
                 last_blink_time = time::Instant::now();
-                cursor_blink_visible = true;
+                cursor_blink_visible = !bed.in_cmd_mode;
                 bed.set_cursor_visible(cursor_blink_visible);
             } else if last_blink_time.elapsed() >= blink_duration {
                 last_blink_time = time::Instant::now();
-                cursor_blink_visible = !cursor_blink_visible;
+                cursor_blink_visible = !cursor_blink_visible & !bed.in_cmd_mode;
                 bed.set_cursor_visible(cursor_blink_visible);
                 redraw = true;
             }
@@ -225,11 +229,28 @@ impl Bed {
 
     fn process_input_actions(&mut self, actions: &[BedAction]) {
         for action in actions {
-            match action {
-                BedAction::Move(mov) => self.move_cursor(*mov),
-                BedAction::InsertChar(c) => self.insert_char(*c),
-                BedAction::Delete(mov) => self.delete(*mov),
-                BedAction::UpdateCursorStyle(style) => self.set_cursor_style(*style),
+            if self.in_cmd_mode {
+                match action {
+                    BedAction::GetCmd => println!("{}", self.cmd_prompt.get_command()),
+                    BedAction::StopCmdPrompt => {
+                        self.cmd_prompt.clear();
+                        self.in_cmd_mode = false;
+                    }
+                    _ => self.cmd_prompt.handle_action(action),
+                }
+            } else {
+                match action {
+                    BedAction::Move(mov) => self.move_cursor(*mov),
+                    BedAction::InsertChar(c) => self.insert_char(*c),
+                    BedAction::Delete(mov) => self.delete(*mov),
+                    BedAction::UpdateCursorStyle(style) => self.set_cursor_style(*style),
+                    BedAction::StartCmdPrompt(s) => {
+                        self.cmd_prompt.set_prompt(s);
+                        self.in_cmd_mode = true;
+                    }
+                    BedAction::GetCmd => unreachable!(),
+                    BedAction::StopCmdPrompt => unreachable!(),
+                }
             }
         }
     }
