@@ -159,7 +159,8 @@ impl Bed {
                     }
                     WindowEvent::MouseButton(MouseButtonLeft, Action::Press, _) => {
                         bed.input_state.set_normal_mode();
-                        bed.move_cursor_to_mouse()
+                        bed.move_cursor_to_mouse();
+                        bed.set_cursor_style(CursorStyle::Block);
                     }
                     WindowEvent::Scroll(xsc, ysc) => {
                         scroll_amt.0 += xsc;
