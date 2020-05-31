@@ -3,13 +3,12 @@
 use std::cmp::{max, min};
 
 use euclid::Size2D;
-use ropey::RopeSlice;
 
-use crate::common::{RopeGraphemes, DPI};
+use crate::common::DPI;
 use crate::font::{harfbuzz, FaceKey, FontCore, RasterFace};
 use crate::style::{Color, TextSize, TextStyle};
 
-use super::{ShapedText, ShapedTextMetrics};
+use super::{RopeOrStr, ShapedText, ShapedTextMetrics};
 
 // TODO: Evaluate performance on caching shaped words
 
@@ -36,9 +35,9 @@ impl TextShaper {
 
     // All indices here are codepoint/char indices
     // TODO: This is one place that needs MAJOR improvement
-    pub(crate) fn shape_line_rope(
+    pub(crate) fn shape_line(
         &mut self,
-        line: RopeSlice,
+        line: RopeOrStr,
         dpi: Size2D<u32, DPI>,
         tab_width: usize,
         faces: &[(usize, FaceKey)],
@@ -57,8 +56,8 @@ impl TextShaper {
         let mut ret = ShapedText::default();
 
         let mut last_cursor_position = 0;
-        for g in RopeGraphemes::new(&line) {
-            if g == "\t" {
+        for g in line.graphemes() {
+            if g == "\t".into() {
                 let next_tab = (last_cursor_position / tab_width) * tab_width + tab_width;
                 while last_cursor_position < next_tab {
                     ret.cursor_positions.push(last_cursor_position);
@@ -189,7 +188,7 @@ impl TextShaper {
 }
 
 struct InputRangesIter<'a> {
-    slice: RopeSlice<'a>,
+    slice: RopeOrStr<'a>,
     faces: &'a [(usize, FaceKey)],
     styles: &'a [(usize, TextStyle)],
     sizes: &'a [(usize, TextSize)],
@@ -200,7 +199,7 @@ struct InputRangesIter<'a> {
 
 impl<'a> Iterator for InputRangesIter<'a> {
     type Item = (
-        RopeSlice<'a>,
+        RopeOrStr<'a>,
         FaceKey,
         TextStyle,
         TextSize,

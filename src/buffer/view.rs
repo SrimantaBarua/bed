@@ -342,8 +342,8 @@ impl BufferView {
             // println!("styled: {:?}", styled);
             let trimmed = rope_trim_newlines(line);
             let len_chars = trimmed.len_chars();
-            let shaped = shaper.shape_line_rope(
-                trimmed,
+            let shaped = shaper.shape_line(
+                trimmed.into(),
                 self.dpi,
                 self.tab_width,
                 &[(len_chars, self.face_key)],
@@ -376,8 +376,8 @@ impl BufferView {
         for (line, styled) in data.lines_at(cline).zip(&styled_lines[cline..]) {
             let trimmed = rope_trim_newlines(line);
             let len_chars = trimmed.len_chars();
-            let shaped = shaper.shape_line_rope(
-                trimmed,
+            let shaped = shaper.shape_line(
+                trimmed.into(),
                 self.dpi,
                 self.tab_width,
                 &[(len_chars, self.face_key)],
@@ -433,8 +433,8 @@ impl BufferView {
             let styled = &styled_lines[linum];
             let trimmed = rope_trim_newlines(line);
             let len_chars = trimmed.len_chars();
-            let shaped = shaper.shape_line_rope(
-                trimmed,
+            let shaped = shaper.shape_line(
+                trimmed.into(),
                 self.dpi,
                 self.tab_width,
                 &[(len_chars, self.face_key)],

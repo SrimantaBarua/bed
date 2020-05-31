@@ -8,7 +8,10 @@ use crate::font::{
 };
 use crate::style::{Color, TextSize, TextStyle};
 
+mod rope_or_str;
 mod shaper;
+
+pub(crate) use rope_or_str::RopeOrStr;
 pub(crate) use shaper::TextShaper;
 
 pub(crate) struct ShapedText {
@@ -34,10 +37,6 @@ impl ShapedText {
             unders: &self.unders,
             idx: 0,
         }
-    }
-
-    pub(crate) fn height(&self) -> u32 {
-        (self.metrics.ascender - self.metrics.descender) as u32
     }
 
     fn default() -> ShapedText {
