@@ -135,6 +135,18 @@ impl BufferView {
         self.shaped_gutter.clear();
         self.fill_or_truncate_view(data, styled_lines);
         self.update_gutter_width(data);
+
+        // Scroll x
+        if vec.x < 0 {
+            self.xoff += (-vec.x) as u32;
+        } else {
+            if self.xoff < vec.x as u32 {
+                self.xoff = 0;
+            } else {
+                self.xoff -= vec.x as u32;
+            }
+        }
+
         self.needs_redraw = true;
     }
 
