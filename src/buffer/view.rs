@@ -150,6 +150,11 @@ impl BufferView {
         point.x -= self.rect.origin.x;
         point.y += self.yoff;
         point.x += self.xoff;
+        if point.x <= self.gutter_width {
+            point.x = 0;
+        } else {
+            point.x -= self.gutter_width;
+        }
         let linum = (point.y / self.height) as usize;
         self.cursor.line_num = self.start_line + linum;
         if self.cursor.line_num >= data.len_lines() {
