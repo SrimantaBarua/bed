@@ -16,7 +16,7 @@ impl Bed {
     fn handle_e(&mut self, s: &str) {
         let mut sp = s.split_whitespace();
         match sp.next() {
-            Some("e") | Some("edit") => {}
+            Some("e") | Some("edit") => self.load_buffer(sp.next()),
             _ => {}
         }
     }

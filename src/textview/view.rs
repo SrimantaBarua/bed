@@ -182,6 +182,22 @@ impl TextPane {
         self.params.rect
     }
 
+    pub(crate) fn new_buffer<F>(&mut self, buf: Rc<RefCell<Buffer>>, mut f: F)
+    where
+        F: FnMut() -> BufferViewID,
+    {
+        for i in 0..self.views.len() {
+            if Rc::ptr_eq(&self.views[i].buffer, &buf) {
+                self.active = i;
+                return;
+            }
+        }
+        let view_id = f();
+        let view = TextView::new(self.params.clone(), buf, view_id);
+        self.active = self.views.len();
+        self.views.push(view);
+    }
+
     pub(super) fn new(
         view_params: BufferViewCreateParams,
         buffer: Rc<RefCell<Buffer>>,

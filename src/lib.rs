@@ -321,4 +321,20 @@ impl Bed {
             None => println!("buffer does not have path"),
         }
     }
+
+    fn load_buffer(&mut self, optpath: Option<&str>) {
+        let optpath = optpath.map(|path| abspath(path));
+        let bufid = self.textview_tree.active().buffer_id();
+        match self.buffer_mgr.load_buffer(bufid, optpath) {
+            Some(Ok(buf)) => {
+                let bufmgr = &mut self.buffer_mgr;
+                self.textview_tree
+                    .active_mut()
+                    .new_buffer(buf, || bufmgr.next_view_id());
+                println!("loaded buffer");
+            }
+            Some(Err(e)) => println!("error loading buffer: {}", e),
+            None => println!("buffer does not have path"),
+        }
+    }
 }

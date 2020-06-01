@@ -471,6 +471,16 @@ impl Buffer {
                 self.parser = parser;
                 self.hl_query = hl_query;
                 self.recreate_parse_tree();
+
+                for view in self.views.values_mut() {
+                    if view.cursor.char_idx > self.data.len_chars() {
+                        view.cursor.char_idx = self.data.len_chars();
+                    }
+                    view.cursor
+                        .sync_and_update_char_idx_left(&self.data, self.tab_width);
+                    view.reshape(&self.data, &self.styled_lines);
+                    view.snap_to_cursor(&self.data, &self.styled_lines);
+                }
             })
     }
 

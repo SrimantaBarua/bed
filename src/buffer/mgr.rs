@@ -84,7 +84,6 @@ impl BufferMgr {
             if let Some(path) = self.id_path_map.get(&id) {
                 path.to_owned()
             } else {
-                // TODO: Signal error
                 return None;
             }
         };
@@ -104,6 +103,23 @@ impl BufferMgr {
                 self.path_id_map.remove(&path);
             }
             None
+        }
+    }
+
+    pub(crate) fn load_buffer(
+        &mut self,
+        id: BufferID,
+        opth: Option<String>,
+    ) -> Option<IOResult<Rc<RefCell<Buffer>>>> {
+        if let Some(path) = opth {
+            Some(self.from_file(&path))
+        } else {
+            if let Some(path) = self.id_path_map.get(&id) {
+                let path = path.to_owned();
+                Some(self.from_file(&path))
+            } else {
+                return None;
+            }
         }
     }
 
