@@ -215,11 +215,8 @@ impl Buffer {
                 }
             }
             // Maybe insert twice?
-            '\n' | ' ' => {
-                self.data.insert_char(cidx, c);
-                if c == '\n' {
-                    end_linum += 1;
-                }
+            ' ' => {
+                self.data.insert_char(cidx, ' ');
                 if cidx > 0 && cidx + 1 < lc {
                     let c0 = self.data.char(cidx - 1);
                     let c1 = self.data.char(cidx + 1);
@@ -227,11 +224,35 @@ impl Buffer {
                         || (c0 == '{' && c1 == '}')
                         || (c0 == '[' && c1 == ']')
                     {
-                        self.data.insert_char(cidx + 1, c);
-                        if c == '\n' {
-                            end_linum += 1;
-                        }
+                        self.data.insert_char(cidx + 1, ' ');
                         end_cidx += 1;
+                    }
+                }
+            }
+            // Also handle indent
+            '\n' => {
+                let (ich, count) = get_indent(&self.data, linum, self.tab_width, self.indent_tabs);
+                println!("{:?}", (ich, count));
+                self.data.insert_char(cidx, '\n');
+                for _ in 0..count {
+                    self.data.insert_char(cidx + 1, ich);
+                }
+                end_cidx += count;
+                cursor_nchars += count;
+                end_linum += 1;
+                if cidx > 0 && end_cidx < lc {
+                    let c0 = self.data.char(cidx - 1);
+                    let c1 = self.data.char(end_cidx);
+                    if (c0 == '(' && c1 == ')')
+                        || (c0 == '{' && c1 == '}')
+                        || (c0 == '[' && c1 == ']')
+                    {
+                        self.data.insert_char(end_cidx, '\n');
+                        for _ in 0..count {
+                            self.data.insert_char(end_cidx + 1, ich);
+                        }
+                        end_linum += 1;
+                        end_cidx += count + 1;
                     }
                 }
             }
@@ -752,4 +773,17 @@ impl Buffer {
         range.end_point.column = end_line.len_bytes();
         range.end_byte = self.data.line_to_byte(range.end_point.row) + range.end_point.column;
     }
+}
+
+fn get_indent(data: &Rope, linum: usize, tab_width: usize, indent_tabs: bool) -> (char, usize) {
+    let mut count = 0;
+    let ich = if indent_tabs { '\t' } else { ' ' };
+    let line = rope_trim_newlines(data.line(linum));
+    for c in line.chars() {
+        if c != ich {
+            break;
+        }
+        count += 1;
+    }
+    (ich, count)
 }
