@@ -67,7 +67,7 @@ pub struct Bed {
 
 impl Bed {
     pub fn run(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) {
-        let config = config::Config::load();
+        let config = Rc::new(config::Config::load());
         let ts_core = ts::TsCore::new();
         let theme_set = theme::ThemeSet::load();
 
@@ -103,7 +103,7 @@ impl Bed {
             .unwrap_or_else(|| theme_set.0.get(DEFAULT_THEME).unwrap())
             .clone();
 
-        let mut buffer_mgr = buffer::BufferMgr::new(ts_core, theme.clone());
+        let mut buffer_mgr = buffer::BufferMgr::new(ts_core, config.clone(), theme.clone());
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))

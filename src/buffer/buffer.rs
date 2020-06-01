@@ -13,6 +13,7 @@ use ropey::{Rope, RopeSlice};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
+use crate::config::Config;
 use crate::input::Motion;
 use crate::painter::Painter;
 use crate::style::{Color, TextStyle};
@@ -34,11 +35,13 @@ pub(crate) struct Buffer {
     views: FnvHashMap<BufferViewID, BufferView>,
     styled_lines: Vec<StyledText>,
     tab_width: usize,
+    indent_tabs: bool,
     filetype: Option<String>,
     parser: Option<Parser>,
     hl_query: Option<Rc<Query>>,
     tree: Option<Tree>,
     theme: Rc<Theme>,
+    config: Rc<Config>,
 }
 
 impl Buffer {
@@ -177,6 +180,7 @@ impl Buffer {
         let linum = view.cursor.line_num;
         let mut end_linum = linum;
         let mut end_cidx = cidx + 1;
+        let mut cursor_nchars = 1;
 
         match c {
             // Insert pair
@@ -231,6 +235,19 @@ impl Buffer {
                     }
                 }
             }
+            '\t' => {
+                if self.indent_tabs {
+                    self.data.insert_char(cidx, '\t');
+                } else {
+                    let start = view.cursor.line_cidx;
+                    let end = (start / self.tab_width) * self.tab_width + self.tab_width;
+                    cursor_nchars = end - start;
+                    end_cidx = cidx + cursor_nchars;
+                    for _ in cidx..end_cidx {
+                        self.data.insert_char(cidx, ' ');
+                    }
+                }
+            }
             c => self.data.insert_char(cidx, c),
         }
 
@@ -256,7 +273,7 @@ impl Buffer {
 
         for view in self.views.values_mut() {
             if view.cursor.char_idx >= cidx {
-                view.cursor.char_idx += 1;
+                view.cursor.char_idx += cursor_nchars;
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
@@ -399,11 +416,12 @@ impl Buffer {
     }
 
     // -------- Create buffer ----------------
-    pub(super) fn empty(buffer_id: BufferID, theme: Rc<Theme>) -> Buffer {
+    pub(super) fn empty(buffer_id: BufferID, config: Rc<Config>, theme: Rc<Theme>) -> Buffer {
         let styled = StyledText::new(0, TextStyle::default(), theme.textview.foreground, None);
+        let tab_width = config.tab_width;
+        let indent_tabs = config.indent_tabs;
         Buffer {
             buffer_id,
-            tab_width: 8,
             data: Rope::new(),
             views: FnvHashMap::default(),
             styled_lines: vec![styled],
@@ -412,6 +430,9 @@ impl Buffer {
             hl_query: None,
             tree: None,
             theme,
+            config,
+            tab_width,
+            indent_tabs,
         }
     }
 
@@ -419,6 +440,7 @@ impl Buffer {
         buffer_id: BufferID,
         path: &str,
         ts_core: &TsCore,
+        config: Rc<Config>,
         theme: Rc<Theme>,
     ) -> IOResult<Buffer> {
         File::open(path)
@@ -434,9 +456,13 @@ impl Buffer {
                     .and_then(|s| ts_core.parser_from_extension(s))
                     .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
                     .unwrap_or((None, None, None));
+                let (tab_width, indent_tabs) = filetype
+                    .as_ref()
+                    .and_then(|ft| config.filetypes.get(ft))
+                    .map(|ft| (ft.tab_width, ft.indent_tabs))
+                    .unwrap_or((config.tab_width, config.indent_tabs));
                 let mut ret = Buffer {
                     buffer_id,
-                    tab_width: 8,
                     data: rope,
                     views: FnvHashMap::default(),
                     styled_lines,
@@ -445,6 +471,9 @@ impl Buffer {
                     hl_query,
                     tree: None,
                     theme,
+                    config,
+                    tab_width,
+                    indent_tabs,
                 };
                 ret.recreate_parse_tree();
                 ret
@@ -467,6 +496,13 @@ impl Buffer {
                     .and_then(|s| ts_core.parser_from_extension(s))
                     .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
                     .unwrap_or((None, None, None));
+                let (tab_width, indent_tabs) = filetype
+                    .as_ref()
+                    .and_then(|ft| self.config.filetypes.get(ft))
+                    .map(|ft| (ft.tab_width, ft.indent_tabs))
+                    .unwrap_or((self.config.tab_width, self.config.indent_tabs));
+                self.tab_width = tab_width;
+                self.indent_tabs = indent_tabs;
                 self.filetype = filetype;
                 self.parser = parser;
                 self.hl_query = hl_query;
@@ -497,6 +533,13 @@ impl Buffer {
             .unwrap_or((None, None, None));
 
         if filetype != self.filetype {
+            let (tab_width, indent_tabs) = filetype
+                .as_ref()
+                .and_then(|ft| self.config.filetypes.get(ft))
+                .map(|ft| (ft.tab_width, ft.indent_tabs))
+                .unwrap_or((self.config.tab_width, self.config.indent_tabs));
+            self.tab_width = tab_width;
+            self.indent_tabs = indent_tabs;
             self.filetype = filetype;
             self.parser = parser;
             self.hl_query = hl_query;

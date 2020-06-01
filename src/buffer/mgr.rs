@@ -6,6 +6,7 @@ use std::rc::{Rc, Weak};
 
 use fnv::FnvHashMap;
 
+use crate::config::Config;
 use crate::theme::Theme;
 use crate::ts::TsCore;
 
@@ -20,12 +21,13 @@ pub(crate) struct BufferMgr {
     next_buf_id: usize,
     ts_core: TsCore,
     theme: Rc<Theme>,
+    config: Rc<Config>,
 }
 
 // TODO: Periodically clear out Weak buffers with a strong count of 0
 
 impl BufferMgr {
-    pub(crate) fn new(ts_core: TsCore, theme: Rc<Theme>) -> BufferMgr {
+    pub(crate) fn new(ts_core: TsCore, config: Rc<Config>, theme: Rc<Theme>) -> BufferMgr {
         BufferMgr {
             path_id_map: FnvHashMap::default(),
             id_path_map: FnvHashMap::default(),
@@ -34,13 +36,18 @@ impl BufferMgr {
             next_buf_id: 0,
             ts_core,
             theme,
+            config: config,
         }
     }
 
     pub(crate) fn empty(&mut self) -> Rc<RefCell<Buffer>> {
         let buf_id = BufferID(self.next_buf_id);
         self.next_buf_id += 1;
-        let ret = Rc::new(RefCell::new(Buffer::empty(buf_id, self.theme.clone())));
+        let ret = Rc::new(RefCell::new(Buffer::empty(
+            buf_id,
+            self.config.clone(),
+            self.theme.clone(),
+        )));
         self.id_buf_map.insert(buf_id, Rc::downgrade(&ret));
         ret
     }
@@ -63,7 +70,14 @@ impl BufferMgr {
                     self.next_buf_id += 1;
                     bid
                 };
-                Buffer::from_file(bid, path, &self.ts_core, self.theme.clone()).map(|buffer| {
+                Buffer::from_file(
+                    bid,
+                    path,
+                    &self.ts_core,
+                    self.config.clone(),
+                    self.theme.clone(),
+                )
+                .map(|buffer| {
                     let buffer = Rc::new(RefCell::new(buffer));
                     self.path_id_map.insert(path.to_owned(), bid);
                     self.id_path_map.insert(bid, path.to_owned());

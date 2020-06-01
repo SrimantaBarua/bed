@@ -1,0 +1,33 @@
+{
+    "theme": "ayu-mirage",
+    "font_family": "monospace",
+    "font_size": 7.25,
+    "gutter_padding" : 12,
+    "gutter_font_family" : "monospace",
+    "gutter_font_scale" : 0.9,
+    "tab_width" : 8,
+    "indent_tabs" : true,
+
+    "filetypes" : {
+        "css" : {
+            "tab_width" : 2,
+            "indent_tabs" : false
+        },
+        "html" : {
+            "tab_width" : 2,
+            "indent_tabs" : false
+        },
+        "javascript" : {
+            "tab_width" : 4,
+            "indent_tabs" : false
+        },
+        "python" : {
+            "tab_width" : 4,
+            "indent_tabs" : false
+        },
+        "rust" : {
+            "tab_width" : 4,
+            "indent_tabs" : false
+        }
+    }
+}

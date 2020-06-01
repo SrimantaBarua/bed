@@ -3,24 +3,41 @@
 use std::default::Default;
 
 use directories::ProjectDirs;
+use fnv::FnvHashMap;
 use serde::Deserialize;
 
 use super::{DEFAULT_FONT, DEFAULT_THEME};
 
-static DEFAULT_FONT_SIZE: f32 = 8.0;
+#[derive(Deserialize)]
+pub(crate) struct ConfigFileType {
+    pub(crate) tab_width: usize,
+    pub(crate) indent_tabs: bool,
+}
 
-static DEFAULT_GUTTER_FONT_SCALE: f32 = 1.0;
-static DEFAULT_GUTTER_PADDING: u32 = 8;
-
+#[derive(Deserialize)]
 pub(crate) struct Config {
+    #[serde(default = "default_theme")]
     pub(crate) theme: String,
+    #[serde(default = "default_font_family")]
     pub(crate) font_family: String,
+    #[serde(default = "default_font_size")]
     pub(crate) font_size: f32,
+    #[serde(default = "default_font_family")]
     pub(crate) gutter_font_family: String,
+    #[serde(default = "default_gutter_font_scale")]
     pub(crate) gutter_font_scale: f32,
+    #[serde(default = "default_gutter_padding")]
     pub(crate) gutter_padding: u32,
+    #[serde(default = "default_font_family")]
     pub(crate) prompt_font_family: String,
+    #[serde(default = "default_font_size")]
     pub(crate) prompt_font_size: f32,
+    #[serde(default = "default_tab_width")]
+    pub(crate) tab_width: usize,
+    #[serde(default = "default_indent_tabs")]
+    pub(crate) indent_tabs: bool,
+    #[serde(default)]
+    pub(crate) filetypes: FnvHashMap<String, ConfigFileType>,
 }
 
 impl Config {
@@ -31,7 +48,6 @@ impl Config {
             std::fs::read_to_string(cfg_dir_path.join("config.json"))
                 .ok()
                 .and_then(|data| serde_json::from_str(&data).ok())
-                .map(|ci: ConfigInner| ci.build())
                 .unwrap_or_default()
         } else {
             Config::default()
@@ -42,14 +58,17 @@ impl Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            theme: DEFAULT_THEME.to_owned(),
-            font_family: DEFAULT_FONT.to_owned(),
-            font_size: DEFAULT_FONT_SIZE,
-            gutter_font_family: DEFAULT_FONT.to_owned(),
-            gutter_font_scale: DEFAULT_GUTTER_FONT_SCALE,
-            gutter_padding: DEFAULT_GUTTER_PADDING,
-            prompt_font_family: DEFAULT_FONT.to_owned(),
-            prompt_font_size: DEFAULT_FONT_SIZE,
+            theme: default_theme(),
+            font_family: default_font_family(),
+            font_size: default_font_size(),
+            gutter_font_family: default_font_family(),
+            gutter_font_scale: default_gutter_font_scale(),
+            gutter_padding: default_gutter_padding(),
+            prompt_font_family: default_font_family(),
+            prompt_font_size: default_font_size(),
+            tab_width: default_tab_width(),
+            indent_tabs: default_indent_tabs(),
+            filetypes: FnvHashMap::default(),
         }
     }
 }
@@ -66,23 +85,30 @@ struct ConfigInner {
     prompt_font_size: Option<f32>,
 }
 
-impl ConfigInner {
-    fn build(self) -> Config {
-        let mut gutter_scale = self.gutter_font_scale.unwrap_or(DEFAULT_GUTTER_FONT_SCALE);
-        if gutter_scale > 1.0 {
-            gutter_scale = 1.0;
-        }
-        let font_family = self.font_family.unwrap_or(DEFAULT_FONT.to_owned());
-        let font_size = self.font_size.unwrap_or(DEFAULT_FONT_SIZE.to_owned());
-        Config {
-            theme: self.theme.unwrap_or(DEFAULT_THEME.to_owned()),
-            font_family: font_family.clone(),
-            font_size: font_size,
-            gutter_font_family: self.gutter_font_family.unwrap_or(font_family.clone()),
-            gutter_font_scale: gutter_scale,
-            gutter_padding: self.gutter_padding.unwrap_or(DEFAULT_GUTTER_PADDING),
-            prompt_font_family: self.prompt_font_family.unwrap_or(font_family.clone()),
-            prompt_font_size: self.prompt_font_size.unwrap_or(font_size),
-        }
-    }
+fn default_theme() -> String {
+    DEFAULT_THEME.to_owned()
+}
+
+fn default_font_family() -> String {
+    DEFAULT_FONT.to_owned()
+}
+
+fn default_font_size() -> f32 {
+    8.0
+}
+
+fn default_gutter_font_scale() -> f32 {
+    1.0
+}
+
+fn default_gutter_padding() -> u32 {
+    8
+}
+
+fn default_tab_width() -> usize {
+    8
+}
+
+fn default_indent_tabs() -> bool {
+    true
 }

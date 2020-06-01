@@ -72,15 +72,15 @@ impl TsCore {
             ),
         ];
         let mut exts = FnvHashMap::default();
-        exts.insert("c".to_owned(), ("C".to_owned(), 0));
-        exts.insert("h".to_owned(), ("C".to_owned(), 0));
-        exts.insert("cpp".to_owned(), ("C++".to_owned(), 1));
-        exts.insert("hpp".to_owned(), ("C++".to_owned(), 1));
-        exts.insert("css".to_owned(), ("CSS".to_owned(), 2));
-        exts.insert("html".to_owned(), ("CSS".to_owned(), 3));
-        exts.insert("js".to_owned(), ("JavaScript".to_owned(), 4));
-        exts.insert("py".to_owned(), ("Python".to_owned(), 5));
-        exts.insert("rs".to_owned(), ("Rust".to_owned(), 6));
+        exts.insert("c".to_owned(), ("c".to_owned(), 0));
+        exts.insert("h".to_owned(), ("c".to_owned(), 0));
+        exts.insert("cpp".to_owned(), ("c++".to_owned(), 1));
+        exts.insert("hpp".to_owned(), ("c++".to_owned(), 1));
+        exts.insert("css".to_owned(), ("css".to_owned(), 2));
+        exts.insert("html".to_owned(), ("css".to_owned(), 3));
+        exts.insert("js".to_owned(), ("javascript".to_owned(), 4));
+        exts.insert("py".to_owned(), ("python".to_owned(), 5));
+        exts.insert("rs".to_owned(), ("rust".to_owned(), 6));
         TsCore {
             languages: languages,
             hl_queries: hl_queries,
