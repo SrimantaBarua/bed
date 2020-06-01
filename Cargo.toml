@@ -1,6 +1,6 @@
 [package]
 name = "bed"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
 edition = "2018"
 build = "build.rs"
