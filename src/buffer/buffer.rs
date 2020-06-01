@@ -176,7 +176,6 @@ impl Buffer {
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
         let view = self.views.get_mut(id).unwrap();
         let cidx = view.cursor.char_idx;
-        let lc = self.data.len_chars();
         let linum = view.cursor.line_num;
         let mut end_linum = linum;
         let mut end_cidx = cidx + 1;
@@ -186,11 +185,11 @@ impl Buffer {
             // Insert pair
             '[' | '{' | '(' => {
                 self.data.insert_char(cidx, c);
-                if cidx + 1 >= lc || self.data.char(cidx + 1).is_whitespace() {
+                if end_cidx >= self.data.len_chars() || self.data.char(end_cidx).is_whitespace() {
                     match c {
-                        '[' => self.data.insert_char(cidx + 1, ']'),
-                        '{' => self.data.insert_char(cidx + 1, '}'),
-                        '(' => self.data.insert_char(cidx + 1, ')'),
+                        '[' => self.data.insert_char(end_cidx, ']'),
+                        '{' => self.data.insert_char(end_cidx, '}'),
+                        '(' => self.data.insert_char(end_cidx, ')'),
                         _ => unreachable!(),
                     }
                     end_cidx += 1;
@@ -198,7 +197,7 @@ impl Buffer {
             }
             // Maybe insert pair, maybe skip
             '"' | '\'' => {
-                if cidx >= lc || self.data.char(cidx) != c {
+                if cidx >= self.data.len_chars() || self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                     self.data.insert_char(cidx + 1, c);
                     end_cidx += 1;
@@ -208,7 +207,7 @@ impl Buffer {
             }
             // Maybe skip insert
             ']' | '}' | ')' => {
-                if cidx >= lc || self.data.char(cidx) != c {
+                if cidx >= self.data.len_chars() || self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                 } else {
                     return self.move_view_cursor(id, Motion::Right(1));
@@ -217,21 +216,21 @@ impl Buffer {
             // Maybe insert twice?
             ' ' => {
                 self.data.insert_char(cidx, ' ');
-                if cidx > 0 && cidx + 1 < lc {
+                if cidx > 0 && end_cidx < self.data.len_chars() {
                     let c0 = self.data.char(cidx - 1);
-                    let c1 = self.data.char(cidx + 1);
+                    let c1 = self.data.char(end_cidx);
                     if (c0 == '(' && c1 == ')')
                         || (c0 == '{' && c1 == '}')
                         || (c0 == '[' && c1 == ']')
                     {
-                        self.data.insert_char(cidx + 1, ' ');
+                        self.data.insert_char(end_cidx, ' ');
                         end_cidx += 1;
                     }
                 }
             }
             // Also handle indent
             '\n' => {
-                let (ich, count) = get_indent(&self.data, linum, self.tab_width, self.indent_tabs);
+                let (ich, count) = get_indent(&self.data, linum, self.indent_tabs);
                 println!("{:?}", (ich, count));
                 self.data.insert_char(cidx, '\n');
                 for _ in 0..count {
@@ -240,13 +239,15 @@ impl Buffer {
                 end_cidx += count;
                 cursor_nchars += count;
                 end_linum += 1;
-                if cidx > 0 && end_cidx < lc {
+                println!("lc: {}, ecdx: {}", self.data.len_chars(), end_cidx);
+                if cidx > 0 && end_cidx < self.data.len_chars() {
                     let c0 = self.data.char(cidx - 1);
                     let c1 = self.data.char(end_cidx);
                     if (c0 == '(' && c1 == ')')
                         || (c0 == '{' && c1 == '}')
                         || (c0 == '[' && c1 == ']')
                     {
+                        println!("here");
                         self.data.insert_char(end_cidx, '\n');
                         for _ in 0..count {
                             self.data.insert_char(end_cidx + 1, ich);
@@ -464,41 +465,42 @@ impl Buffer {
         config: Rc<Config>,
         theme: Rc<Theme>,
     ) -> IOResult<Buffer> {
-        File::open(path)
-            .and_then(|f| Rope::from_reader(f))
-            .map(|rope| {
-                let mut styled_lines = Vec::new();
-                for line in rope.lines() {
-                    styled_lines.push(default_hl_for_line(line, theme.textview.foreground));
-                }
-                let (filetype, parser, hl_query) = Path::new(path)
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .and_then(|s| ts_core.parser_from_extension(s))
-                    .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
-                    .unwrap_or((None, None, None));
-                let (tab_width, indent_tabs) = filetype
-                    .as_ref()
-                    .and_then(|ft| config.filetypes.get(ft))
-                    .map(|ft| (ft.tab_width, ft.indent_tabs))
-                    .unwrap_or((config.tab_width, config.indent_tabs));
-                let mut ret = Buffer {
-                    buffer_id,
-                    data: rope,
-                    views: FnvHashMap::default(),
-                    styled_lines,
-                    filetype,
-                    parser,
-                    hl_query,
-                    tree: None,
-                    theme,
-                    config,
-                    tab_width,
-                    indent_tabs,
-                };
-                ret.recreate_parse_tree();
-                ret
-            })
+        let rope = if let Ok(file) = File::open(path) {
+            Rope::from_reader(file)?
+        } else {
+            Rope::new()
+        };
+        let mut styled_lines = Vec::new();
+        for line in rope.lines() {
+            styled_lines.push(default_hl_for_line(line, theme.textview.foreground));
+        }
+        let (filetype, parser, hl_query) = Path::new(path)
+            .extension()
+            .and_then(|s| s.to_str())
+            .and_then(|s| ts_core.parser_from_extension(s))
+            .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
+            .unwrap_or((None, None, None));
+        let (tab_width, indent_tabs) = filetype
+            .as_ref()
+            .and_then(|ft| config.filetypes.get(ft))
+            .map(|ft| (ft.tab_width, ft.indent_tabs))
+            .unwrap_or((config.tab_width, config.indent_tabs));
+        let mut ret = Buffer {
+            buffer_id,
+            data: rope,
+            views: FnvHashMap::default(),
+            styled_lines,
+            filetype,
+            parser,
+            hl_query,
+            tree: None,
+            theme,
+            config,
+            tab_width,
+            indent_tabs,
+        };
+        ret.recreate_parse_tree();
+        Ok(ret)
     }
 
     pub(super) fn reload_from_file(&mut self, path: &str, ts_core: &TsCore) -> IOResult<()> {
@@ -775,7 +777,7 @@ impl Buffer {
     }
 }
 
-fn get_indent(data: &Rope, linum: usize, tab_width: usize, indent_tabs: bool) -> (char, usize) {
+fn get_indent(data: &Rope, linum: usize, indent_tabs: bool) -> (char, usize) {
     let mut count = 0;
     let ich = if indent_tabs { '\t' } else { ' ' };
     let line = rope_trim_newlines(data.line(linum));
