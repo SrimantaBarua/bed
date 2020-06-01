@@ -2,6 +2,7 @@
 name = "bed"
 version = "0.1.0"
 authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
+description = "Barua's EDitor"
 edition = "2018"
 build = "build.rs"
 

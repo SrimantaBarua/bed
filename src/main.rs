@@ -3,6 +3,9 @@
 
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+#[macro_use]
+extern crate clap;
+
 use euclid::size2;
 
 use ::bed::Bed;
@@ -15,10 +18,10 @@ fn main() {
 
 fn parse_args() -> clap::ArgMatches<'static> {
     use clap::{App, Arg};
-    App::new("bed")
-        .version("0.0.1")
-        .author("Srimanta Barua <srimanta.barua1@gmail.com>")
-        .about("Barua's editor")
+    App::new(crate_name!())
+        .version(crate_version!())
+        .author(crate_authors!())
+        .about(crate_description!())
         .arg(
             Arg::with_name("FILE")
                 .help("file to open")
