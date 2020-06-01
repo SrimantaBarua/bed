@@ -198,6 +198,18 @@ impl TextPane {
         self.views.push(view);
     }
 
+    pub(crate) fn next_buffer(&mut self) {
+        self.active = (self.active + 1) % self.views.len();
+    }
+
+    pub(crate) fn prev_buffer(&mut self) {
+        if self.active == 0 {
+            self.active = self.views.len() - 1;
+        } else {
+            self.active -= 1;
+        }
+    }
+
     pub(super) fn new(
         view_params: BufferViewCreateParams,
         buffer: Rc<RefCell<Buffer>>,

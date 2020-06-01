@@ -6,9 +6,18 @@ impl Bed {
     pub(crate) fn handle_command(&mut self, cmd: &str) {
         let mut bytes = cmd.bytes();
         match bytes.next() {
+            Some(b'b') => self.handle_b(cmd),
             Some(b'e') => self.handle_e(cmd),
             Some(b'q') => self.handle_q(cmd),
             Some(b'w') => self.handle_w(cmd),
+            _ => {}
+        }
+    }
+
+    fn handle_b(&mut self, s: &str) {
+        match &s[1..] {
+            "n" | "next" => self.textview_tree.active_mut().next_buffer(),
+            "p" | "previous" => self.textview_tree.active_mut().prev_buffer(),
             _ => {}
         }
     }
