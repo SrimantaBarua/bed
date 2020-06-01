@@ -11,6 +11,7 @@ use glfw::{Action, MouseButtonLeft, WindowEvent};
 
 mod buffer;
 mod cmdprompt;
+mod commands;
 mod common;
 mod config;
 mod font;
@@ -58,7 +59,7 @@ pub struct Bed {
     textview_tree: textview::TextTree,
     painter: painter::Painter,
     input_state: input::State,
-    _buffer_mgr: buffer::BufferMgr,
+    buffer_mgr: buffer::BufferMgr,
     cmd_prompt: cmdprompt::CmdPrompt,
     window: window::Window,
     in_cmd_mode: bool,
@@ -146,7 +147,7 @@ impl Bed {
             window: window,
             painter: painter,
             input_state,
-            _buffer_mgr: buffer_mgr,
+            buffer_mgr,
             cmd_prompt,
             textview_tree: textview_tree,
             in_cmd_mode: false,
@@ -233,7 +234,7 @@ impl Bed {
                 match action {
                     BedAction::GetCmd => {
                         let command = self.cmd_prompt.get_command();
-                        self.handle_command(command)
+                        self.handle_command(&command)
                     }
                     BedAction::StopCmdPrompt => {
                         self.cmd_prompt.clear();
@@ -255,13 +256,6 @@ impl Bed {
                     BedAction::StopCmdPrompt => unreachable!(),
                 }
             }
-        }
-    }
-
-    fn handle_command(&mut self, cmd: String) {
-        match cmd.as_ref() {
-            "q" | "quit" => self.window.set_should_close(),
-            _ => {}
         }
     }
 
@@ -316,5 +310,15 @@ impl Bed {
             }
         });
         redraw
+    }
+
+    fn write_buffer(&mut self, optpath: Option<&str>) {
+        let optpath = optpath.map(|path| abspath(path));
+        let bufid = self.textview_tree.active().buffer_id();
+        match self.buffer_mgr.write_buffer(bufid, optpath) {
+            Some(Ok(nbytes)) => println!("wrote {} bytes", nbytes),
+            Some(Err(e)) => println!("error writing buffer: {}", e),
+            None => println!("buffer does not have path"),
+        }
     }
 }

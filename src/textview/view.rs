@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use euclid::{vec2, Point2D, Rect, Vector2D};
 
-use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID, CursorStyle};
+use crate::buffer::{Buffer, BufferID, BufferViewCreateParams, BufferViewID, CursorStyle};
 use crate::common::PixelSize;
 use crate::input::Motion;
 use crate::painter::Painter;
@@ -18,6 +18,18 @@ struct TextView {
 }
 
 impl TextView {
+    fn new(
+        view_params: BufferViewCreateParams,
+        buffer: Rc<RefCell<Buffer>>,
+        id: BufferViewID,
+    ) -> TextView {
+        {
+            let buffer = &mut *buffer.borrow_mut();
+            buffer.new_view(&id, view_params);
+        }
+        TextView { buffer, id }
+    }
+
     fn move_cursor(&mut self, mov: Motion) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
@@ -67,22 +79,17 @@ impl TextView {
         }
     }
 
-    fn new(
-        view_params: BufferViewCreateParams,
-        buffer: Rc<RefCell<Buffer>>,
-        id: BufferViewID,
-    ) -> TextView {
-        {
-            let buffer = &mut *buffer.borrow_mut();
-            buffer.new_view(&id, view_params);
-        }
-        TextView { buffer, id }
-    }
-
     fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.set_view_rect(&self.id, rect);
+        }
+    }
+
+    fn buffer_id(&self) -> BufferID {
+        {
+            let buffer = &*self.buffer.borrow();
+            buffer.buffer_id()
         }
     }
 
@@ -165,6 +172,10 @@ impl TextPane {
 
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
         self.views[self.active].set_cursor_style(style);
+    }
+
+    pub(crate) fn buffer_id(&self) -> BufferID {
+        self.views[self.active].buffer_id()
     }
 
     pub(crate) fn rect(&self) -> Rect<u32, PixelSize> {

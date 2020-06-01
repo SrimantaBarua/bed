@@ -27,7 +27,7 @@ static RUST_HIGHLIGHTS: &str = include_str!("../res/tree-sitter/rust/highlights.
 pub(crate) struct TsCore {
     languages: Vec<Language>,
     hl_queries: Vec<Rc<Query>>,
-    exts: FnvHashMap<String, usize>,
+    exts: FnvHashMap<String, (String, usize)>,
 }
 
 impl TsCore {
@@ -72,15 +72,15 @@ impl TsCore {
             ),
         ];
         let mut exts = FnvHashMap::default();
-        exts.insert("c".to_owned(), 0);
-        exts.insert("h".to_owned(), 0);
-        exts.insert("cpp".to_owned(), 1);
-        exts.insert("hpp".to_owned(), 1);
-        exts.insert("css".to_owned(), 2);
-        exts.insert("html".to_owned(), 3);
-        exts.insert("js".to_owned(), 4);
-        exts.insert("py".to_owned(), 5);
-        exts.insert("rs".to_owned(), 6);
+        exts.insert("c".to_owned(), ("C".to_owned(), 0));
+        exts.insert("h".to_owned(), ("C".to_owned(), 0));
+        exts.insert("cpp".to_owned(), ("C++".to_owned(), 1));
+        exts.insert("hpp".to_owned(), ("C++".to_owned(), 1));
+        exts.insert("css".to_owned(), ("CSS".to_owned(), 2));
+        exts.insert("html".to_owned(), ("CSS".to_owned(), 3));
+        exts.insert("js".to_owned(), ("JavaScript".to_owned(), 4));
+        exts.insert("py".to_owned(), ("Python".to_owned(), 5));
+        exts.insert("rs".to_owned(), ("Rust".to_owned(), 6));
         TsCore {
             languages: languages,
             hl_queries: hl_queries,
@@ -88,13 +88,13 @@ impl TsCore {
         }
     }
 
-    pub(crate) fn parser_from_extension(&self, ext: &str) -> Option<(Parser, Rc<Query>)> {
-        self.exts.get(ext).map(|i| {
+    pub(crate) fn parser_from_extension(&self, ext: &str) -> Option<(String, Parser, Rc<Query>)> {
+        self.exts.get(ext).map(|(ft, i)| {
             let mut parser = Parser::new();
             parser
                 .set_language(self.languages[*i])
                 .expect("failed to set parser language");
-            (parser, self.hl_queries[*i].clone())
+            (ft.to_owned(), parser, self.hl_queries[*i].clone())
         })
     }
 }

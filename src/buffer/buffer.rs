@@ -3,6 +3,7 @@
 use std::cmp::min;
 use std::fs::File;
 use std::io::Result as IOResult;
+use std::io::Write;
 use std::path::Path;
 use std::rc::Rc;
 
@@ -20,7 +21,7 @@ use crate::ts::TsCore;
 
 use super::styled::StyledText;
 use super::view::{BufferView, BufferViewCreateParams};
-use super::{BufferViewID, CursorStyle};
+use super::{BufferID, BufferViewID, CursorStyle};
 
 fn default_hl_for_line(line: RopeSlice, color: Color) -> StyledText {
     let lch = rope_trim_newlines(line).len_chars();
@@ -28,10 +29,12 @@ fn default_hl_for_line(line: RopeSlice, color: Color) -> StyledText {
 }
 
 pub(crate) struct Buffer {
+    buffer_id: BufferID,
     data: Rope,
     views: FnvHashMap<BufferViewID, BufferView>,
     styled_lines: Vec<StyledText>,
     tab_width: usize,
+    filetype: Option<String>,
     parser: Option<Parser>,
     hl_query: Option<Rc<Query>>,
     tree: Option<Tree>,
@@ -396,13 +399,15 @@ impl Buffer {
     }
 
     // -------- Create buffer ----------------
-    pub(super) fn empty(theme: Rc<Theme>) -> Buffer {
+    pub(super) fn empty(buffer_id: BufferID, theme: Rc<Theme>) -> Buffer {
         let styled = StyledText::new(0, TextStyle::default(), theme.textview.foreground, None);
         Buffer {
+            buffer_id,
             tab_width: 8,
             data: Rope::new(),
             views: FnvHashMap::default(),
             styled_lines: vec![styled],
+            filetype: None,
             parser: None,
             hl_query: None,
             tree: None,
@@ -410,7 +415,12 @@ impl Buffer {
         }
     }
 
-    pub(super) fn from_file(path: &str, ts_core: &TsCore, theme: Rc<Theme>) -> IOResult<Buffer> {
+    pub(super) fn from_file(
+        buffer_id: BufferID,
+        path: &str,
+        ts_core: &TsCore,
+        theme: Rc<Theme>,
+    ) -> IOResult<Buffer> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
             .map(|rope| {
@@ -418,17 +428,19 @@ impl Buffer {
                 for line in rope.lines() {
                     styled_lines.push(default_hl_for_line(line, theme.textview.foreground));
                 }
-                let (parser, hl_query) = Path::new(path)
+                let (filetype, parser, hl_query) = Path::new(path)
                     .extension()
                     .and_then(|s| s.to_str())
                     .and_then(|s| ts_core.parser_from_extension(s))
-                    .map(|(p, q)| (Some(p), Some(q)))
-                    .unwrap_or((None, None));
+                    .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
+                    .unwrap_or((None, None, None));
                 let mut ret = Buffer {
+                    buffer_id,
                     tab_width: 8,
                     data: rope,
                     views: FnvHashMap::default(),
                     styled_lines,
+                    filetype,
                     parser,
                     hl_query,
                     tree: None,
@@ -449,16 +461,63 @@ impl Buffer {
                     self.styled_lines
                         .push(default_hl_for_line(line, self.theme.textview.foreground));
                 }
-                let (parser, hl_query) = Path::new(path)
+                let (filetype, parser, hl_query) = Path::new(path)
                     .extension()
                     .and_then(|s| s.to_str())
                     .and_then(|s| ts_core.parser_from_extension(s))
-                    .map(|(p, q)| (Some(p), Some(q)))
-                    .unwrap_or((None, None));
+                    .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
+                    .unwrap_or((None, None, None));
+                self.filetype = filetype;
                 self.parser = parser;
                 self.hl_query = hl_query;
                 self.recreate_parse_tree();
             })
+    }
+
+    // -------- Write buffer contents ----------------
+
+    pub(super) fn write(&mut self, path: &str, ts_core: &TsCore) -> IOResult<usize> {
+        let len = self.data.len_bytes();
+
+        let (filetype, parser, hl_query) = Path::new(path)
+            .extension()
+            .and_then(|s| s.to_str())
+            .and_then(|s| ts_core.parser_from_extension(s))
+            .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
+            .unwrap_or((None, None, None));
+
+        if filetype != self.filetype {
+            self.filetype = filetype;
+            self.parser = parser;
+            self.hl_query = hl_query;
+
+            self.styled_lines.clear();
+            for line in self.data.lines() {
+                self.styled_lines
+                    .push(default_hl_for_line(line, self.theme.textview.foreground));
+            }
+
+            self.recreate_parse_tree();
+            for view in self.views.values_mut() {
+                view.reshape(&self.data, &self.styled_lines);
+            }
+        }
+
+        match File::create(path) {
+            Ok(mut f) => {
+                for chunk in self.data.chunks() {
+                    f.write(chunk.as_bytes())?;
+                }
+                Ok(len)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    // -------- Small utility ----------------
+
+    pub(crate) fn buffer_id(&self) -> BufferID {
+        self.buffer_id
     }
 
     // -------- Parsing stuff ----------------

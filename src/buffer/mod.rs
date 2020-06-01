@@ -15,6 +15,9 @@ impl BufferViewID {
     }
 }
 
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub(crate) struct BufferID(usize);
+
 pub(crate) use buffer::Buffer;
 pub(crate) use cursor::CursorStyle;
 pub(crate) use mgr::BufferMgr;
