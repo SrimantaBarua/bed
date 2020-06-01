@@ -186,7 +186,7 @@ impl Buffer {
             // Insert pair
             '[' | '{' | '(' => {
                 self.data.insert_char(cidx, c);
-                if cidx + 1 == lc || self.data.char(cidx + 1).is_whitespace() {
+                if cidx + 1 >= lc || self.data.char(cidx + 1).is_whitespace() {
                     match c {
                         '[' => self.data.insert_char(cidx + 1, ']'),
                         '{' => self.data.insert_char(cidx + 1, '}'),
@@ -198,7 +198,7 @@ impl Buffer {
             }
             // Maybe insert pair, maybe skip
             '"' | '\'' => {
-                if cidx == lc || self.data.char(cidx) != c {
+                if cidx >= lc || self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                     self.data.insert_char(cidx + 1, c);
                     end_cidx += 1;
@@ -208,7 +208,7 @@ impl Buffer {
             }
             // Maybe skip insert
             ']' | '}' | ')' => {
-                if cidx == lc || self.data.char(cidx) != c {
+                if cidx >= lc || self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                 } else {
                     return self.move_view_cursor(id, Motion::Right(1));
