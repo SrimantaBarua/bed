@@ -9,6 +9,9 @@ extern crate crossbeam_channel;
 use euclid::{size2, vec2, Rect, Size2D};
 use glfw::{Action, MouseButtonLeft, WindowEvent};
 
+#[macro_use]
+mod log;
+
 mod buffer;
 mod cmdprompt;
 mod commands;
@@ -316,9 +319,9 @@ impl Bed {
         let optpath = optpath.map(|path| abspath(path));
         let bufid = self.textview_tree.active().buffer_id();
         match self.buffer_mgr.write_buffer(bufid, optpath) {
-            Some(Ok(nbytes)) => println!("wrote {} bytes", nbytes),
-            Some(Err(e)) => println!("error writing buffer: {}", e),
-            None => println!("buffer does not have path"),
+            Some(Ok(nbytes)) => debug!("wrote {} bytes", nbytes),
+            Some(Err(e)) => error!("error writing buffer: {}", e),
+            None => debug!("buffer does not have path"),
         }
     }
 
@@ -331,10 +334,10 @@ impl Bed {
                 self.textview_tree
                     .active_mut()
                     .new_buffer(buf, || bufmgr.next_view_id());
-                println!("loaded buffer");
+                debug!("loaded buffer");
             }
-            Some(Err(e)) => println!("error loading buffer: {}", e),
-            None => println!("buffer does not have path"),
+            Some(Err(e)) => error!("error loading buffer: {}", e),
+            None => error!("buffer does not have path"),
         }
     }
 }

@@ -231,7 +231,6 @@ impl Buffer {
             // Also handle indent
             '\n' => {
                 let (ich, count) = get_indent(&self.data, linum, self.indent_tabs);
-                println!("{:?}", (ich, count));
                 self.data.insert_char(cidx, '\n');
                 for _ in 0..count {
                     self.data.insert_char(cidx + 1, ich);
@@ -239,7 +238,6 @@ impl Buffer {
                 end_cidx += count;
                 cursor_nchars += count;
                 end_linum += 1;
-                println!("lc: {}, ecdx: {}", self.data.len_chars(), end_cidx);
                 if cidx > 0 && end_cidx < self.data.len_chars() {
                     let c0 = self.data.char(cidx - 1);
                     let c1 = self.data.char(end_cidx);
@@ -247,7 +245,6 @@ impl Buffer {
                         || (c0 == '{' && c1 == '}')
                         || (c0 == '[' && c1 == ']')
                     {
-                        println!("here");
                         self.data.insert_char(end_cidx, '\n');
                         for _ in 0..count {
                             self.data.insert_char(end_cidx + 1, ich);
