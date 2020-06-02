@@ -153,10 +153,20 @@ impl State {
                     self.mode = Mode::Input;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
                 }
+                'I' => {
+                    self.mode = Mode::Input;
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
+                    actions.push(Action::Move(Motion::LineStart));
+                }
                 'a' => {
                     self.mode = Mode::Input;
                     actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
                     actions.push(Action::Move(Motion::Right(1)));
+                }
+                'A' => {
+                    self.mode = Mode::Input;
+                    actions.push(Action::UpdateCursorStyle(CursorStyle::Line));
+                    actions.push(Action::Move(Motion::LineEnd));
                 }
                 'o' => {
                     self.mode = Mode::Input;
