@@ -9,7 +9,7 @@ use euclid::{vec2, Point2D, Rect, Vector2D};
 
 use crate::buffer::{Buffer, BufferID, BufferViewCreateParams, BufferViewID, CursorStyle};
 use crate::common::PixelSize;
-use crate::input::Motion;
+use crate::input::MotionOrObj;
 use crate::painter::Painter;
 
 struct TextView {
@@ -30,10 +30,10 @@ impl TextView {
         TextView { buffer, id }
     }
 
-    fn move_cursor(&mut self, mov: Motion) {
+    fn move_cursor(&mut self, mo: MotionOrObj) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
-            buffer.move_view_cursor(&self.id, mov);
+            buffer.move_view_cursor(&self.id, mo);
         }
     }
 
@@ -44,10 +44,10 @@ impl TextView {
         }
     }
 
-    fn delete(&mut self, mov: Motion) {
+    fn delete(&mut self, mo: MotionOrObj) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
-            buffer.view_delete(&self.id, mov);
+            buffer.view_delete(&self.id, mo);
         }
     }
 
@@ -123,8 +123,8 @@ pub(crate) struct TextPane {
 }
 
 impl TextPane {
-    pub(crate) fn move_cursor(&mut self, mov: Motion) {
-        self.views[self.active].move_cursor(mov);
+    pub(crate) fn move_cursor(&mut self, mo: MotionOrObj) {
+        self.views[self.active].move_cursor(mo);
     }
 
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<u32, PixelSize>) {
@@ -135,8 +135,8 @@ impl TextPane {
         self.views[self.active].insert_char(c);
     }
 
-    pub(crate) fn delete(&mut self, mov: Motion) {
-        self.views[self.active].delete(mov);
+    pub(crate) fn delete(&mut self, mo: MotionOrObj) {
+        self.views[self.active].delete(mo);
     }
 
     pub(crate) fn check_redraw(&mut self) -> bool {

@@ -14,7 +14,7 @@ use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::config::Config;
-use crate::input::Motion;
+use crate::input::{Motion, MotionOrObj, Object};
 use crate::painter::Painter;
 use crate::style::{Color, TextStyle};
 use crate::theme::Theme;
@@ -86,10 +86,10 @@ impl Buffer {
     }
 
     // -------- View cursor manipulation ----------------
-    pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mov: Motion) {
+    pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mo: MotionOrObj) {
         let view = self.views.get_mut(id).unwrap();
-        match mov {
-            Motion::Left(n) => {
+        match mo {
+            MotionOrObj::Motion(Motion::Left(n)) => {
                 if view.cursor.line_cidx <= n {
                     view.cursor.line_cidx = 0;
                 } else {
@@ -98,12 +98,12 @@ impl Buffer {
                 view.cursor
                     .sync_line_cidx_gidx_left(&self.data, self.tab_width);
             }
-            Motion::Right(n) => {
+            MotionOrObj::Motion(Motion::Right(n)) => {
                 view.cursor.line_cidx += n;
                 view.cursor
                     .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
-            Motion::Up(n) => {
+            MotionOrObj::Motion(Motion::Up(n)) => {
                 if view.cursor.line_num == 0 {
                     view.cursor.char_idx = 0;
                     view.cursor.line_cidx = 0;
@@ -118,7 +118,7 @@ impl Buffer {
                 }
                 view.cursor.sync_global_x(&self.data, self.tab_width);
             }
-            Motion::Down(n) => {
+            MotionOrObj::Motion(Motion::Down(n)) => {
                 view.cursor.line_num += n;
                 if view.cursor.line_num >= self.data.len_lines() {
                     view.cursor.char_idx = self.data.len_chars();
@@ -128,23 +128,24 @@ impl Buffer {
                     view.cursor.sync_global_x(&self.data, self.tab_width);
                 }
             }
-            Motion::LineStart => {
+            MotionOrObj::Motion(Motion::LineStart) => {
                 view.cursor.line_cidx = 0;
                 view.cursor
                     .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
-            Motion::LineEnd => {
+            MotionOrObj::Motion(Motion::LineEnd) => {
                 let lc = rope_trim_newlines(self.data.line(view.cursor.line_num)).len_chars();
                 view.cursor.line_cidx = lc;
                 view.cursor
                     .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
-            Motion::ToLine(linum) => {
+            MotionOrObj::Motion(Motion::ToLine(linum)) => {
                 view.cursor.line_num = min(linum, self.data.len_lines() - 1);
                 view.cursor.line_cidx = 0;
                 view.cursor
                     .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
+            _ => unimplemented!(),
         }
         view.snap_to_cursor(&self.data, &self.styled_lines);
     }
@@ -202,7 +203,7 @@ impl Buffer {
                     self.data.insert_char(cidx + 1, c);
                     end_cidx += 1;
                 } else {
-                    return self.move_view_cursor(id, Motion::Right(1));
+                    return self.move_view_cursor(id, MotionOrObj::Motion(Motion::Right(1)));
                 }
             }
             // Maybe skip insert
@@ -210,7 +211,7 @@ impl Buffer {
                 if cidx >= self.data.len_chars() || self.data.char(cidx) != c {
                     self.data.insert_char(cidx, c);
                 } else {
-                    return self.move_view_cursor(id, Motion::Right(1));
+                    return self.move_view_cursor(id, MotionOrObj::Motion(Motion::Right(1)));
                 }
             }
             // Maybe insert twice?
@@ -301,14 +302,14 @@ impl Buffer {
         }
     }
 
-    pub(crate) fn view_delete(&mut self, id: &BufferViewID, mov: Motion) {
+    pub(crate) fn view_delete(&mut self, id: &BufferViewID, mo: MotionOrObj) {
         let view = self.views.get_mut(id).unwrap();
         let cidx = view.cursor.char_idx;
         let lc = self.data.len_chars();
         let mut linum = view.cursor.line_num;
         let mut move_to_start = false;
-        let (start_cidx, end_cidx) = match mov {
-            Motion::Left(n) => {
+        let (start_cidx, end_cidx) = match mo {
+            MotionOrObj::Motion(Motion::Left(n)) => {
                 if cidx == 0 {
                     return;
                 }
@@ -320,7 +321,7 @@ impl Buffer {
                 linum = start_line;
                 (start_cidx, cidx)
             }
-            Motion::Right(n) => {
+            MotionOrObj::Motion(Motion::Right(n)) => {
                 if cidx == self.data.len_chars() {
                     return;
                 }
@@ -331,7 +332,7 @@ impl Buffer {
                 }
                 (cidx, end_cidx)
             }
-            Motion::Up(n) => {
+            MotionOrObj::Motion(Motion::Up(n)) => {
                 let start_linum = if linum < n { 0 } else { linum - n };
                 let start_cidx = self.data.line_to_char(start_linum);
                 let end_cidx = self.data.line_to_char(linum + 1);
@@ -345,7 +346,7 @@ impl Buffer {
                 move_to_start = true;
                 (start_cidx, end_cidx)
             }
-            Motion::Down(n) => {
+            MotionOrObj::Motion(Motion::Down(n)) => {
                 let start_linum = linum;
                 let (start_cidx, end_cidx) = if start_linum + n >= self.data.len_lines() {
                     linum -= 1;
@@ -370,7 +371,7 @@ impl Buffer {
                 move_to_start = true;
                 (start_cidx, end_cidx)
             }
-            Motion::LineStart => {
+            MotionOrObj::Motion(Motion::LineStart) => {
                 if view.cursor.line_cidx == 0 {
                     return;
                 }
@@ -379,7 +380,7 @@ impl Buffer {
                     view.cursor.char_idx,
                 )
             }
-            Motion::LineEnd => {
+            MotionOrObj::Motion(Motion::LineEnd) => {
                 let lc = rope_trim_newlines(self.data.line(view.cursor.line_num)).len_chars();
                 if view.cursor.line_cidx == lc {
                     return;

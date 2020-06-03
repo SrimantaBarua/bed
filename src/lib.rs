@@ -30,7 +30,7 @@ mod window;
 
 use buffer::{BufferViewCreateParams, CursorStyle};
 use common::PixelSize;
-use input::{Action as BedAction, Motion as BedMotion};
+use input::{Action as BedAction, MotionOrObj as BedMotionOrObj};
 
 #[cfg(target_os = "linux")]
 static DEFAULT_FONT: &'static str = "monospace";
@@ -247,9 +247,9 @@ impl Bed {
                 }
             } else {
                 match action {
-                    BedAction::Move(mov) => self.move_cursor(*mov),
+                    BedAction::Move(mo) => self.move_cursor(*mo),
                     BedAction::InsertChar(c) => self.insert_char(*c),
-                    BedAction::Delete(mov) => self.delete(*mov),
+                    BedAction::Delete(mo) => self.delete(*mo),
                     BedAction::UpdateCursorStyle(style) => self.set_cursor_style(*style),
                     BedAction::StartCmdPrompt(s) => {
                         self.cmd_prompt.set_prompt(s);
@@ -279,12 +279,12 @@ impl Bed {
         self.textview_tree.active_mut().insert_char(c);
     }
 
-    fn delete(&mut self, mov: BedMotion) {
-        self.textview_tree.active_mut().delete(mov);
+    fn delete(&mut self, mo: BedMotionOrObj) {
+        self.textview_tree.active_mut().delete(mo);
     }
 
-    fn move_cursor(&mut self, mov: BedMotion) {
-        self.textview_tree.active_mut().move_cursor(mov);
+    fn move_cursor(&mut self, mo: BedMotionOrObj) {
+        self.textview_tree.active_mut().move_cursor(mo);
     }
 
     fn set_cursor_visible(&mut self, visible: bool) {

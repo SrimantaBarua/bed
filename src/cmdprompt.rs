@@ -9,7 +9,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::buffer::CursorStyle;
 use crate::common::{PixelSize, DPI};
 use crate::font::FaceKey;
-use crate::input::{Action, Motion};
+use crate::input::{Action, Motion, MotionOrObj};
 use crate::painter::Painter;
 use crate::style::{TextSize, TextStyle};
 use crate::text::{RopeOrStr, ShapedText, TextShaper};
@@ -150,8 +150,10 @@ impl CmdPrompt {
     pub(crate) fn handle_action(&mut self, action: &Action) {
         match action {
             Action::Move(m) => match m {
-                Motion::Left(0) | Motion::Right(0) => return,
-                Motion::Left(mut n) => {
+                MotionOrObj::Motion(Motion::Left(0)) | MotionOrObj::Motion(Motion::Right(0)) => {
+                    return
+                }
+                MotionOrObj::Motion(Motion::Left(mut n)) => {
                     let mut start = self.cursor_bidx;
                     let mut cis = self.command[self.prompt_len..self.cursor_bidx].char_indices();
                     while let Some((i, _)) = cis.next_back() {
@@ -168,7 +170,7 @@ impl CmdPrompt {
                     self.cursor_bidx = bidx;
                     self.cursor_gidx = gidx;
                 }
-                Motion::Right(mut n) => {
+                MotionOrObj::Motion(Motion::Right(mut n)) => {
                     n += 1;
                     let mut end = self.cursor_bidx;
                     for (i, _) in self.command[self.cursor_bidx..].char_indices() {
@@ -188,12 +190,12 @@ impl CmdPrompt {
                     self.cursor_bidx = bidx;
                     self.cursor_gidx = gidx;
                 }
-                Motion::LineStart => {
+                MotionOrObj::Motion(Motion::LineStart) => {
                     let (bidx, gidx) = bidx_gidx_from_bidx(&self.command, self.prompt_len);
                     self.cursor_bidx = bidx;
                     self.cursor_gidx = gidx;
                 }
-                Motion::LineEnd => {
+                MotionOrObj::Motion(Motion::LineEnd) => {
                     let (bidx, gidx) = bidx_gidx_from_bidx(&self.command, self.command.len());
                     self.cursor_bidx = bidx;
                     self.cursor_gidx = gidx;
@@ -201,8 +203,10 @@ impl CmdPrompt {
                 _ => {}
             },
             Action::Delete(m) => match m {
-                Motion::Left(0) | Motion::Right(0) => return,
-                Motion::Left(mut n) => {
+                MotionOrObj::Motion(Motion::Left(0)) | MotionOrObj::Motion(Motion::Right(0)) => {
+                    return
+                }
+                MotionOrObj::Motion(Motion::Left(mut n)) => {
                     let mut start = self.cursor_bidx;
                     let mut cis = self.command[self.prompt_len..self.cursor_bidx].char_indices();
                     while let Some((i, _)) = cis.next_back() {
@@ -220,7 +224,7 @@ impl CmdPrompt {
                     self.cursor_bidx = bidx;
                     self.cursor_gidx = gidx;
                 }
-                Motion::Right(mut n) => {
+                MotionOrObj::Motion(Motion::Right(mut n)) => {
                     n += 1;
                     let mut end = self.cursor_bidx;
                     for (i, _) in self.command[self.cursor_bidx..].char_indices() {
@@ -241,14 +245,14 @@ impl CmdPrompt {
                     self.cursor_bidx = bidx;
                     self.cursor_gidx = gidx;
                 }
-                Motion::LineStart => {
+                MotionOrObj::Motion(Motion::LineStart) => {
                     self.command
                         .replace_range(self.prompt_len..self.cursor_bidx, "");
                     let (bidx, gidx) = bidx_gidx_from_bidx(&self.command, self.prompt_len);
                     self.cursor_bidx = bidx;
                     self.cursor_gidx = gidx;
                 }
-                Motion::LineEnd => {
+                MotionOrObj::Motion(Motion::LineEnd) => {
                     self.command.replace_range(self.cursor_bidx.., "");
                     let (bidx, gidx) = bidx_gidx_from_bidx(&self.command, self.cursor_bidx);
                     self.cursor_bidx = bidx;
