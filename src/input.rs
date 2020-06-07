@@ -26,8 +26,9 @@ pub(crate) enum Motion {
 
 #[derive(Clone, Copy)]
 pub(crate) enum Object {
-    Line,
-    Word,
+    Lines(usize),
+    Words(usize),
+    WordsExt(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -69,11 +70,14 @@ macro_rules! thing {
     (LINE_END) => {
         $crate::input::MotionOrObj::Motion($crate::input::Motion::LineEnd)
     };
-    (LINE) => {
-        $crate::input::MotionOrObj::Object($crate::input::Object::Line)
+    (LINE, $n:expr) => {
+        $crate::input::MotionOrObj::Object($crate::input::Object::Lines($n))
     };
-    (WORD) => {
-        $crate::input::MotionOrObj::Object($crate::input::Object::Word)
+    (WORD, $n:expr) => {
+        $crate::input::MotionOrObj::Object($crate::input::Object::Words($n))
+    };
+    (WORD_EXT, $n:expr) => {
+        $crate::input::MotionOrObj::Object($crate::input::Object::WordsExt($n))
     };
 }
 
@@ -201,6 +205,9 @@ impl State {
                 '0' if self.verb_count.len() == 0 => actions.push(act!(MOV, LINE_START)),
                 '$' => actions.push(act!(MOV, LINE_END)),
                 'G' => actions.push(act!(MOV, TO_LINE, std::usize::MAX)),
+                // Text object movement
+                'w' => actions.push(act!(MOV, WORD, verb_count)),
+                'W' => actions.push(act!(MOV, WORD_EXT, verb_count)),
                 // Counts
                 c if c.is_ascii_digit() => {
                     self.verb_count.push(c);
@@ -283,7 +290,17 @@ impl State {
                     'd' => {
                         self.mode = Mode::Normal;
                         actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
-                        actions.push(act!(DEL, DOWN, n));
+                        actions.push(act!(DEL, LINE, n * verb_count));
+                    }
+                    'w' => {
+                        self.mode = Mode::Normal;
+                        actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                        actions.push(act!(DEL, WORD, n * verb_count));
+                    }
+                    'W' => {
+                        self.mode = Mode::Normal;
+                        actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                        actions.push(act!(DEL, WORD_EXT, n * verb_count));
                     }
                     _ => {}
                 }

@@ -88,6 +88,7 @@ impl Buffer {
     // -------- View cursor manipulation ----------------
     pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mo: MotionOrObj) {
         let view = self.views.get_mut(id).unwrap();
+        let cidx = view.cursor.char_idx;
         match mo {
             MotionOrObj::Motion(Motion::Left(n)) => {
                 if view.cursor.line_cidx <= n {
@@ -145,8 +146,23 @@ impl Buffer {
                 view.cursor
                     .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
-            _ => unimplemented!(),
+            MotionOrObj::Object(Object::Words(n)) => {
+                let new_cidx = self.nth_word_start(cidx, n, false);
+                let view = self.views.get_mut(id).unwrap();
+                view.cursor.char_idx = new_cidx;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+            }
+            MotionOrObj::Object(Object::WordsExt(n)) => {
+                let new_cidx = self.nth_word_start(cidx, n, true);
+                let view = self.views.get_mut(id).unwrap();
+                view.cursor.char_idx = new_cidx;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+            }
+            MotionOrObj::Object(Object::Lines(_)) => unreachable!(),
         }
+        let view = self.views.get_mut(id).unwrap();
         view.snap_to_cursor(&self.data, &self.styled_lines);
     }
 
@@ -390,7 +406,24 @@ impl Buffer {
                     view.cursor.char_idx + (lc - view.cursor.line_cidx),
                 )
             }
-            _ => unimplemented!(),
+            MotionOrObj::Motion(Motion::ToLine(_)) => unimplemented!(),
+            MotionOrObj::Object(Object::Lines(_)) => unimplemented!(),
+            MotionOrObj::Object(Object::Words(n)) => {
+                let end_cidx = self.nth_word_start(cidx, n, false);
+                let end_line = self.data.char_to_line(end_cidx);
+                for _ in linum..end_line {
+                    self.styled_lines.remove(linum + 1);
+                }
+                (cidx, end_cidx)
+            }
+            MotionOrObj::Object(Object::WordsExt(n)) => {
+                let end_cidx = self.nth_word_start(cidx, n, true);
+                let end_line = self.data.char_to_line(end_cidx);
+                for _ in linum..end_line {
+                    self.styled_lines.remove(linum + 1);
+                }
+                (cidx, end_cidx)
+            }
         };
 
         let old_rope = self.data.clone();
@@ -772,6 +805,42 @@ impl Buffer {
         let end_line = self.data.line(range.end_point.row);
         range.end_point.column = end_line.len_bytes();
         range.end_byte = self.data.line_to_byte(range.end_point.row) + range.end_point.column;
+    }
+
+    // -------- Text object identification --------
+    fn nth_word_start(&self, start_cidx: usize, n: usize, extended: bool) -> usize {
+        let mut chars = self.data.chars_at(start_cidx).peekable();
+        let mut cidx = start_cidx;
+        for _ in 0..n {
+            cidx += 1;
+            match chars.next() {
+                None => return self.data.len_chars(),
+                Some(c) if !c.is_whitespace() => {
+                    while let Some(c) = chars.peek() {
+                        if *c == '_' || c.is_alphanumeric() {
+                            chars.next();
+                            cidx += 1;
+                            continue;
+                        }
+                        if extended && c.is_ascii_punctuation() {
+                            chars.next();
+                            cidx += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            while let Some(c) = chars.peek() {
+                if !c.is_whitespace() {
+                    break;
+                }
+                chars.next();
+                cidx += 1;
+            }
+        }
+        cidx
     }
 }
 
