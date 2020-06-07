@@ -29,6 +29,8 @@ pub(crate) enum Object {
     Lines(usize),
     Words(usize),
     WordsExt(usize),
+    BackWords(usize),
+    BackWordsExt(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -73,11 +75,17 @@ macro_rules! thing {
     (LINE, $n:expr) => {
         $crate::input::MotionOrObj::Object($crate::input::Object::Lines($n))
     };
-    (WORD, $n:expr) => {
+    (WORDS, $n:expr) => {
         $crate::input::MotionOrObj::Object($crate::input::Object::Words($n))
     };
-    (WORD_EXT, $n:expr) => {
+    (WORDS_EXT, $n:expr) => {
         $crate::input::MotionOrObj::Object($crate::input::Object::WordsExt($n))
+    };
+    (BACK_WORDS, $n:expr) => {
+        $crate::input::MotionOrObj::Object($crate::input::Object::BackWords($n))
+    };
+    (BACK_WORDS_EXT, $n:expr) => {
+        $crate::input::MotionOrObj::Object($crate::input::Object::BackWordsExt($n))
     };
 }
 
@@ -206,8 +214,10 @@ impl State {
                 '$' => actions.push(act!(MOV, LINE_END)),
                 'G' => actions.push(act!(MOV, TO_LINE, std::usize::MAX)),
                 // Text object movement
-                'w' => actions.push(act!(MOV, WORD, verb_count)),
-                'W' => actions.push(act!(MOV, WORD_EXT, verb_count)),
+                'w' => actions.push(act!(MOV, WORDS, verb_count)),
+                'W' => actions.push(act!(MOV, WORDS_EXT, verb_count)),
+                'b' => actions.push(act!(MOV, BACK_WORDS, verb_count)),
+                'B' => actions.push(act!(MOV, BACK_WORDS_EXT, verb_count)),
                 // Counts
                 c if c.is_ascii_digit() => {
                     self.verb_count.push(c);
@@ -275,18 +285,14 @@ impl State {
             },
             Mode::DPressed(n) => {
                 match c {
-                    // Basic movement
+                    // Basic movement deletion
                     'h' => actions.push(act!(DEL, LEFT, n * verb_count)),
                     'j' => actions.push(act!(DEL, DOWN, n * verb_count)),
                     'k' => actions.push(act!(DEL, UP, n * verb_count)),
                     'l' => actions.push(act!(DEL, RIGHT, n * verb_count)),
                     '0' if self.verb_count.len() == 0 => actions.push(act!(DEL, LINE_START)),
                     '$' => actions.push(act!(DEL, LINE_END)),
-                    // Counts
-                    c if c.is_ascii_digit() => {
-                        self.verb_count.push(c);
-                        return;
-                    }
+                    // Text object deletion
                     'd' => {
                         self.mode = Mode::Normal;
                         actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
@@ -295,12 +301,27 @@ impl State {
                     'w' => {
                         self.mode = Mode::Normal;
                         actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
-                        actions.push(act!(DEL, WORD, n * verb_count));
+                        actions.push(act!(DEL, WORDS, n * verb_count));
                     }
                     'W' => {
                         self.mode = Mode::Normal;
                         actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
-                        actions.push(act!(DEL, WORD_EXT, n * verb_count));
+                        actions.push(act!(DEL, WORDS_EXT, n * verb_count));
+                    }
+                    'b' => {
+                        self.mode = Mode::Normal;
+                        actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                        actions.push(act!(DEL, BACK_WORDS, n * verb_count));
+                    }
+                    'B' => {
+                        self.mode = Mode::Normal;
+                        actions.push(Action::UpdateCursorStyle(CursorStyle::Block));
+                        actions.push(act!(DEL, BACK_WORDS_EXT, n * verb_count));
+                    }
+                    // Counts
+                    c if c.is_ascii_digit() => {
+                        self.verb_count.push(c);
+                        return;
                     }
                     _ => {}
                 }

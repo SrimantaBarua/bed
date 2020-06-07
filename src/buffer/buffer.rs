@@ -147,15 +147,25 @@ impl Buffer {
                     .sync_line_cidx_gidx_right(&self.data, self.tab_width);
             }
             MotionOrObj::Object(Object::Words(n)) => {
-                let new_cidx = self.nth_word_start(cidx, n, false);
-                let view = self.views.get_mut(id).unwrap();
+                let new_cidx = nth_word_start(&self.data, cidx, n, false);
                 view.cursor.char_idx = new_cidx;
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
             MotionOrObj::Object(Object::WordsExt(n)) => {
-                let new_cidx = self.nth_word_start(cidx, n, true);
-                let view = self.views.get_mut(id).unwrap();
+                let new_cidx = nth_word_start(&self.data, cidx, n, true);
+                view.cursor.char_idx = new_cidx;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+            }
+            MotionOrObj::Object(Object::BackWords(n)) => {
+                let new_cidx = nth_back_word_start(&self.data, cidx, n, false);
+                view.cursor.char_idx = new_cidx;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+            }
+            MotionOrObj::Object(Object::BackWordsExt(n)) => {
+                let new_cidx = nth_back_word_start(&self.data, cidx, n, true);
                 view.cursor.char_idx = new_cidx;
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
@@ -407,9 +417,8 @@ impl Buffer {
                 )
             }
             MotionOrObj::Motion(Motion::ToLine(_)) => unimplemented!(),
-            MotionOrObj::Object(Object::Lines(_)) => unimplemented!(),
             MotionOrObj::Object(Object::Words(n)) => {
-                let end_cidx = self.nth_word_start(cidx, n, false);
+                let end_cidx = nth_word_start(&self.data, cidx, n, false);
                 let end_line = self.data.char_to_line(end_cidx);
                 for _ in linum..end_line {
                     self.styled_lines.remove(linum + 1);
@@ -417,13 +426,32 @@ impl Buffer {
                 (cidx, end_cidx)
             }
             MotionOrObj::Object(Object::WordsExt(n)) => {
-                let end_cidx = self.nth_word_start(cidx, n, true);
+                let end_cidx = nth_word_start(&self.data, cidx, n, true);
                 let end_line = self.data.char_to_line(end_cidx);
                 for _ in linum..end_line {
                     self.styled_lines.remove(linum + 1);
                 }
                 (cidx, end_cidx)
             }
+            MotionOrObj::Object(Object::BackWords(n)) => {
+                let start_cidx = nth_back_word_start(&self.data, cidx, n, false);
+                let start_line = self.data.char_to_line(start_cidx);
+                for _ in start_line..linum {
+                    self.styled_lines.remove(start_line + 1);
+                }
+                linum = start_line;
+                (start_cidx, cidx)
+            }
+            MotionOrObj::Object(Object::BackWordsExt(n)) => {
+                let start_cidx = nth_back_word_start(&self.data, cidx, n, true);
+                let start_line = self.data.char_to_line(start_cidx);
+                for _ in start_line..linum {
+                    self.styled_lines.remove(start_line + 1);
+                }
+                linum = start_line;
+                (start_cidx, cidx)
+            }
+            MotionOrObj::Object(Object::Lines(_)) => unimplemented!(),
         };
 
         let old_rope = self.data.clone();
@@ -806,42 +834,71 @@ impl Buffer {
         range.end_point.column = end_line.len_bytes();
         range.end_byte = self.data.line_to_byte(range.end_point.row) + range.end_point.column;
     }
+}
 
-    // -------- Text object identification --------
-    fn nth_word_start(&self, start_cidx: usize, n: usize, extended: bool) -> usize {
-        let mut chars = self.data.chars_at(start_cidx).peekable();
-        let mut cidx = start_cidx;
-        for _ in 0..n {
-            cidx += 1;
-            match chars.next() {
-                None => return self.data.len_chars(),
-                Some(c) if !c.is_whitespace() => {
-                    while let Some(c) = chars.peek() {
-                        if *c == '_' || c.is_alphanumeric() {
-                            chars.next();
-                            cidx += 1;
-                            continue;
-                        }
-                        if extended && c.is_ascii_punctuation() {
-                            chars.next();
-                            cidx += 1;
-                            continue;
-                        }
-                        break;
+fn nth_word_start(rope: &Rope, start_cidx: usize, n: usize, extended: bool) -> usize {
+    let mut chars = rope.chars_at(start_cidx).peekable();
+    let mut cidx = start_cidx;
+    for _ in 0..n {
+        cidx += 1;
+        match chars.next() {
+            None => return rope.len_chars(),
+            Some(c) if !c.is_whitespace() => {
+                while let Some(c) = chars.peek() {
+                    if *c == '_' || c.is_alphanumeric() {
+                        chars.next();
+                        cidx += 1;
+                        continue;
                     }
-                }
-                _ => {}
-            }
-            while let Some(c) = chars.peek() {
-                if !c.is_whitespace() {
+                    if extended && c.is_ascii_punctuation() {
+                        chars.next();
+                        cidx += 1;
+                        continue;
+                    }
                     break;
                 }
-                chars.next();
-                cidx += 1;
+            }
+            _ => {}
+        }
+        while let Some(c) = chars.peek() {
+            if !c.is_whitespace() {
+                break;
+            }
+            chars.next();
+            cidx += 1;
+        }
+    }
+    cidx
+}
+
+fn nth_back_word_start(rope: &Rope, start_cidx: usize, n: usize, extended: bool) -> usize {
+    let mut chars = rope.chars_at(start_cidx);
+    let mut cidx = start_cidx;
+    let mut curc = rope.char(cidx);
+    for _ in 0..n {
+        if cidx == 0 {
+            return 0;
+        }
+        while let Some(c) = chars.prev() {
+            curc = c;
+            cidx -= 1;
+            if !c.is_whitespace() {
+                break;
             }
         }
-        cidx
+        if curc == '_' || curc.is_alphanumeric() || (extended && curc.is_ascii_punctuation()) {
+            while let Some(c) = chars.prev() {
+                if c == '_' || c.is_alphanumeric() || (extended && c.is_ascii_punctuation()) {
+                    curc = c;
+                    cidx -= 1;
+                    continue;
+                }
+                chars.next();
+                break;
+            }
+        }
     }
+    cidx
 }
 
 fn get_indent(data: &Rope, linum: usize, indent_tabs: bool) -> (char, usize) {
