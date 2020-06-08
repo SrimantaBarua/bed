@@ -15,6 +15,7 @@ use crate::style::{Color, TextSlant, TextWeight};
 pub(crate) struct ThemeTextview {
     pub(crate) background: Color,
     pub(crate) foreground: Color,
+    pub(crate) cursor_line: Color,
     pub(crate) cursor: Color,
 }
 
@@ -23,6 +24,7 @@ impl Default for ThemeTextview {
         ThemeTextview {
             background: Color::new(0xff, 0xff, 0xff, 0xff),
             foreground: Color::new(0, 0, 0, 0xff),
+            cursor_line: Color::new(0xee, 0xee, 0xee, 0xff),
             cursor: Color::new(0xff, 0x88, 0x22, 0xff),
         }
     }

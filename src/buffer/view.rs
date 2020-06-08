@@ -305,12 +305,19 @@ impl BufferView {
             let mut linum = self.start_line;
 
             for line in &self.shaped_lines {
-                pos.y += self.ascender;
                 let cursor = if linum == self.cursor.line_num {
+                    painter.color_quad(
+                        Rect::new(
+                            point2(0, pos.y),
+                            size2(self.rect.size.width, self.height).cast(),
+                        ),
+                        self.theme.textview.cursor_line,
+                    );
                     cursor
                 } else {
                     None
                 };
+                pos.y += self.ascender;
                 painter.draw_shaped_text(shaper, pos, line, cursor, text_rect.size.width);
                 pos.y -= self.descender;
                 linum += 1;

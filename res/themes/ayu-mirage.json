@@ -3,11 +3,17 @@
         "textview" : {
             "background" : "#1F2430",
             "foreground" : "#CBCCC6",
-            "cursor" : "#FFCC66"
+            "cursor" : "#FFCC66",
+            "cursor_line" : "#242B38"
         },
         "gutter" : {
             "background" : "#1F2430",
             "foreground" : "#707A8C66"
+        },
+        "prompt" : {
+            "background" : "#1F2430",
+            "foreground" : "#CBCCC6",
+            "cursor" : "#FFCC66"
         },
 
         "syntax" : {
