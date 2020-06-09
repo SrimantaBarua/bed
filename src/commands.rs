@@ -10,6 +10,8 @@ impl Bed {
             Some(b'c') => self.handle_c(cmd),
             Some(b'e') => self.handle_e(cmd),
             Some(b'q') => self.handle_q(cmd),
+            Some(b's') => self.handle_s(cmd),
+            Some(b'v') => self.handle_v(cmd),
             Some(b'w') => self.handle_w(cmd),
             _ => {}
         }
@@ -39,9 +41,25 @@ impl Bed {
         }
     }
 
+    fn handle_s(&mut self, s: &str) {
+        let mut sp = s.split_whitespace();
+        match sp.next() {
+            Some("sp") | Some("split") => self.horizontal_split(sp.next()),
+            _ => {}
+        }
+    }
+
     fn handle_q(&mut self, s: &str) {
         match &s[1..] {
             "" | "uit" => self.window.set_should_close(),
+            _ => {}
+        }
+    }
+
+    fn handle_v(&mut self, s: &str) {
+        let mut sp = s.split_whitespace();
+        match sp.next() {
+            Some("vsp") | Some("vsplit") => self.vertical_split(sp.next()),
             _ => {}
         }
     }

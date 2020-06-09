@@ -132,7 +132,7 @@ impl Bed {
             dpi,
             text_shaper.clone(),
             viewable_rect,
-            theme,
+            theme.clone(),
         );
 
         let textview_rect = Rect::new(
@@ -154,7 +154,7 @@ impl Bed {
             gutter_text_size,
             gutter_padding: config.gutter_padding,
         };
-        let textview_tree = textview::TextTree::new(view_params, buf, view_id);
+        let textview_tree = textview::TextTree::new(view_params, buf, view_id, theme);
 
         window.show();
 
@@ -358,6 +358,32 @@ impl Bed {
         let abspath = abspath(path);
         if let Err(e) = env::set_current_dir(&abspath) {
             error!("failed to change directory to '{}': {}", path, e);
+        }
+    }
+
+    fn horizontal_split(&mut self, optpath: Option<&str>) {
+        let view_id = self.buffer_mgr.next_view_id();
+        if let Some(path) = optpath {
+            let abspath = abspath(path);
+            match self.buffer_mgr.from_file(&abspath) {
+                Ok(buf) => self.textview_tree.split_h(Some(buf), view_id),
+                Err(e) => error!("erorr loading buffer: {}", e),
+            }
+        } else {
+            self.textview_tree.split_h(None, view_id);
+        }
+    }
+
+    fn vertical_split(&mut self, optpath: Option<&str>) {
+        let view_id = self.buffer_mgr.next_view_id();
+        if let Some(path) = optpath {
+            let abspath = abspath(path);
+            match self.buffer_mgr.from_file(&abspath) {
+                Ok(buf) => self.textview_tree.split_v(Some(buf), view_id),
+                Err(e) => error!("erorr loading buffer: {}", e),
+            }
+        } else {
+            self.textview_tree.split_v(None, view_id);
         }
     }
 }

@@ -4,7 +4,9 @@
             "background" : "#1F2430",
             "foreground" : "#CBCCC6",
             "cursor" : "#FFCC66",
-            "cursor_line" : "#242B38"
+            "cursor_line" : "#242B38",
+            "border_width" : 1,
+            "border_color" : "#5C677399"
         },
         "gutter" : {
             "background" : "#1F2430",

@@ -224,10 +224,14 @@ impl TextPane {
         }
     }
 
-    pub(super) fn clone(&self, view_id: BufferViewID) -> TextPane {
+    pub(super) fn clone(
+        &self,
+        optbuffer: Option<Rc<RefCell<Buffer>>>,
+        view_id: BufferViewID,
+    ) -> TextPane {
         let views = vec![TextView::new(
             self.params.clone(),
-            self.views[self.active].buffer.clone(),
+            optbuffer.unwrap_or_else(|| self.views[self.active].buffer.clone()),
             view_id,
         )];
         TextPane {

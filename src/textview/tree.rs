@@ -8,12 +8,13 @@ use euclid::{size2, Point2D, Rect};
 use crate::buffer::{Buffer, BufferViewCreateParams, BufferViewID};
 use crate::common::PixelSize;
 use crate::painter::Painter;
+use crate::theme::Theme;
 
 use super::TextPane;
 
 pub(crate) struct TextTree {
+    theme: Rc<Theme>,
     rect: Rect<u32, PixelSize>,
-    border_width: u32,
     root: Node,
 }
 
@@ -22,31 +23,43 @@ impl TextTree {
         view_params: BufferViewCreateParams,
         buf: Rc<RefCell<Buffer>>,
         view_id: BufferViewID,
+        theme: Rc<Theme>,
     ) -> TextTree {
         TextTree {
             rect: view_params.rect,
-            border_width: 1,
             root: Node::new_leaf(view_params, buf, view_id),
+            theme,
         }
     }
 
     pub(crate) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
         self.rect = rect;
-        self.root.set_rect(rect, self.border_width);
+        self.root.set_rect(rect, self.theme.textview.border_width);
     }
 
     pub(crate) fn draw(&self, painter: &mut Painter) {
+        let _ = painter.widget_ctx(self.rect.cast(), self.theme.textview.border_color);
         self.root.draw(painter);
     }
 
-    pub(crate) fn split_v(&mut self, view_id: BufferViewID) {
-        self.root.split_v(view_id);
-        self.root.set_rect(self.rect, self.border_width);
+    pub(crate) fn split_v(
+        &mut self,
+        optbuffer: Option<Rc<RefCell<Buffer>>>,
+        view_id: BufferViewID,
+    ) {
+        self.root.split_v(optbuffer, view_id);
+        self.root
+            .set_rect(self.rect, self.theme.textview.border_width);
     }
 
-    pub(crate) fn split_h(&mut self, view_id: BufferViewID) {
-        self.root.split_h(view_id);
-        self.root.set_rect(self.rect, self.border_width);
+    pub(crate) fn split_h(
+        &mut self,
+        optbuffer: Option<Rc<RefCell<Buffer>>>,
+        view_id: BufferViewID,
+    ) {
+        self.root.split_h(optbuffer, view_id);
+        self.root
+            .set_rect(self.rect, self.theme.textview.border_width);
     }
 
     pub(crate) fn active(&self) -> &TextPane {
@@ -144,11 +157,12 @@ impl Node {
         }
     }
 
-    fn split_h(&mut self, view_id: BufferViewID) {
+    fn split_h(&mut self, optbuffer: Option<Rc<RefCell<Buffer>>>, view_id: BufferViewID) {
         if self.is_leaf() {
             let view = self.opt_view.take().unwrap();
             self.active = 0;
-            self.children.push(Node::leaf_with(view.clone(view_id)));
+            self.children
+                .push(Node::leaf_with(view.clone(optbuffer, view_id)));
             self.children.push(Node::leaf_with(view));
             self.split = Split::Horizontal;
         } else if self.split == Split::Horizontal {
@@ -157,21 +171,22 @@ impl Node {
                     .opt_view
                     .as_ref()
                     .unwrap()
-                    .clone(view_id);
+                    .clone(optbuffer, view_id);
                 self.children.insert(self.active, Node::leaf_with(view));
             } else {
-                self.children[self.active].split_h(view_id);
+                self.children[self.active].split_h(optbuffer, view_id);
             }
         } else {
-            self.children[self.active].split_h(view_id);
+            self.children[self.active].split_h(optbuffer, view_id);
         }
     }
 
-    fn split_v(&mut self, view_id: BufferViewID) {
+    fn split_v(&mut self, optbuffer: Option<Rc<RefCell<Buffer>>>, view_id: BufferViewID) {
         if self.is_leaf() {
             let view = self.opt_view.take().unwrap();
             self.active = 0;
-            self.children.push(Node::leaf_with(view.clone(view_id)));
+            self.children
+                .push(Node::leaf_with(view.clone(optbuffer, view_id)));
             self.children.push(Node::leaf_with(view));
             self.split = Split::Vertical;
         } else if self.split == Split::Vertical {
@@ -180,13 +195,13 @@ impl Node {
                     .opt_view
                     .as_ref()
                     .unwrap()
-                    .clone(view_id);
+                    .clone(optbuffer, view_id);
                 self.children.insert(self.active, Node::leaf_with(view));
             } else {
-                self.children[self.active].split_v(view_id);
+                self.children[self.active].split_v(optbuffer, view_id);
             }
         } else {
-            self.children[self.active].split_v(view_id);
+            self.children[self.active].split_v(optbuffer, view_id);
         }
     }
 

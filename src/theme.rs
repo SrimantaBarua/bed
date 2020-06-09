@@ -17,6 +17,8 @@ pub(crate) struct ThemeTextview {
     pub(crate) foreground: Color,
     pub(crate) cursor_line: Color,
     pub(crate) cursor: Color,
+    pub(crate) border_width: u32,
+    pub(crate) border_color: Color,
 }
 
 impl Default for ThemeTextview {
@@ -26,6 +28,8 @@ impl Default for ThemeTextview {
             foreground: Color::new(0, 0, 0, 0xff),
             cursor_line: Color::new(0xee, 0xee, 0xee, 0xff),
             cursor: Color::new(0xff, 0x88, 0x22, 0xff),
+            border_width: 1,
+            border_color: Color::new(0, 0, 0, 0xff),
         }
     }
 }
