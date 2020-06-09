@@ -1,6 +1,8 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::RefCell;
+use std::env;
+use std::path::Path;
 use std::rc::Rc;
 use std::{thread, time};
 
@@ -44,12 +46,19 @@ static CURSOR_LINE_WIDTH: i32 = 2;
 static CURSOR_BLOCK_WIDTH: i32 = 10;
 
 fn abspath(spath: &str) -> String {
-    use std::env;
-    use std::path::Path;
-
     let path = Path::new(spath);
     if path.is_absolute() {
         spath.to_owned()
+    } else if path.starts_with("~") {
+        let mut home_dir = directories::BaseDirs::new()
+            .expect("failed to get base directories")
+            .home_dir()
+            .to_owned();
+        home_dir.push(path.strip_prefix("~").expect("failed to stip '~' prefix"));
+        home_dir
+            .to_str()
+            .expect("failed to convert path to string")
+            .to_owned()
     } else {
         let mut wdir = env::current_dir().expect("failed to get current directory");
         wdir.push(spath);
@@ -341,6 +350,14 @@ impl Bed {
             }
             Some(Err(e)) => error!("error loading buffer: {}", e),
             None => error!("buffer does not have path"),
+        }
+    }
+
+    fn change_directory(&mut self, optpath: Option<&str>) {
+        let path = optpath.unwrap_or("~");
+        let abspath = abspath(path);
+        if let Err(e) = env::set_current_dir(&abspath) {
+            error!("failed to change directory to '{}': {}", path, e);
         }
     }
 }

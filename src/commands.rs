@@ -7,6 +7,7 @@ impl Bed {
         let mut bytes = cmd.bytes();
         match bytes.next() {
             Some(b'b') => self.handle_b(cmd),
+            Some(b'c') => self.handle_c(cmd),
             Some(b'e') => self.handle_e(cmd),
             Some(b'q') => self.handle_q(cmd),
             Some(b'w') => self.handle_w(cmd),
@@ -18,6 +19,14 @@ impl Bed {
         match &s[1..] {
             "n" | "next" => self.textview_tree.active_mut().next_buffer(),
             "p" | "previous" => self.textview_tree.active_mut().prev_buffer(),
+            _ => {}
+        }
+    }
+
+    fn handle_c(&mut self, s: &str) {
+        let mut sp = s.split_whitespace();
+        match sp.next() {
+            Some("cd") => self.change_directory(sp.next()),
             _ => {}
         }
     }
