@@ -35,6 +35,7 @@ pub(super) struct BufferView {
     pub(super) cursor: Cursor,
     pub(super) rect: Rect<u32, PixelSize>,
     pub(super) needs_redraw: bool,
+    pub(super) is_active: bool,
     tab_width: usize,
     // Text shaping
     face_key: FaceKey,
@@ -80,6 +81,7 @@ impl BufferView {
             cursor: Cursor::default(),
             rect: params.rect,
             needs_redraw: true,
+            is_active: true,
             tab_width,
             face_key: params.face_key,
             text_size: params.text_size,
@@ -97,11 +99,24 @@ impl BufferView {
             gutter_text_size: params.gutter_text_size,
             gutter_padding: params.gutter_padding,
             gutter_width: 0,
-            theme: theme,
+            theme,
         };
         view.fill_or_truncate_view(data, styled_lines);
         view.update_gutter_width(data);
         view
+    }
+
+    pub(crate) fn deactivate(&mut self) {
+        self.shaped_lines.clear();
+        self.shaped_gutter.clear();
+        self.is_active = false;
+    }
+
+    pub(crate) fn activate(&mut self, data: &Rope, styled_lines: &[StyledText]) {
+        self.fill_or_truncate_view(data, styled_lines);
+        self.update_gutter_width(data);
+        self.is_active = true;
+        self.needs_redraw = true;
     }
 
     pub(super) fn scroll(

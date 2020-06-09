@@ -30,6 +30,20 @@ impl TextView {
         TextView { buffer, id }
     }
 
+    fn deactivate(&mut self) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.deactivate_view(&self.id);
+        }
+    }
+
+    fn activate(&mut self) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.activate_view(&self.id);
+        }
+    }
+
     fn move_cursor(&mut self, mo: MotionOrObj) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
@@ -188,10 +202,15 @@ impl TextPane {
     {
         for i in 0..self.views.len() {
             if Rc::ptr_eq(&self.views[i].buffer, &buf) {
-                self.active = i;
+                if i != self.active {
+                    self.views[self.active].deactivate();
+                    self.views[i].activate();
+                    self.active = i;
+                }
                 return;
             }
         }
+        self.views[self.active].deactivate();
         let view_id = f();
         let view = TextView::new(self.params.clone(), buf, view_id);
         self.active = self.views.len();
@@ -199,14 +218,22 @@ impl TextPane {
     }
 
     pub(crate) fn next_buffer(&mut self) {
-        self.active = (self.active + 1) % self.views.len();
+        if self.views.len() > 1 {
+            self.views[self.active].deactivate();
+            self.active = (self.active + 1) % self.views.len();
+            self.views[self.active].activate();
+        }
     }
 
     pub(crate) fn prev_buffer(&mut self) {
-        if self.active == 0 {
-            self.active = self.views.len() - 1;
-        } else {
-            self.active -= 1;
+        if self.views.len() > 1 {
+            self.views[self.active].deactivate();
+            if self.active == 0 {
+                self.active = self.views.len() - 1;
+            } else {
+                self.active -= 1;
+            }
+            self.views[self.active].activate();
         }
     }
 

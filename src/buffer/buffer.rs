@@ -80,6 +80,17 @@ impl Buffer {
         self.views.remove(id);
     }
 
+    pub(crate) fn activate_view(&mut self, id: &BufferViewID) {
+        self.views
+            .get_mut(id)
+            .unwrap()
+            .activate(&self.data, &self.styled_lines);
+    }
+
+    pub(crate) fn deactivate_view(&mut self, id: &BufferViewID) {
+        self.views.get_mut(id).unwrap().deactivate();
+    }
+
     pub(crate) fn scroll_view(&mut self, id: &BufferViewID, vec: Vector2D<i32, PixelSize>) {
         self.views
             .get_mut(id)
@@ -314,7 +325,7 @@ impl Buffer {
         };
         self.rehighlight_range(tree_sitter::Range {
             start_byte: self.data.line_to_byte(linum),
-            end_byte: end_byte,
+            end_byte,
             start_point: Point::new(linum, 0),
             end_point: Point::new(end_linum, end_col),
         });
@@ -325,8 +336,10 @@ impl Buffer {
                 view.cursor
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
-            view.reshape(&self.data, &self.styled_lines);
-            view.snap_to_cursor(&self.data, &self.styled_lines);
+            if view.is_active {
+                view.reshape(&self.data, &self.styled_lines);
+                view.snap_to_cursor(&self.data, &self.styled_lines);
+            }
         }
     }
 
@@ -470,7 +483,7 @@ impl Buffer {
             (lb, lb + llen)
         };
         self.rehighlight_range(tree_sitter::Range {
-            start_byte: start_byte,
+            start_byte,
             end_byte: end_byte,
             start_point: Point::new(linum, 0),
             end_point: Point::new(linum, end_byte - start_byte),
@@ -493,8 +506,10 @@ impl Buffer {
                         .sync_and_update_char_idx_left(&self.data, self.tab_width);
                 }
             }
-            view.reshape(&self.data, &self.styled_lines);
-            view.snap_to_cursor(&self.data, &self.styled_lines);
+            if view.is_active {
+                view.reshape(&self.data, &self.styled_lines);
+                view.snap_to_cursor(&self.data, &self.styled_lines);
+            }
         }
     }
 
@@ -616,8 +631,10 @@ impl Buffer {
                     }
                     view.cursor
                         .sync_and_update_char_idx_left(&self.data, self.tab_width);
-                    view.reshape(&self.data, &self.styled_lines);
-                    view.snap_to_cursor(&self.data, &self.styled_lines);
+                    if view.is_active {
+                        view.reshape(&self.data, &self.styled_lines);
+                        view.snap_to_cursor(&self.data, &self.styled_lines);
+                    }
                 }
             })
     }
@@ -665,7 +682,9 @@ impl Buffer {
             self.indent_tabs = project.indent_tabs.unwrap_or(self.indent_tabs);
         }
         for view in self.views.values_mut() {
-            view.reshape(&self.data, &self.styled_lines);
+            if view.is_active {
+                view.reshape(&self.data, &self.styled_lines);
+            }
         }
 
         match File::create(path) {
