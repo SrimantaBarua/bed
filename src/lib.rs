@@ -21,6 +21,7 @@ mod font;
 mod input;
 mod opengl;
 mod painter;
+mod project;
 mod style;
 mod text;
 mod textview;
@@ -73,6 +74,7 @@ impl Bed {
         let config = Rc::new(config::Config::load());
         let ts_core = ts::TsCore::new();
         let theme_set = theme::ThemeSet::load();
+        let projects = project::Projects::load();
 
         let input_state = input::State::new();
         let mut input_actions = Vec::new();
@@ -106,7 +108,8 @@ impl Bed {
             .unwrap_or_else(|| theme_set.0.get(DEFAULT_THEME).unwrap())
             .clone();
 
-        let mut buffer_mgr = buffer::BufferMgr::new(ts_core, config.clone(), theme.clone());
+        let mut buffer_mgr =
+            buffer::BufferMgr::new(ts_core, projects, config.clone(), theme.clone());
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))
@@ -138,8 +141,8 @@ impl Bed {
             dpi,
             text_shaper,
             rect: textview_rect,
-            gutter_face_key: gutter_face_key,
-            gutter_text_size: gutter_text_size,
+            gutter_face_key,
+            gutter_text_size,
             gutter_padding: config.gutter_padding,
         };
         let textview_tree = textview::TextTree::new(view_params, buf, view_id);
@@ -147,12 +150,12 @@ impl Bed {
         window.show();
 
         let mut bed = Bed {
-            window: window,
-            painter: painter,
+            window,
+            painter,
             input_state,
             buffer_mgr,
             cmd_prompt,
-            textview_tree: textview_tree,
+            textview_tree,
             in_cmd_mode: false,
         };
 

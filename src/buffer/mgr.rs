@@ -7,6 +7,7 @@ use std::rc::{Rc, Weak};
 use fnv::FnvHashMap;
 
 use crate::config::Config;
+use crate::project::Projects;
 use crate::theme::Theme;
 use crate::ts::TsCore;
 
@@ -19,6 +20,7 @@ pub(crate) struct BufferMgr {
     id_buf_map: FnvHashMap<BufferID, Weak<RefCell<Buffer>>>,
     next_view_id: usize,
     next_buf_id: usize,
+    projects: Projects,
     ts_core: TsCore,
     theme: Rc<Theme>,
     config: Rc<Config>,
@@ -27,7 +29,12 @@ pub(crate) struct BufferMgr {
 // TODO: Periodically clear out Weak buffers with a strong count of 0
 
 impl BufferMgr {
-    pub(crate) fn new(ts_core: TsCore, config: Rc<Config>, theme: Rc<Theme>) -> BufferMgr {
+    pub(crate) fn new(
+        ts_core: TsCore,
+        projects: Projects,
+        config: Rc<Config>,
+        theme: Rc<Theme>,
+    ) -> BufferMgr {
         BufferMgr {
             path_id_map: FnvHashMap::default(),
             id_path_map: FnvHashMap::default(),
@@ -36,7 +43,8 @@ impl BufferMgr {
             next_buf_id: 0,
             ts_core,
             theme,
-            config: config,
+            projects,
+            config,
         }
     }
 
@@ -59,7 +67,7 @@ impl BufferMgr {
             .and_then(|weak_ref| weak_ref.upgrade())
             .map(|buffer| {
                 (&mut *buffer.borrow_mut())
-                    .reload_from_file(path, &self.ts_core)
+                    .reload_from_file(path, self.projects.project_for_path(path), &self.ts_core)
                     .map(|_| buffer.clone())
             })
             .unwrap_or_else(|| {
@@ -73,6 +81,7 @@ impl BufferMgr {
                 Buffer::from_file(
                     bid,
                     path,
+                    self.projects.project_for_path(path),
                     &self.ts_core,
                     self.config.clone(),
                     self.theme.clone(),
@@ -103,14 +112,17 @@ impl BufferMgr {
         };
         if let Some(rcbuf) = self.id_buf_map.get_mut(&id).and_then(|wr| wr.upgrade()) {
             let buf = &mut *rcbuf.borrow_mut();
-            Some(buf.write(&path, &self.ts_core).map(|nb| {
-                if let Some(p) = self.id_path_map.get(&id) {
-                    self.path_id_map.remove(p);
-                }
-                self.id_path_map.insert(id, path.to_owned());
-                self.path_id_map.insert(path, id);
-                nb
-            }))
+            Some(
+                buf.write(&path, self.projects.project_for_path(&path), &self.ts_core)
+                    .map(|nb| {
+                        if let Some(p) = self.id_path_map.get(&id) {
+                            self.path_id_map.remove(p);
+                        }
+                        self.id_path_map.insert(id, path.to_owned());
+                        self.path_id_map.insert(path, id);
+                        nb
+                    }),
+            )
         } else {
             self.id_buf_map.remove(&id);
             if let Some(path) = self.id_path_map.remove(&id) {

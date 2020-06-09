@@ -16,6 +16,7 @@ use crate::common::{rope_trim_newlines, PixelSize};
 use crate::config::Config;
 use crate::input::{Motion, MotionOrObj, Object};
 use crate::painter::Painter;
+use crate::project::Project;
 use crate::style::{Color, TextStyle};
 use crate::theme::Theme;
 use crate::ts::TsCore;
@@ -40,6 +41,7 @@ pub(crate) struct Buffer {
     parser: Option<Parser>,
     hl_query: Option<Rc<Query>>,
     tree: Option<Tree>,
+    project: Option<Rc<Project>>,
     theme: Rc<Theme>,
     config: Rc<Config>,
 }
@@ -514,12 +516,14 @@ impl Buffer {
             config,
             tab_width,
             indent_tabs,
+            project: None,
         }
     }
 
     pub(super) fn from_file(
         buffer_id: BufferID,
         path: &str,
+        project: Option<Rc<Project>>,
         ts_core: &TsCore,
         config: Rc<Config>,
         theme: Rc<Theme>,
@@ -539,11 +543,16 @@ impl Buffer {
             .and_then(|s| ts_core.parser_from_extension(s))
             .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
             .unwrap_or((None, None, None));
-        let (tab_width, indent_tabs) = filetype
+        let (mut tab_width, mut indent_tabs) = filetype
             .as_ref()
             .and_then(|ft| config.filetypes.get(ft))
             .map(|ft| (ft.tab_width, ft.indent_tabs))
             .unwrap_or((config.tab_width, config.indent_tabs));
+
+        if let Some(project) = &project {
+            tab_width = project.tab_width.unwrap_or(tab_width);
+            indent_tabs = project.indent_tabs.unwrap_or(indent_tabs);
+        }
         let mut ret = Buffer {
             buffer_id,
             data: rope,
@@ -557,16 +566,23 @@ impl Buffer {
             config,
             tab_width,
             indent_tabs,
+            project,
         };
         ret.recreate_parse_tree();
         Ok(ret)
     }
 
-    pub(super) fn reload_from_file(&mut self, path: &str, ts_core: &TsCore) -> IOResult<()> {
+    pub(super) fn reload_from_file(
+        &mut self,
+        path: &str,
+        project: Option<Rc<Project>>,
+        ts_core: &TsCore,
+    ) -> IOResult<()> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
             .map(|rope| {
                 self.data = rope;
+                self.project = project;
                 self.styled_lines.clear();
                 for line in self.data.lines() {
                     self.styled_lines
@@ -590,6 +606,10 @@ impl Buffer {
                 self.hl_query = hl_query;
                 self.recreate_parse_tree();
 
+                if let Some(project) = &self.project {
+                    self.tab_width = project.tab_width.unwrap_or(self.tab_width);
+                    self.indent_tabs = project.indent_tabs.unwrap_or(self.indent_tabs);
+                }
                 for view in self.views.values_mut() {
                     if view.cursor.char_idx > self.data.len_chars() {
                         view.cursor.char_idx = self.data.len_chars();
@@ -604,7 +624,13 @@ impl Buffer {
 
     // -------- Write buffer contents ----------------
 
-    pub(super) fn write(&mut self, path: &str, ts_core: &TsCore) -> IOResult<usize> {
+    pub(super) fn write(
+        &mut self,
+        path: &str,
+        project: Option<Rc<Project>>,
+        ts_core: &TsCore,
+    ) -> IOResult<usize> {
+        self.project = project;
         let len = self.data.len_bytes();
 
         let (filetype, parser, hl_query) = Path::new(path)
@@ -631,11 +657,15 @@ impl Buffer {
                 self.styled_lines
                     .push(default_hl_for_line(line, self.theme.textview.foreground));
             }
-
             self.recreate_parse_tree();
-            for view in self.views.values_mut() {
-                view.reshape(&self.data, &self.styled_lines);
-            }
+        }
+
+        if let Some(project) = &self.project {
+            self.tab_width = project.tab_width.unwrap_or(self.tab_width);
+            self.indent_tabs = project.indent_tabs.unwrap_or(self.indent_tabs);
+        }
+        for view in self.views.values_mut() {
+            view.reshape(&self.data, &self.styled_lines);
         }
 
         match File::create(path) {
