@@ -122,7 +122,7 @@ impl State {
     }
 
     pub(crate) fn handle_key(&mut self, key: Key, md: Modifiers, actions: &mut Vec<Action>) {
-        let verb_count = self.verb_count.parse().unwrap_or(1);
+        let _verb_count = self.verb_count.parse().unwrap_or(1);
         match self.mode {
             Mode::Normal => match key {
                 // Basic movement
@@ -146,6 +146,8 @@ impl State {
                 Key::Right => actions.push(act!(MOV, RIGHT, 1)),
                 Key::Home => actions.push(act!(MOV, LINE_START)),
                 Key::End => actions.push(act!(MOV, LINE_END)),
+                Key::N if md.contains(Modifiers::Control) => actions.push(act!(MOV, DOWN, 1)),
+                Key::P if md.contains(Modifiers::Control) => actions.push(act!(MOV, UP, 1)),
                 // Insert
                 Key::Enter => actions.push(Action::InsertChar('\n')),
                 Key::Tab => actions.push(Action::InsertChar('\t')),

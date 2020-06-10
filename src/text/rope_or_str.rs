@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cmp::PartialEq;
+use std::fmt;
 use std::ops::Range;
 use std::str::Chars as SChars;
 
@@ -10,7 +11,7 @@ use unicode_segmentation::{Graphemes, UnicodeSegmentation};
 
 use crate::common::RopeGraphemes;
 
-#[derive(Eq)]
+#[derive(Debug, Eq)]
 pub(crate) enum RopeOrStr<'a> {
     Rope(RopeSlice<'a>),
     Str(&'a str),
@@ -39,6 +40,15 @@ impl<'a> PartialEq for RopeOrStr<'a> {
                 RopeOrStr::Rope(or) => ms == or,
                 RopeOrStr::Str(os) => ms == os,
             },
+        }
+    }
+}
+
+impl<'a> fmt::Display for RopeOrStr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RopeOrStr::Rope(r) => write!(f, "{}", r),
+            RopeOrStr::Str(s) => write!(f, "{}", s),
         }
     }
 }

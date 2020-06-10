@@ -67,16 +67,16 @@
                 "foreground" : "#F29E74"
             },
             "property" : {
-                "foreground" : "#EC5F67"
+                "foreground" : "#F28779"
             },
             "punctuation" : {
-                "foreground" : "#D9D7CE"
+                "foreground" : "#CBCCC6"
             },
             "punctuation.accessor" : {
                 "foreground" : "#F29E74"
             },
             "punctuation.delimiter" : {
-                "foreground" : "#D9D7CECC"
+                "foreground" : "#CBCCC6CC"
             },
             "punctuation.tag" : {
                 "foreground": "#5CCFE690"
@@ -88,7 +88,7 @@
                 "foreground" : "#FFA759"
             },
             "variable" : {
-                "foreground" : "#D9D7CE"
+                "foreground" : "#CBCCC6"
             },
             "variable.builtin" : {
                 "foreground" : "#5CCFE6",

@@ -1,0 +1,103 @@
+{
+    "ayu-light" : {
+        "textview" : {
+            "background" : "#FAFAFA",
+            "foreground" : "#6C7680",
+            "cursor" : "#FF9940",
+            "cursor_line" : "#959DA61A",
+            "border_width" : 1,
+            "border_color" : "#ABB0B6"
+        },
+        "gutter" : {
+            "background" : "#FAFAFA",
+            "foreground" : "#959DA666"
+        },
+        "prompt" : {
+            "background" : "#FAFAFA",
+            "foreground" : "#6C7680",
+            "cursor" : "#FF9940"
+        },
+        "completion" : {
+            "background" : "#FFFFFF",
+            "foreground" : "#6C7680"
+        },
+
+        "syntax" : {
+            "comment" : {
+                "foreground" : "#ABB0B6",
+                "slant" : "italic"
+            },
+            "constant" : {
+                "foreground" : "#A37ACC"
+            },
+            "constructor" : {
+                "foreground" : "#F2AE49"
+            },
+            "decorator" : {
+                "foreground" : "#F2AE49"
+            },
+            "funccall" : {
+                "foreground" : "#F2AE49"
+            },
+            "funccall.macro" : {
+                "foreground" : "#ED9366"
+            },
+            "funcdefn" : {
+                "foreground" : "#F2AE49"
+            },
+            "keyword" : {
+                "foreground" : "#FA8D3E"
+            },
+            "label" : {
+                "foreground" : "#399EE6"
+            },
+            "literal" : {
+                "foreground" : "#A37ACC"
+            },
+            "literal.escape" : {
+                "foreground" : "#4CBF99"
+            },
+            "literal.string" : {
+                "foreground" : "#86B300"
+            },
+            "macrodefn" : {
+                "foreground" : "#A37ACC"
+            },
+            "operator" : {
+                "foreground" : "#ED9366"
+            },
+            "property" : {
+                "foreground" : "#F07171"
+            },
+            "punctuation" : {
+                "foreground" : "#6C7680"
+            },
+            "punctuation.accessor" : {
+                "foreground" : "#ED9366"
+            },
+            "punctuation.delimiter" : {
+                "foreground" : "#6C7680CC"
+            },
+            "punctuation.tag" : {
+                "foreground": "#55B4D490"
+            },
+            "tag" : {
+                "foreground": "#55B4D4"
+            },
+            "type" : {
+                "foreground" : "#FA8D3E"
+            },
+            "variable" : {
+                "foreground" : "#6C7680"
+            },
+            "variable.builtin" : {
+                "foreground" : "#55B4D4",
+                "slant" : "italic"
+            },
+            "variable.parameter" : {
+                "foreground" : "#A37ACC"
+            }
+        }
+    }
+}
+

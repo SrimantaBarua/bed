@@ -162,7 +162,7 @@ impl BufferView {
         let height_above = origin.y - self.ascender as u32;
         let max_height = max(height_above, height_below);
 
-        let (mut height, mut width) = (self.completion_padding * 2, 0);
+        let (mut height, mut width) = (0, 0);
         let shaper = &mut *self.text_shaper.borrow_mut();
         for item in list {
             if height + self.completion_height > max_height {
@@ -441,7 +441,7 @@ impl BufferView {
                 self.theme.completion.background,
             );
             let basex = self.completion_padding as i32;
-            let mut pos = point2(basex, self.completion_padding as i32);
+            let mut pos = point2(basex, 0);
             for line in &self.completion_shaped {
                 pos.y += self.completion_ascender;
                 painter.draw_shaped_text(

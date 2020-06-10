@@ -64,7 +64,9 @@ impl CompletionSource {
                         if let Ok(typ) = dirent.file_type() {
                             if string.starts_with(base) {
                                 if typ.is_dir() {
-                                    string.push('/');
+                                    string = " ".to_owned() + &string + "/";
+                                } else {
+                                    string = " ".to_owned() + &string;
                                 }
                                 list.push(string);
                             }

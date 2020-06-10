@@ -107,7 +107,7 @@ fn default_completion_font_scale() -> f32 {
 }
 
 fn default_completion_padding() -> u32 {
-    4
+    8
 }
 
 fn default_tab_width() -> usize {

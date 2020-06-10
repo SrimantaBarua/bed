@@ -18,9 +18,7 @@ pub(crate) struct TextShaper {
 
 impl TextShaper {
     pub(crate) fn new(font_core: FontCore) -> TextShaper {
-        TextShaper {
-            font_core: font_core,
-        }
+        TextShaper { font_core }
     }
 
     pub(crate) fn get_raster(
@@ -71,11 +69,11 @@ impl TextShaper {
 
         let input_iter = InputRangesIter {
             slice: line,
-            faces: faces,
-            styles: styles,
-            sizes: sizes,
-            colors: colors,
-            unders: unders,
+            faces,
+            styles,
+            sizes,
+            colors,
+            unders,
             cidx: 0,
         };
 
@@ -86,73 +84,77 @@ impl TextShaper {
             input_iter.filter(|x| x.0.len_chars() > 0)
         {
             let mut chars = slice.chars().peekable();
-            let first_char = chars.next().unwrap();
-            let face_key = if first_char == '\t' {
-                self.font_core
-                    .find_for_char(base_face, ' ')
-                    .unwrap_or(base_face)
-            } else {
-                self.font_core
-                    .find_for_char(base_face, first_char)
-                    .unwrap_or(base_face)
-            };
 
-            let (buf, font) = self.font_core.get(face_key, style).unwrap();
-            buf.clear_contents();
-            if first_char == '\t' {
-                let next_tab = (x / tab_width) * tab_width + tab_width;
-                while x < next_tab {
-                    buf.add(' ', cidx);
+            'inner: loop {
+                let first_char = chars.next().unwrap();
+                let face_key = if first_char == '\t' {
+                    self.font_core
+                        .find_for_char(base_face, ' ')
+                        .unwrap_or(base_face)
+                } else {
+                    self.font_core
+                        .find_for_char(base_face, first_char)
+                        .unwrap_or(base_face)
+                };
+
+                let (buf, font) = self.font_core.get(face_key, style).unwrap();
+                buf.clear_contents();
+                if first_char == '\t' {
+                    let next_tab = (x / tab_width) * tab_width + tab_width;
+                    while x < next_tab {
+                        buf.add(' ', cidx);
+                        cidx += 1;
+                        x += 1;
+                    }
+                } else {
+                    buf.add(first_char, cidx);
                     cidx += 1;
                     x += 1;
                 }
-            } else {
-                buf.add(first_char, cidx);
-                cidx += 1;
-                x += 1;
-            }
 
-            let face_metrics = font.raster.get_metrics(size, dpi);
-            ret.metrics.ascender = max(ret.metrics.ascender, face_metrics.ascender);
-            ret.metrics.descender = min(ret.metrics.descender, face_metrics.descender);
-            ret.metrics.underline_position =
-                min(ret.metrics.underline_position, face_metrics.underline_pos);
-            ret.metrics.underline_thickness = max(
-                ret.metrics.underline_thickness,
-                face_metrics.underline_thickness,
-            );
+                let face_metrics = font.raster.get_metrics(size, dpi);
+                ret.metrics.ascender = max(ret.metrics.ascender, face_metrics.ascender);
+                ret.metrics.descender = min(ret.metrics.descender, face_metrics.descender);
+                ret.metrics.underline_position =
+                    min(ret.metrics.underline_position, face_metrics.underline_pos);
+                ret.metrics.underline_thickness = max(
+                    ret.metrics.underline_thickness,
+                    face_metrics.underline_thickness,
+                );
 
-            while let Some(c) = chars.peek() {
-                if *c == '\t' {
-                    if font.raster.has_glyph_for_char(' ') {
-                        let next_tab = (x / tab_width) * tab_width + tab_width;
-                        while x < next_tab {
-                            buf.add(' ', cidx);
+                while let Some(c) = chars.peek() {
+                    if *c == '\t' {
+                        if font.raster.has_glyph_for_char(' ') {
+                            let next_tab = (x / tab_width) * tab_width + tab_width;
+                            while x < next_tab {
+                                buf.add(' ', cidx);
+                                cidx += 1;
+                                x += 1;
+                            }
+                            chars.next();
+                            continue;
+                        }
+                    } else {
+                        if font.raster.has_glyph_for_char(*c) {
+                            buf.add(*c, cidx);
                             cidx += 1;
                             x += 1;
+                            chars.next();
+                            continue;
                         }
-                        chars.next();
-                        continue;
                     }
-                } else {
-                    if font.raster.has_glyph_for_char(*c) {
-                        buf.add(*c, cidx);
-                        cidx += 1;
-                        x += 1;
-                        chars.next();
-                        continue;
-                    }
+                    font.shaper.set_scale(size, dpi);
+                    buf.guess_segment_properties();
+                    let gis = harfbuzz::shape(&font.shaper, buf);
+                    ret.push(gis, face_key, style, size, color, under);
+                    continue 'inner;
                 }
                 font.shaper.set_scale(size, dpi);
                 buf.guess_segment_properties();
                 let gis = harfbuzz::shape(&font.shaper, buf);
                 ret.push(gis, face_key, style, size, color, under);
-                continue 'outer;
+                break;
             }
-            font.shaper.set_scale(size, dpi);
-            buf.guess_segment_properties();
-            let gis = harfbuzz::shape(&font.shaper, buf);
-            ret.push(gis, face_key, style, size, color, under);
         }
 
         ret
@@ -175,8 +177,8 @@ impl TextShaper {
         font.shaper.set_scale(size, dpi);
         let glyphs = harfbuzz::shape(&font.shaper, buf).collect();
         ShapedText {
-            metrics: metrics,
-            glyphs: glyphs,
+            metrics,
+            glyphs,
             cursor_positions: vec![0],
             faces: vec![(1, face)],
             styles: vec![(1, style)],
