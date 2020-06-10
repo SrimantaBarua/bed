@@ -2,7 +2,6 @@
 
 use std::cell::RefCell;
 use std::env;
-use std::path::Path;
 use std::rc::Rc;
 use std::{thread, time};
 
@@ -32,7 +31,7 @@ mod ts;
 mod window;
 
 use buffer::{BufferViewCreateParams, CursorStyle};
-use common::PixelSize;
+use common::{abspath, PixelSize};
 use input::{Action as BedAction, MotionOrObj as BedMotionOrObj};
 
 #[cfg(target_os = "linux")]
@@ -44,29 +43,6 @@ static DEFAULT_THEME: &str = "default";
 
 static CURSOR_LINE_WIDTH: i32 = 2;
 static CURSOR_BLOCK_WIDTH: i32 = 10;
-
-fn abspath(spath: &str) -> String {
-    let path = Path::new(spath);
-    if path.is_absolute() {
-        spath.to_owned()
-    } else if path.starts_with("~") {
-        let mut home_dir = directories::BaseDirs::new()
-            .expect("failed to get base directories")
-            .home_dir()
-            .to_owned();
-        home_dir.push(path.strip_prefix("~").expect("failed to stip '~' prefix"));
-        home_dir
-            .to_str()
-            .expect("failed to convert path to string")
-            .to_owned()
-    } else {
-        let mut wdir = env::current_dir().expect("failed to get current directory");
-        wdir.push(spath);
-        wdir.to_str()
-            .expect("failed to convert path to string")
-            .to_owned()
-    }
-}
 
 pub struct Bed {
     textview_tree: textview::TextTree,
@@ -105,9 +81,13 @@ impl Bed {
         let prompt_face_key = font_core
             .find(&config.prompt_font_family)
             .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
+        let completion_face_key = font_core
+            .find(&config.completion_font_family)
+            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
         let text_size = style::TextSize::from_f32(config.font_size);
         let gutter_text_size = text_size.scale(config.gutter_font_scale);
         let prompt_text_size = style::TextSize::from_f32(config.prompt_font_size);
+        let completion_text_size = text_size.scale(config.completion_font_scale);
 
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
@@ -153,6 +133,9 @@ impl Bed {
             gutter_face_key,
             gutter_text_size,
             gutter_padding: config.gutter_padding,
+            completion_face_key,
+            completion_text_size,
+            completion_padding: config.completion_padding,
         };
         let textview_tree = textview::TextTree::new(view_params, buf, view_id, theme);
 
@@ -204,6 +187,7 @@ impl Bed {
                     }
                     WindowEvent::MouseButton(MouseButtonLeft, Action::Press, _) => {
                         bed.input_state.set_normal_mode();
+                        bed.textview_tree.active_mut().stop_completion();
                         bed.move_cursor_to_mouse();
                         bed.set_cursor_style(CursorStyle::Block);
                     }

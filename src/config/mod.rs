@@ -32,6 +32,12 @@ pub(crate) struct Config {
     pub(crate) prompt_font_family: String,
     #[serde(default = "default_font_size")]
     pub(crate) prompt_font_size: f32,
+    #[serde(default = "default_font_family")]
+    pub(crate) completion_font_family: String,
+    #[serde(default = "default_completion_font_scale")]
+    pub(crate) completion_font_scale: f32,
+    #[serde(default = "default_completion_padding")]
+    pub(crate) completion_padding: u32,
     #[serde(default = "default_tab_width")]
     pub(crate) tab_width: usize,
     #[serde(default = "default_indent_tabs")]
@@ -66,23 +72,14 @@ impl Default for Config {
             gutter_padding: default_gutter_padding(),
             prompt_font_family: default_font_family(),
             prompt_font_size: default_font_size(),
+            completion_font_family: default_font_family(),
+            completion_font_scale: default_completion_font_scale(),
+            completion_padding: default_completion_padding(),
             tab_width: default_tab_width(),
             indent_tabs: default_indent_tabs(),
             filetypes: FnvHashMap::default(),
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct ConfigInner {
-    theme: Option<String>,
-    font_family: Option<String>,
-    font_size: Option<f32>,
-    gutter_font_family: Option<String>,
-    gutter_font_scale: Option<f32>,
-    gutter_padding: Option<u32>,
-    prompt_font_family: Option<String>,
-    prompt_font_size: Option<f32>,
 }
 
 fn default_theme() -> String {
@@ -103,6 +100,14 @@ fn default_gutter_font_scale() -> f32 {
 
 fn default_gutter_padding() -> u32 {
     8
+}
+
+fn default_completion_font_scale() -> f32 {
+    1.0
+}
+
+fn default_completion_padding() -> u32 {
+    4
 }
 
 fn default_tab_width() -> usize {

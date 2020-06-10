@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 mod buffer;
+mod completion;
 mod cursor;
 mod mgr;
 mod styled;

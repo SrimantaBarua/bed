@@ -2,9 +2,11 @@
     "theme": "ayu-mirage",
     "font_family": "monospace",
     "font_size": 7.25,
-    "gutter_padding" : 12,
     "gutter_font_family" : "monospace",
     "gutter_font_scale" : 0.9,
+    "gutter_padding" : 12,
+    "prompt_font_family" : "monospace",
+    "prompt_font_size" : 7.25,
     "tab_width" : 8,
     "indent_tabs" : true,
 

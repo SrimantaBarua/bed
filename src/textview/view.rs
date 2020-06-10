@@ -114,6 +114,13 @@ impl TextView {
         }
     }
 
+    fn stop_completion(&mut self) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.stop_view_completion(&self.id)
+        }
+    }
+
     fn draw(&self, painter: &mut Painter) {
         {
             let buffer = &mut *self.buffer.borrow_mut();
@@ -274,6 +281,10 @@ impl TextPane {
         for v in &mut self.views {
             v.set_rect(rect);
         }
+    }
+
+    pub(crate) fn stop_completion(&mut self) {
+        self.views[self.active].stop_completion();
     }
 
     pub(super) fn draw(&self, painter: &mut Painter) {

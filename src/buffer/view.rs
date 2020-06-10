@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::RefCell;
+use std::cmp::{max, min};
 use std::collections::VecDeque;
 use std::fmt::Write;
 use std::rc::Rc;
@@ -29,6 +30,9 @@ pub(crate) struct BufferViewCreateParams {
     pub(crate) gutter_face_key: FaceKey,
     pub(crate) gutter_text_size: TextSize,
     pub(crate) gutter_padding: u32,
+    pub(crate) completion_face_key: FaceKey,
+    pub(crate) completion_text_size: TextSize,
+    pub(crate) completion_padding: u32,
 }
 
 pub(super) struct BufferView {
@@ -57,6 +61,16 @@ pub(super) struct BufferView {
     gutter_text_size: TextSize,
     gutter_padding: u32,
     gutter_width: u32,
+    // Completion popup
+    completion_active: bool,
+    completion_shaped: VecDeque<ShapedText>,
+    completion_rect: Rect<u32, PixelSize>,
+    completion_ascender: i32,
+    completion_descender: i32,
+    completion_height: u32,
+    completion_face_key: FaceKey,
+    completion_text_size: TextSize,
+    completion_padding: u32,
     // Misc.
     theme: Rc<Theme>,
 }
@@ -75,6 +89,14 @@ impl BufferView {
                 .get_raster(params.face_key, TextStyle::default())
                 .unwrap();
             let metrics = raster.get_metrics(params.text_size, params.dpi);
+            (metrics.ascender, metrics.descender)
+        };
+        let (completion_ascender, completion_descender) = {
+            let shaper = &mut *params.text_shaper.borrow_mut();
+            let raster = shaper
+                .get_raster(params.completion_face_key, TextStyle::default())
+                .unwrap();
+            let metrics = raster.get_metrics(params.completion_text_size, params.dpi);
             (metrics.ascender, metrics.descender)
         };
         let mut view = BufferView {
@@ -99,6 +121,15 @@ impl BufferView {
             gutter_text_size: params.gutter_text_size,
             gutter_padding: params.gutter_padding,
             gutter_width: 0,
+            completion_active: false,
+            completion_shaped: VecDeque::new(),
+            completion_rect: Rect::new(params.rect.origin, size2(0, 0)),
+            completion_ascender,
+            completion_descender,
+            completion_height: (completion_ascender - completion_descender) as u32,
+            completion_face_key: params.completion_face_key,
+            completion_text_size: params.completion_text_size,
+            completion_padding: params.completion_padding,
             theme,
         };
         view.fill_or_truncate_view(data, styled_lines);
@@ -116,6 +147,70 @@ impl BufferView {
         self.fill_or_truncate_view(data, styled_lines);
         self.update_gutter_width(data);
         self.is_active = true;
+        self.needs_redraw = true;
+    }
+
+    pub(crate) fn start_completion(&mut self, list: &[String]) {
+        if list.len() == 0 {
+            return;
+        }
+        let mut origin = match self.cursor_baseline_to_relative_point() {
+            Some(point) => point,
+            None => return,
+        };
+        let height_below = self.rect.size.height - (origin.y as i32 - self.descender) as u32;
+        let height_above = origin.y - self.ascender as u32;
+        let max_height = max(height_above, height_below);
+
+        let (mut height, mut width) = (self.completion_padding * 2, 0);
+        let shaper = &mut *self.text_shaper.borrow_mut();
+        for item in list {
+            if height + self.completion_height > max_height {
+                break;
+            }
+            let rs = RopeOrStr::from(item.as_ref());
+            let lc = rs.len_chars();
+            let shaped = shaper.shape_line(
+                rs,
+                self.dpi,
+                self.tab_width,
+                &[(lc, self.completion_face_key)],
+                &[(lc, TextStyle::default())],
+                &[(lc, self.completion_text_size)],
+                &[(lc, self.theme.completion.foreground)],
+                &[(lc, None)],
+            );
+            height += self.completion_height;
+            width = max(width, shaped.width() as u32);
+            self.completion_shaped.push_back(shaped);
+        }
+        if self.completion_shaped.len() == 0 {
+            return;
+        }
+        width += 2 * self.completion_padding;
+
+        if height > height_below {
+            origin.y -= self.ascender as u32 + height;
+        } else {
+            origin.y = (origin.y as i32 - self.descender) as u32;
+        }
+
+        // TODO: Let completion popup extend beyond view, within limits of window
+        width = min(width, self.rect.size.width - self.gutter_width);
+        if origin.x + width > self.rect.size.width - self.gutter_width {
+            origin.x = self.rect.size.width - self.gutter_width - width;
+        }
+        origin += self.rect.origin.to_vector();
+        origin.x += self.gutter_width;
+        self.completion_rect = Rect::new(origin, size2(width, height));
+
+        self.completion_active = true;
+        self.needs_redraw = true;
+    }
+
+    pub(crate) fn stop_completion(&mut self) {
+        self.completion_shaped.clear();
+        self.completion_active = false;
         self.needs_redraw = true;
     }
 
@@ -336,6 +431,28 @@ impl BufferView {
                 painter.draw_shaped_text(shaper, pos, line, cursor, text_rect.size.width);
                 pos.y -= self.descender;
                 linum += 1;
+            }
+        }
+
+        // Draw completion
+        if self.completion_active {
+            let mut painter = painter.widget_ctx(
+                self.completion_rect.cast(),
+                self.theme.completion.background,
+            );
+            let basex = self.completion_padding as i32;
+            let mut pos = point2(basex, self.completion_padding as i32);
+            for line in &self.completion_shaped {
+                pos.y += self.completion_ascender;
+                painter.draw_shaped_text(
+                    shaper,
+                    pos,
+                    line,
+                    None,
+                    self.completion_rect.size.width - self.completion_padding * 2,
+                );
+                pos.y -= self.completion_descender;
+                pos.x = basex;
             }
         }
     }
@@ -589,5 +706,39 @@ impl BufferView {
         let width = shaped.width();
         let width = if width < 0 { 0u32 } else { width as u32 };
         self.gutter_width = self.gutter_padding * 2 + width;
+    }
+
+    fn cursor_baseline_to_relative_point(&self) -> Option<Point2D<u32, PixelSize>> {
+        if !self.cursor.visible
+            || self.cursor.line_num < self.start_line
+            || self.cursor.line_num >= self.start_line + self.shaped_lines.len()
+        {
+            return None;
+        }
+        let y =
+            (self.cursor.line_num - self.start_line) as u32 * self.height + self.ascender as u32;
+        if y < self.yoff {
+            return None;
+        }
+        let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
+        let (mut gidx, mut x) = (0, 0);
+        'outer: for (clusters, _, _, _, _, _) in line.styled_iter() {
+            for clus in clusters {
+                let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
+                if gidx + clus.num_graphemes < self.cursor.line_gidx {
+                    x += width;
+                    gidx += clus.num_graphemes;
+                    continue;
+                }
+                let rem_graphemes = self.cursor.line_gidx - gidx;
+                x += ((rem_graphemes * width as usize) / clus.num_graphemes) as i32;
+                break 'outer;
+            }
+        }
+        if x >= self.xoff as i32 {
+            Some(point2(x as u32 - self.xoff, y - self.yoff))
+        } else {
+            None
+        }
     }
 }

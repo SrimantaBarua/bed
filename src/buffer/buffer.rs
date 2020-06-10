@@ -21,6 +21,7 @@ use crate::style::{Color, TextStyle};
 use crate::theme::Theme;
 use crate::ts::TsCore;
 
+use super::completion::CompletionSource;
 use super::styled::StyledText;
 use super::view::{BufferView, BufferViewCreateParams};
 use super::{BufferID, BufferViewID, CursorStyle};
@@ -91,6 +92,10 @@ impl Buffer {
         self.views.get_mut(id).unwrap().deactivate();
     }
 
+    pub(crate) fn stop_view_completion(&mut self, id: &BufferViewID) {
+        self.views.get_mut(id).unwrap().stop_completion();
+    }
+
     pub(crate) fn scroll_view(&mut self, id: &BufferViewID, vec: Vector2D<i32, PixelSize>) {
         self.views
             .get_mut(id)
@@ -101,6 +106,8 @@ impl Buffer {
     // -------- View cursor manipulation ----------------
     pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mo: MotionOrObj) {
         let view = self.views.get_mut(id).unwrap();
+        view.stop_completion();
+
         let cidx = view.cursor.char_idx;
         match mo {
             MotionOrObj::Motion(Motion::Left(n)) => {
@@ -215,11 +222,15 @@ impl Buffer {
     // -------- View edits -----------------
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
         let view = self.views.get_mut(id).unwrap();
+        view.stop_completion();
+
         let cidx = view.cursor.char_idx;
         let linum = view.cursor.line_num;
         let mut end_linum = linum;
         let mut end_cidx = cidx + 1;
         let mut cursor_nchars = 1;
+
+        let mut is_completion_trigger = false;
 
         match c {
             // Insert pair
@@ -307,7 +318,15 @@ impl Buffer {
                     }
                 }
             }
-            c => self.data.insert_char(cidx, c),
+            c => {
+                self.data.insert_char(cidx, c);
+                is_completion_trigger = true;
+            }
+        }
+
+        let mut completion_list = Vec::new();
+        if is_completion_trigger {
+            CompletionSource::Path.complete(&self.data, end_cidx, &mut completion_list);
         }
 
         let fgcol = self.theme.textview.foreground;
@@ -341,10 +360,19 @@ impl Buffer {
                 view.snap_to_cursor(&self.data, &self.styled_lines);
             }
         }
+
+        if is_completion_trigger {
+            self.views
+                .get_mut(id)
+                .unwrap()
+                .start_completion(&completion_list);
+        }
     }
 
     pub(crate) fn view_delete(&mut self, id: &BufferViewID, mo: MotionOrObj) {
         let view = self.views.get_mut(id).unwrap();
+        view.stop_completion();
+
         let cidx = view.cursor.char_idx;
         let lc = self.data.len_chars();
         let mut linum = view.cursor.line_num;
@@ -484,7 +512,7 @@ impl Buffer {
         };
         self.rehighlight_range(tree_sitter::Range {
             start_byte,
-            end_byte: end_byte,
+            end_byte,
             start_point: Point::new(linum, 0),
             end_point: Point::new(linum, end_byte - start_byte),
         });

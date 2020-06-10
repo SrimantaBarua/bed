@@ -17,6 +17,10 @@
             "foreground" : "#CBCCC6",
             "cursor" : "#FFCC66"
         },
+        "completion" : {
+            "background" : "#343945",
+            "foreground" : "#CBCCC6"
+        },
 
         "syntax" : {
             "comment" : {
