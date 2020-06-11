@@ -10,9 +10,9 @@ use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
-use crate::font::FaceKey;
+use crate::config::Config;
 use crate::painter::Painter;
-use crate::style::{TextSize, TextStyle};
+use crate::style::TextStyle;
 use crate::text::{RopeOrStr, ShapedText, TextShaper};
 use crate::theme::Theme;
 use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
@@ -22,17 +22,10 @@ use super::styled::StyledText;
 
 #[derive(Clone)]
 pub(crate) struct BufferViewCreateParams {
-    pub(crate) face_key: FaceKey,
-    pub(crate) text_size: TextSize,
+    pub(crate) config: Rc<Config>,
     pub(crate) dpi: Size2D<u32, DPI>,
     pub(crate) text_shaper: Rc<RefCell<TextShaper>>,
     pub(crate) rect: Rect<u32, PixelSize>,
-    pub(crate) gutter_face_key: FaceKey,
-    pub(crate) gutter_text_size: TextSize,
-    pub(crate) gutter_padding: u32,
-    pub(crate) completion_face_key: FaceKey,
-    pub(crate) completion_text_size: TextSize,
-    pub(crate) completion_padding: u32,
 }
 
 pub(super) struct BufferView {
@@ -42,8 +35,6 @@ pub(super) struct BufferView {
     pub(super) is_active: bool,
     tab_width: usize,
     // Text shaping
-    face_key: FaceKey,
-    text_size: TextSize,
     dpi: Size2D<u32, DPI>,
     text_shaper: Rc<RefCell<TextShaper>>,
     // Shaped lines and gutter
@@ -57,9 +48,6 @@ pub(super) struct BufferView {
     yoff: u32,
     xoff: u32,
     // Gutter
-    gutter_face_key: FaceKey,
-    gutter_text_size: TextSize,
-    gutter_padding: u32,
     gutter_width: u32,
     // Completion popup
     completion_active: bool,
@@ -68,10 +56,8 @@ pub(super) struct BufferView {
     completion_ascender: i32,
     completion_descender: i32,
     completion_height: u32,
-    completion_face_key: FaceKey,
-    completion_text_size: TextSize,
-    completion_padding: u32,
     // Misc.
+    config: Rc<Config>,
     theme: Rc<Theme>,
 }
 
@@ -83,20 +69,21 @@ impl BufferView {
         styled_lines: &[StyledText],
         tab_width: usize,
     ) -> BufferView {
+        let config = params.config;
         let (ascender, descender) = {
             let shaper = &mut *params.text_shaper.borrow_mut();
             let raster = shaper
-                .get_raster(params.face_key, TextStyle::default())
+                .get_raster(config.textview_face, TextStyle::default())
                 .unwrap();
-            let metrics = raster.get_metrics(params.text_size, params.dpi);
+            let metrics = raster.get_metrics(config.textview_font_size, params.dpi);
             (metrics.ascender, metrics.descender)
         };
         let (completion_ascender, completion_descender) = {
             let shaper = &mut *params.text_shaper.borrow_mut();
             let raster = shaper
-                .get_raster(params.completion_face_key, TextStyle::default())
+                .get_raster(config.completion_face, TextStyle::default())
                 .unwrap();
-            let metrics = raster.get_metrics(params.completion_text_size, params.dpi);
+            let metrics = raster.get_metrics(config.completion_font_size, params.dpi);
             (metrics.ascender, metrics.descender)
         };
         let mut view = BufferView {
@@ -105,8 +92,6 @@ impl BufferView {
             needs_redraw: true,
             is_active: true,
             tab_width,
-            face_key: params.face_key,
-            text_size: params.text_size,
             dpi: params.dpi,
             text_shaper: params.text_shaper,
             ascender,
@@ -117,9 +102,6 @@ impl BufferView {
             start_line: 0,
             yoff: 0,
             xoff: 0,
-            gutter_face_key: params.gutter_face_key,
-            gutter_text_size: params.gutter_text_size,
-            gutter_padding: params.gutter_padding,
             gutter_width: 0,
             completion_active: false,
             completion_shaped: VecDeque::new(),
@@ -127,9 +109,7 @@ impl BufferView {
             completion_ascender,
             completion_descender,
             completion_height: (completion_ascender - completion_descender) as u32,
-            completion_face_key: params.completion_face_key,
-            completion_text_size: params.completion_text_size,
-            completion_padding: params.completion_padding,
+            config,
             theme,
         };
         view.fill_or_truncate_view(data, styled_lines);
@@ -162,7 +142,7 @@ impl BufferView {
         let height_above = origin.y - self.ascender as u32;
         let max_height = max(height_above, height_below);
 
-        let (mut height, mut width) = (0, 0);
+        let (mut height, mut width) = (self.config.completion_padding_vertical * 2, 0);
         let shaper = &mut *self.text_shaper.borrow_mut();
         for item in list {
             if height + self.completion_height > max_height {
@@ -174,9 +154,9 @@ impl BufferView {
                 rs,
                 self.dpi,
                 self.tab_width,
-                &[(lc, self.completion_face_key)],
+                &[(lc, self.config.completion_face)],
                 &[(lc, TextStyle::default())],
-                &[(lc, self.completion_text_size)],
+                &[(lc, self.config.completion_font_size)],
                 &[(lc, self.theme.completion.foreground)],
                 &[(lc, None)],
             );
@@ -187,7 +167,7 @@ impl BufferView {
         if self.completion_shaped.len() == 0 {
             return;
         }
-        width += 2 * self.completion_padding;
+        width += 2 * self.config.completion_padding_horizontal;
 
         if height > height_below {
             origin.y -= self.ascender as u32 + height;
@@ -386,7 +366,7 @@ impl BufferView {
         // Draw gutter
         {
             let mut painter = painter.widget_ctx(gutter_rect.cast(), self.theme.gutter.background);
-            let basex = (self.gutter_width - self.gutter_padding) as i32;
+            let basex = (self.gutter_width - self.config.gutter_padding) as i32;
             let mut pos = point2(basex, -(self.yoff as i32));
             for line in &self.shaped_gutter {
                 pos.x -= line.width();
@@ -440,8 +420,8 @@ impl BufferView {
                 self.completion_rect.cast(),
                 self.theme.completion.background,
             );
-            let basex = self.completion_padding as i32;
-            let mut pos = point2(basex, 0);
+            let basex = self.config.completion_padding_horizontal as i32;
+            let mut pos = point2(basex, self.config.completion_padding_vertical as i32);
             for line in &self.completion_shaped {
                 pos.y += self.completion_ascender;
                 painter.draw_shaped_text(
@@ -449,7 +429,7 @@ impl BufferView {
                     pos,
                     line,
                     None,
-                    self.completion_rect.size.width - self.completion_padding * 2,
+                    self.completion_rect.size.width - (basex as u32) * 2,
                 );
                 pos.y -= self.completion_descender;
                 pos.x = basex;
@@ -479,9 +459,9 @@ impl BufferView {
                 trimmed.into(),
                 self.dpi,
                 self.tab_width,
-                &[(len_chars, self.face_key)],
+                &[(len_chars, self.config.textview_face)],
                 &styled.styles,
-                &[(len_chars, self.text_size)],
+                &[(len_chars, self.config.textview_font_size)],
                 &styled.colors,
                 &styled.unders,
             );
@@ -498,9 +478,9 @@ impl BufferView {
                 rs,
                 self.dpi,
                 self.tab_width,
-                &[(lc, self.gutter_face_key)],
+                &[(lc, self.config.gutter_face)],
                 &[(lc, TextStyle::default())],
-                &[(lc, self.gutter_text_size)],
+                &[(lc, self.config.gutter_font_size)],
                 &[(lc, self.theme.gutter.foreground)],
                 &[(lc, None)],
             );
@@ -536,9 +516,9 @@ impl BufferView {
                 trimmed.into(),
                 self.dpi,
                 self.tab_width,
-                &[(len_chars, self.face_key)],
+                &[(len_chars, self.config.textview_face)],
                 &styled.styles,
-                &[(len_chars, self.text_size)],
+                &[(len_chars, self.config.textview_font_size)],
                 &styled.colors,
                 &styled.unders,
             );
@@ -555,9 +535,9 @@ impl BufferView {
                 rs,
                 self.dpi,
                 self.tab_width,
-                &[(lc, self.gutter_face_key)],
+                &[(lc, self.config.gutter_face)],
                 &[(lc, TextStyle::default())],
-                &[(lc, self.gutter_text_size)],
+                &[(lc, self.config.gutter_font_size)],
                 &[(lc, self.theme.gutter.foreground)],
                 &[(lc, None)],
             );
@@ -621,9 +601,9 @@ impl BufferView {
                 trimmed.into(),
                 self.dpi,
                 self.tab_width,
-                &[(len_chars, self.face_key)],
+                &[(len_chars, self.config.textview_face)],
                 &styled.styles,
-                &[(len_chars, self.text_size)],
+                &[(len_chars, self.config.textview_font_size)],
                 &styled.colors,
                 &styled.unders,
             );
@@ -639,9 +619,9 @@ impl BufferView {
                 rs,
                 self.dpi,
                 self.tab_width,
-                &[(lc, self.gutter_face_key)],
+                &[(lc, self.config.gutter_face)],
                 &[(lc, TextStyle::default())],
-                &[(lc, self.gutter_text_size)],
+                &[(lc, self.config.gutter_font_size)],
                 &[(lc, self.theme.gutter.foreground)],
                 &[(lc, None)],
             );
@@ -697,15 +677,15 @@ impl BufferView {
             rs,
             self.dpi,
             self.tab_width,
-            &[(lc, self.gutter_face_key)],
+            &[(lc, self.config.gutter_face)],
             &[(lc, TextStyle::default())],
-            &[(lc, self.gutter_text_size)],
+            &[(lc, self.config.gutter_font_size)],
             &[(lc, self.theme.gutter.foreground)],
             &[(lc, None)],
         );
         let width = shaped.width();
         let width = if width < 0 { 0u32 } else { width as u32 };
-        self.gutter_width = self.gutter_padding * 2 + width;
+        self.gutter_width = self.config.gutter_padding * 2 + width;
     }
 
     fn cursor_baseline_to_relative_point(&self) -> Option<Point2D<u32, PixelSize>> {

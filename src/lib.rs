@@ -17,6 +17,7 @@ mod buffer;
 mod cmdprompt;
 mod commands;
 mod common;
+//mod completion_popup;
 mod config;
 mod font;
 mod input;
@@ -34,15 +35,9 @@ use buffer::{BufferViewCreateParams, CursorStyle};
 use common::{abspath, PixelSize};
 use input::{Action as BedAction, MotionOrObj as BedMotionOrObj};
 
-#[cfg(target_os = "linux")]
-static DEFAULT_FONT: &'static str = "monospace";
-#[cfg(target_os = "windows")]
-static DEFAULT_FONT: &'static str = "Consolas";
-
-static DEFAULT_THEME: &str = "default";
-
 static CURSOR_LINE_WIDTH: i32 = 2;
 static CURSOR_BLOCK_WIDTH: i32 = 10;
+static DEFAULT_THEME: &str = "default";
 
 pub struct Bed {
     textview_tree: textview::TextTree,
@@ -56,7 +51,9 @@ pub struct Bed {
 
 impl Bed {
     pub fn run(args: clap::ArgMatches, size: Size2D<u32, PixelSize>) {
-        let config = Rc::new(config::Config::load());
+        let mut font_core = font::FontCore::new().unwrap();
+
+        let config = Rc::new(config::Config::load(&mut font_core));
         let ts_core = ts::TsCore::new();
         let theme_set = theme::ThemeSet::load();
         let projects = project::Projects::load();
@@ -70,25 +67,6 @@ impl Bed {
         let viewable_rect = window.viewable_rect();
 
         let painter = painter::Painter::new(size, viewable_rect, dpi);
-
-        let mut font_core = font::FontCore::new().unwrap();
-        let face_key = font_core
-            .find(&config.font_family)
-            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
-        let gutter_face_key = font_core
-            .find(&config.gutter_font_family)
-            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
-        let prompt_face_key = font_core
-            .find(&config.prompt_font_family)
-            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
-        let completion_face_key = font_core
-            .find(&config.completion_font_family)
-            .unwrap_or_else(|| font_core.find(&DEFAULT_FONT).expect("failed to find font"));
-        let text_size = style::TextSize::from_f32(config.font_size);
-        let gutter_text_size = text_size.scale(config.gutter_font_scale);
-        let prompt_text_size = style::TextSize::from_f32(config.prompt_font_size);
-        let completion_text_size = text_size.scale(config.completion_font_scale);
-
         let text_shaper = Rc::new(RefCell::new(text::TextShaper::new(font_core)));
 
         let theme = theme_set
@@ -107,8 +85,7 @@ impl Bed {
         };
 
         let cmd_prompt = cmdprompt::CmdPrompt::new(
-            prompt_face_key,
-            prompt_text_size,
+            config.clone(),
             dpi,
             text_shaper.clone(),
             viewable_rect,
@@ -125,17 +102,10 @@ impl Bed {
 
         let view_id = buffer_mgr.next_view_id();
         let view_params = BufferViewCreateParams {
-            face_key,
-            text_size,
+            config: config.clone(),
             dpi,
             text_shaper,
             rect: textview_rect,
-            gutter_face_key,
-            gutter_text_size,
-            gutter_padding: config.gutter_padding,
-            completion_face_key,
-            completion_text_size,
-            completion_padding: config.completion_padding,
         };
         let textview_tree = textview::TextTree::new(view_params, buf, view_id, theme);
 

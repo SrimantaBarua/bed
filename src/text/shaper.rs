@@ -80,12 +80,12 @@ impl TextShaper {
         let mut cidx = 0;
         let mut x = 0;
 
-        'outer: for (slice, base_face, style, size, color, under) in
+        for (slice, base_face, style, size, color, under) in
             input_iter.filter(|x| x.0.len_chars() > 0)
         {
             let mut chars = slice.chars().peekable();
 
-            'inner: loop {
+            'outer: loop {
                 let first_char = chars.next().unwrap();
                 let face_key = if first_char == '\t' {
                     self.font_core
@@ -147,7 +147,7 @@ impl TextShaper {
                     buf.guess_segment_properties();
                     let gis = harfbuzz::shape(&font.shaper, buf);
                     ret.push(gis, face_key, style, size, color, under);
-                    continue 'inner;
+                    continue 'outer;
                 }
                 font.shaper.set_scale(size, dpi);
                 buf.guess_segment_properties();

@@ -8,23 +8,19 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::buffer::CursorStyle;
 use crate::common::{PixelSize, DPI};
-use crate::font::FaceKey;
+use crate::config::Config;
 use crate::input::{Action, Motion, MotionOrObj};
 use crate::painter::Painter;
-use crate::style::{TextSize, TextStyle};
+use crate::style::TextStyle;
 use crate::text::{RopeOrStr, ShapedText, TextShaper};
 use crate::theme::Theme;
 
 const TAB_WIDTH: usize = 8;
-const VPAD: u32 = 4;
-const HPAD: u32 = 4;
 
 pub(crate) struct CmdPrompt {
     command: String,
     pub(crate) rect: Rect<u32, PixelSize>,
     // Text shaping
-    face_key: FaceKey,
-    text_size: TextSize,
     dpi: Size2D<u32, DPI>,
     text_shaper: Rc<RefCell<TextShaper>>,
     // Shaped text
@@ -32,6 +28,7 @@ pub(crate) struct CmdPrompt {
     ascender: i32,
     descender: i32,
     // Misc.
+    config: Rc<Config>,
     theme: Rc<Theme>,
     prompt_len: usize,
     cursor_bidx: usize,
@@ -40,8 +37,7 @@ pub(crate) struct CmdPrompt {
 
 impl CmdPrompt {
     pub(crate) fn new(
-        face_key: FaceKey,
-        text_size: TextSize,
+        config: Rc<Config>,
         dpi: Size2D<u32, DPI>,
         text_shaper: Rc<RefCell<TextShaper>>,
         win_rect: Rect<u32, PixelSize>,
@@ -49,22 +45,24 @@ impl CmdPrompt {
     ) -> CmdPrompt {
         let (ascender, descender, shaped) = {
             let shaper = &mut *text_shaper.borrow_mut();
-            let raster = shaper.get_raster(face_key, TextStyle::default()).unwrap();
-            let metrics = raster.get_metrics(text_size, dpi);
+            let raster = shaper
+                .get_raster(config.prompt_face, TextStyle::default())
+                .unwrap();
+            let metrics = raster.get_metrics(config.prompt_font_size, dpi);
             let shaped = shaper.shape_line(
                 "".into(),
                 dpi,
                 TAB_WIDTH,
-                &[(0, face_key)],
+                &[(0, config.prompt_face)],
                 &[(0, TextStyle::default())],
-                &[(0, text_size)],
+                &[(0, config.prompt_font_size)],
                 &[(0, theme.prompt.foreground)],
                 &[(0, None)],
             );
             (metrics.ascender, metrics.descender, shaped)
         };
         let height = (ascender - descender) as u32;
-        let rheight = height + VPAD * 2;
+        let rheight = height + config.prompt_padding_vertical * 2;
         assert!(win_rect.size.height > rheight);
         let rect = Rect::new(
             point2(
@@ -76,8 +74,7 @@ impl CmdPrompt {
         CmdPrompt {
             command: "".to_owned(),
             rect,
-            face_key,
-            text_size,
+            config,
             dpi,
             text_shaper,
             shaped,
@@ -93,7 +90,10 @@ impl CmdPrompt {
     pub(crate) fn draw(&self, painter: &mut Painter) {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut painter = painter.widget_ctx(self.rect.cast(), self.theme.prompt.background);
-        let pos = point2(HPAD as i32, VPAD as i32 + self.ascender);
+        let pos = point2(
+            self.config.prompt_padding_horizontal as i32,
+            self.config.prompt_padding_vertical as i32 + self.ascender,
+        );
         let cursor = if self.command.len() > 0 {
             Some((
                 self.cursor_gidx,
@@ -108,13 +108,13 @@ impl CmdPrompt {
             pos,
             &self.shaped,
             cursor,
-            self.rect.size.width - HPAD,
+            self.rect.size.width - self.config.prompt_padding_horizontal,
         );
     }
 
     pub(crate) fn resize(&mut self, win_rect: Rect<u32, PixelSize>) -> Rect<u32, PixelSize> {
         let height = (self.ascender - self.descender) as u32;
-        let rheight = height + VPAD * 2;
+        let rheight = height + self.config.prompt_padding_vertical * 2;
         assert!(win_rect.size.height > rheight);
         self.rect.origin.x = win_rect.origin.x;
         self.rect.origin.y = win_rect.origin.y + win_rect.size.height - rheight;
@@ -279,9 +279,9 @@ impl CmdPrompt {
             RopeOrStr::from(self.command.as_ref()),
             self.dpi,
             TAB_WIDTH,
-            &[(lc, self.face_key)],
+            &[(lc, self.config.prompt_face)],
             &[(lc, TextStyle::default())],
-            &[(lc, self.text_size)],
+            &[(lc, self.config.prompt_font_size)],
             &[(lc, self.theme.prompt.foreground)],
             &[(lc, None)],
         );

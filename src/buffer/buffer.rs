@@ -588,7 +588,7 @@ impl Buffer {
             .unwrap_or((None, None, None));
         let (mut tab_width, mut indent_tabs) = filetype
             .as_ref()
-            .and_then(|ft| config.filetypes.get(ft))
+            .and_then(|ft| config.language.get(ft))
             .map(|ft| (ft.tab_width, ft.indent_tabs))
             .unwrap_or((config.tab_width, config.indent_tabs));
 
@@ -639,7 +639,7 @@ impl Buffer {
                     .unwrap_or((None, None, None));
                 let (tab_width, indent_tabs) = filetype
                     .as_ref()
-                    .and_then(|ft| self.config.filetypes.get(ft))
+                    .and_then(|ft| self.config.language.get(ft))
                     .map(|ft| (ft.tab_width, ft.indent_tabs))
                     .unwrap_or((self.config.tab_width, self.config.indent_tabs));
                 self.tab_width = tab_width;
@@ -688,7 +688,7 @@ impl Buffer {
         if filetype != self.filetype {
             let (tab_width, indent_tabs) = filetype
                 .as_ref()
-                .and_then(|ft| self.config.filetypes.get(ft))
+                .and_then(|ft| self.config.language.get(ft))
                 .map(|ft| (ft.tab_width, ft.indent_tabs))
                 .unwrap_or((self.config.tab_width, self.config.indent_tabs));
             self.tab_width = tab_width;

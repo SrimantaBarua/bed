@@ -1,0 +1,33 @@
+{
+    "theme" : <string>,
+
+    "editor.font_family" : <string>,
+    "editor.font_size" : <number>,
+    "editor.tab_width" : <integer>,
+    "editor.indent_tabs" : <bool>,
+
+    "gutter.font_family" : <string>,
+    "gutter.font_scale" : <float <= 1.0>,
+    "gutter.padding" : <integer>,
+
+    "prompt.font_family" : <string>,
+    "prompt.font_scale" : <float>,
+    "prompt.padding_vertical" : <integer>,
+    "prompt.padding_horizontal" : <integer>,
+
+    "completion.font_family" : <string>,
+    "completion.font_scale" : <float>,
+    "completion.padding_vertical" : <integer>,
+    "completion.padding_horizontal" : <integer>,
+
+    "language" : {
+        "rust" : {
+            "editor.tab_width" : <integer>,
+            "editor.indent_tabs" : <bool>,
+        },
+        "c" : {
+            "editor.tab_width" : <integer>,
+            "editor.indent_tabs" : <bool>,
+        }
+    },
+}
