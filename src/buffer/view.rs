@@ -1,7 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::RefCell;
-use std::cmp::{max, min};
 use std::collections::VecDeque;
 use std::fmt::Write;
 use std::rc::Rc;
@@ -10,6 +9,7 @@ use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
+use crate::completion_popup::CompletionPopup;
 use crate::config::Config;
 use crate::painter::Painter;
 use crate::style::TextStyle;
@@ -50,12 +50,7 @@ pub(super) struct BufferView {
     // Gutter
     gutter_width: u32,
     // Completion popup
-    completion_active: bool,
-    completion_shaped: VecDeque<ShapedText>,
-    completion_rect: Rect<u32, PixelSize>,
-    completion_ascender: i32,
-    completion_descender: i32,
-    completion_height: u32,
+    completion: Option<CompletionPopup>,
     // Misc.
     config: Rc<Config>,
     theme: Rc<Theme>,
@@ -78,14 +73,6 @@ impl BufferView {
             let metrics = raster.get_metrics(config.textview_font_size, params.dpi);
             (metrics.ascender, metrics.descender)
         };
-        let (completion_ascender, completion_descender) = {
-            let shaper = &mut *params.text_shaper.borrow_mut();
-            let raster = shaper
-                .get_raster(config.completion_face, TextStyle::default())
-                .unwrap();
-            let metrics = raster.get_metrics(config.completion_font_size, params.dpi);
-            (metrics.ascender, metrics.descender)
-        };
         let mut view = BufferView {
             cursor: Cursor::default(),
             rect: params.rect,
@@ -103,12 +90,7 @@ impl BufferView {
             yoff: 0,
             xoff: 0,
             gutter_width: 0,
-            completion_active: false,
-            completion_shaped: VecDeque::new(),
-            completion_rect: Rect::new(params.rect.origin, size2(0, 0)),
-            completion_ascender,
-            completion_descender,
-            completion_height: (completion_ascender - completion_descender) as u32,
+            completion: None,
             config,
             theme,
         };
@@ -130,67 +112,23 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn start_completion(&mut self, list: &[String]) {
-        if list.len() == 0 {
-            return;
-        }
-        let mut origin = match self.cursor_baseline_to_relative_point() {
-            Some(point) => point,
-            None => return,
-        };
-        let height_below = self.rect.size.height - (origin.y as i32 - self.descender) as u32;
-        let height_above = origin.y - self.ascender as u32;
-        let max_height = max(height_above, height_below);
-
-        let (mut height, mut width) = (self.config.completion_padding_vertical * 2, 0);
-        let shaper = &mut *self.text_shaper.borrow_mut();
-        for item in list {
-            if height + self.completion_height > max_height {
-                break;
-            }
-            let rs = RopeOrStr::from(item.as_ref());
-            let lc = rs.len_chars();
-            let shaped = shaper.shape_line(
-                rs,
+    pub(crate) fn start_completion(&mut self, list: Vec<String>) {
+        if let Some(origin) = self.cursor_baseline_to_relative_point() {
+            self.completion = CompletionPopup::new(
+                origin,
+                self.rect,
+                list,
+                self.theme.clone(),
+                self.config.clone(),
+                self.text_shaper.clone(),
                 self.dpi,
-                self.tab_width,
-                &[(lc, self.config.completion_face)],
-                &[(lc, TextStyle::default())],
-                &[(lc, self.config.completion_font_size)],
-                &[(lc, self.theme.completion.foreground)],
-                &[(lc, None)],
             );
-            height += self.completion_height;
-            width = max(width, shaped.width() as u32);
-            self.completion_shaped.push_back(shaped);
         }
-        if self.completion_shaped.len() == 0 {
-            return;
-        }
-        width += 2 * self.config.completion_padding_horizontal;
-
-        if height > height_below {
-            origin.y -= self.ascender as u32 + height;
-        } else {
-            origin.y = (origin.y as i32 - self.descender) as u32;
-        }
-
-        // TODO: Let completion popup extend beyond view, within limits of window
-        width = min(width, self.rect.size.width - self.gutter_width);
-        if origin.x + width > self.rect.size.width - self.gutter_width {
-            origin.x = self.rect.size.width - self.gutter_width - width;
-        }
-        origin += self.rect.origin.to_vector();
-        origin.x += self.gutter_width;
-        self.completion_rect = Rect::new(origin, size2(width, height));
-
-        self.completion_active = true;
         self.needs_redraw = true;
     }
 
     pub(crate) fn stop_completion(&mut self) {
-        self.completion_shaped.clear();
-        self.completion_active = false;
+        self.completion = None;
         self.needs_redraw = true;
     }
 
@@ -349,7 +287,6 @@ impl BufferView {
 
     pub(super) fn draw(&mut self, painter: &mut Painter) {
         self.needs_redraw = false;
-        let shaper = &mut *self.text_shaper.borrow_mut();
 
         let gutter_rect = Rect::new(
             self.rect.origin,
@@ -365,6 +302,7 @@ impl BufferView {
 
         // Draw gutter
         {
+            let shaper = &mut *self.text_shaper.borrow_mut();
             let mut painter = painter.widget_ctx(gutter_rect.cast(), self.theme.gutter.background);
             let basex = (self.gutter_width - self.config.gutter_padding) as i32;
             let mut pos = point2(basex, -(self.yoff as i32));
@@ -379,6 +317,7 @@ impl BufferView {
 
         // Draw textview
         {
+            let shaper = &mut *self.text_shaper.borrow_mut();
             let mut painter = painter.widget_ctx(text_rect.cast(), self.theme.textview.background);
 
             let mut ccolor = self.theme.textview.cursor;
@@ -415,25 +354,8 @@ impl BufferView {
         }
 
         // Draw completion
-        if self.completion_active {
-            let mut painter = painter.widget_ctx(
-                self.completion_rect.cast(),
-                self.theme.completion.background,
-            );
-            let basex = self.config.completion_padding_horizontal as i32;
-            let mut pos = point2(basex, self.config.completion_padding_vertical as i32);
-            for line in &self.completion_shaped {
-                pos.y += self.completion_ascender;
-                painter.draw_shaped_text(
-                    shaper,
-                    pos,
-                    line,
-                    None,
-                    self.completion_rect.size.width - (basex as u32) * 2,
-                );
-                pos.y -= self.completion_descender;
-                pos.x = basex;
-            }
+        if let Some(completion) = &self.completion {
+            completion.draw(painter)
         }
     }
 

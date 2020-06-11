@@ -17,7 +17,7 @@ mod buffer;
 mod cmdprompt;
 mod commands;
 mod common;
-//mod completion_popup;
+mod completion_popup;
 mod config;
 mod font;
 mod input;

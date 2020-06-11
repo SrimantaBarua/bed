@@ -365,7 +365,7 @@ impl Buffer {
             self.views
                 .get_mut(id)
                 .unwrap()
-                .start_completion(&completion_list);
+                .start_completion(completion_list);
         }
     }
 
