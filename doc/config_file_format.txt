@@ -20,6 +20,11 @@
     "completion.padding_vertical" : <integer>,
     "completion.padding_horizontal" : <integer>,
 
+    "completion.annotation" : {
+        "path.file" : <string>,
+        "path.directory" : <string>
+    },
+
     "language" : {
         "rust" : {
             "editor.tab_width" : <integer>,
@@ -29,5 +34,5 @@
             "editor.tab_width" : <integer>,
             "editor.indent_tabs" : <bool>,
         }
-    },
+    }
 }

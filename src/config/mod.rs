@@ -33,6 +33,10 @@ fn default_indent_tabs() -> bool {
     DEFAULT_INDENT_TABS
 }
 
+fn default_completion_annotation() -> String {
+    "".to_owned()
+}
+
 #[derive(Deserialize)]
 pub(crate) struct ConfigLanguage {
     #[serde(
@@ -45,6 +49,14 @@ pub(crate) struct ConfigLanguage {
         default = "default_indent_tabs"
     )]
     pub(crate) indent_tabs: bool,
+}
+
+#[derive(Default, Deserialize)]
+pub(crate) struct ConfigCompletionAnnotation {
+    #[serde(rename(deserialize = "path.directory"), default)]
+    pub(crate) path_directory: String,
+    #[serde(rename(deserialize = "path.file"), default)]
+    pub(crate) path_file: String,
 }
 
 pub(crate) struct Config {
@@ -69,6 +81,7 @@ pub(crate) struct Config {
     pub(crate) completion_font_size: TextSize,
     pub(crate) completion_padding_vertical: u32,
     pub(crate) completion_padding_horizontal: u32,
+    pub(crate) completion_annotation: ConfigCompletionAnnotation,
 }
 
 impl Config {
@@ -124,6 +137,8 @@ struct ConfigInner {
     completion_padding_vertical: Option<u32>,
     #[serde(rename(deserialize = "completion.padding_horizontal"))]
     completion_padding_horizontal: Option<u32>,
+    #[serde(rename(deserialize = "completion.annotation"), default)]
+    completion_annotation: ConfigCompletionAnnotation,
     // Language-specific
     language: FnvHashMap<String, ConfigLanguage>,
 }
@@ -191,6 +206,7 @@ impl ConfigInner {
             completion_font_size,
             completion_padding_vertical,
             completion_padding_horizontal,
+            completion_annotation: self.completion_annotation,
         }
     }
 }

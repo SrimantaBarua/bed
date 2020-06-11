@@ -326,7 +326,13 @@ impl Buffer {
 
         let mut completion_list = Vec::new();
         if is_completion_trigger {
-            CompletionSource::Path.complete(&self.data, end_cidx, &mut completion_list);
+            CompletionSource::Path.complete(
+                &self.data,
+                end_cidx,
+                &mut completion_list,
+                &self.config,
+                &self.theme,
+            );
         }
 
         let fgcol = self.theme.textview.foreground;

@@ -53,7 +53,7 @@ pub(crate) struct CompletionPopup {
 
 impl CompletionPopup {
     pub(crate) fn new(
-        mut origin: Point2D<u32, PixelSize>,
+        relative_origin: Point2D<u32, PixelSize>,
         constrain_rect: Rect<u32, PixelSize>,
         options: Vec<CompletionOption>,
         theme: Rc<Theme>,
@@ -70,6 +70,7 @@ impl CompletionPopup {
             (metrics.ascender, metrics.descender)
         };
         let height = (ascender - descender) as u32;
+        let mut origin = relative_origin;
 
         if options.len() == 0 {
             return None;

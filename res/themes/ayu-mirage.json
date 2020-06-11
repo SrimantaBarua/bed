@@ -19,7 +19,9 @@
         },
         "completion" : {
             "background" : "#343945",
-            "foreground" : "#CBCCC6"
+            "foreground" : "#CBCCC6",
+            "path.file" : "#FFD580",
+            "path.directory" : "#5CCFE6"
         },
 
         "syntax" : {

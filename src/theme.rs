@@ -70,6 +70,10 @@ impl Default for ThemePrompt {
 pub(crate) struct ThemeCompletion {
     pub(crate) background: Color,
     pub(crate) foreground: Color,
+    #[serde(rename(deserialize = "path.directory"))]
+    pub(crate) path_directory: Color,
+    #[serde(rename(deserialize = "path.file"))]
+    pub(crate) path_file: Color,
 }
 
 impl Default for ThemeCompletion {
@@ -77,6 +81,8 @@ impl Default for ThemeCompletion {
         ThemeCompletion {
             background: Color::new(0xee, 0xee, 0xee, 0xff),
             foreground: Color::new(0x22, 0x22, 0x22, 0xff),
+            path_file: Color::new(0xff, 0xd5, 0x80, 0xff),
+            path_directory: Color::new(0x5c, 0xcf, 0x36, 0xff),
         }
     }
 }

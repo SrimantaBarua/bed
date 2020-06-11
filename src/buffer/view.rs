@@ -115,9 +115,12 @@ impl BufferView {
 
     pub(crate) fn start_completion(&mut self, list: Vec<CompletionOption>) {
         if let Some(origin) = self.cursor_baseline_to_relative_point() {
+            let mut rect = self.rect;
+            rect.origin.x += self.gutter_width;
+            rect.size.width -= self.gutter_width;
             self.completion = CompletionPopup::new(
                 origin,
-                self.rect,
+                rect,
                 list,
                 self.theme.clone(),
                 self.config.clone(),

@@ -6,20 +6,35 @@ use std::path::Path;
 use ropey::Rope;
 
 use crate::completion_popup::CompletionOption;
-use crate::style::Color;
+use crate::config::Config;
+use crate::theme::Theme;
 
 pub(super) enum CompletionSource {
     Path,
 }
 
 impl CompletionSource {
-    pub(super) fn complete(&self, data: &Rope, offset: usize, list: &mut Vec<CompletionOption>) {
+    pub(super) fn complete(
+        &self,
+        data: &Rope,
+        offset: usize,
+        list: &mut Vec<CompletionOption>,
+        config: &Config,
+        theme: &Theme,
+    ) {
         match self {
-            CompletionSource::Path => self.complete_path(data, offset, list),
+            CompletionSource::Path => self.complete_path(data, offset, list, config, theme),
         }
     }
 
-    fn complete_path(&self, data: &Rope, offset: usize, list: &mut Vec<CompletionOption>) {
+    fn complete_path(
+        &self,
+        data: &Rope,
+        offset: usize,
+        list: &mut Vec<CompletionOption>,
+        config: &Config,
+        theme: &Theme,
+    ) {
         // Heuristics. TODO: Improve
         let mut chars = data.chars_at(offset);
         let mut is_dir_start = false;
@@ -68,9 +83,15 @@ impl CompletionSource {
                             if string.starts_with(base) {
                                 let (annotation, color) = if typ.is_dir() {
                                     string.push('/');
-                                    ("".to_owned(), Color::new(0x5c, 0xcf, 0xe6, 0xff))
+                                    (
+                                        config.completion_annotation.path_directory.to_owned(),
+                                        theme.completion.path_directory,
+                                    )
                                 } else {
-                                    ("".to_owned(), Color::new(0xff, 0xd5, 0x80, 0xff))
+                                    (
+                                        config.completion_annotation.path_file.to_owned(),
+                                        theme.completion.path_file,
+                                    )
                                 };
                                 string.push(' ');
                                 list.push(CompletionOption::new(string, annotation, color));
