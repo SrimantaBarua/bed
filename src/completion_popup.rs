@@ -10,12 +10,34 @@ use euclid::{point2, size2, Point2D, Rect, Size2D};
 use crate::common::{PixelSize, DPI};
 use crate::config::Config;
 use crate::painter::Painter;
-use crate::style::TextStyle;
-use crate::text::{RopeOrStr, ShapedText, TextShaper};
+use crate::style::{Color, TextStyle};
+use crate::text::{RopeOrStr, ShapedText, TextAlignment, TextShaper};
 use crate::theme::Theme;
 
+const MIDDLE_PADDING: u32 = 12;
+
+pub(crate) struct CompletionOption {
+    pub(crate) option: String,
+    pub(crate) annotation: String,
+    pub(crate) annotation_color: Color,
+}
+
+impl CompletionOption {
+    pub(crate) fn new(
+        option: String,
+        annotation: String,
+        annotation_color: Color,
+    ) -> CompletionOption {
+        CompletionOption {
+            option,
+            annotation,
+            annotation_color,
+        }
+    }
+}
+
 pub(crate) struct CompletionPopup {
-    options: Vec<String>,
+    options: Vec<CompletionOption>,
     shaped: VecDeque<ShapedText>,
     start: usize,
     selected: Option<usize>,
@@ -33,7 +55,7 @@ impl CompletionPopup {
     pub(crate) fn new(
         mut origin: Point2D<u32, PixelSize>,
         constrain_rect: Rect<u32, PixelSize>,
-        options: Vec<String>,
+        options: Vec<CompletionOption>,
         theme: Rc<Theme>,
         config: Rc<Config>,
         text_shaper: Rc<RefCell<TextShaper>>,
@@ -64,7 +86,9 @@ impl CompletionPopup {
                 if total_height + height > max_height {
                     break;
                 }
-                let rs = RopeOrStr::from(item.as_ref());
+                let olc = item.option.chars().count();
+                let combined = item.option.clone() + &item.annotation;
+                let rs = RopeOrStr::from(combined.as_ref());
                 let lc = rs.len_chars();
                 let shaped = shaper.shape_line(
                     rs,
@@ -72,9 +96,16 @@ impl CompletionPopup {
                     config.tab_width,
                     &[(lc, config.completion_face)],
                     &[(lc, TextStyle::default())],
-                    &[(lc, config.completion_font_size)],
-                    &[(lc, theme.completion.foreground)],
+                    &[
+                        (olc, config.completion_font_size),
+                        (lc, config.completion_font_size.scale(0.7)),
+                    ],
+                    &[
+                        (olc, theme.completion.foreground),
+                        (lc, item.annotation_color),
+                    ],
                     &[(lc, None)],
+                    &[(olc, TextAlignment::Left), (lc, TextAlignment::Right)],
                 );
                 total_height += height;
                 width = max(width, shaped.width() as u32);
@@ -84,7 +115,7 @@ impl CompletionPopup {
         if shaped_lines.len() == 0 {
             return None;
         }
-        width += 2 * config.completion_padding_horizontal;
+        width += 2 * config.completion_padding_horizontal + MIDDLE_PADDING;
 
         if total_height > height_below {
             origin.y -= ascender as u32 + total_height;
@@ -138,6 +169,6 @@ impl CompletionPopup {
     }
 
     pub(crate) fn get_choice(&self) -> Option<&str> {
-        self.selected.map(|i| self.options[i].as_ref())
+        self.selected.map(|i| self.options[i].option.as_ref())
     }
 }

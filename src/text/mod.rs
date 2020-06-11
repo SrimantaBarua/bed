@@ -23,6 +23,7 @@ pub(crate) struct ShapedText {
     sizes: Vec<(usize, TextSize)>,
     colors: Vec<(usize, Color)>,
     unders: Vec<(usize, Option<Color>)>,
+    alignments: Vec<(usize, TextAlignment)>,
 }
 
 impl ShapedText {
@@ -35,6 +36,7 @@ impl ShapedText {
             sizes: &self.sizes,
             colors: &self.colors,
             unders: &self.unders,
+            alignments: &self.alignments,
             idx: 0,
         }
     }
@@ -57,6 +59,7 @@ impl ShapedText {
             sizes: Vec::new(),
             colors: Vec::new(),
             unders: Vec::new(),
+            alignments: Vec::new(),
         }
     }
 
@@ -68,6 +71,7 @@ impl ShapedText {
         size: TextSize,
         color: Color,
         under: Option<Color>,
+        align: TextAlignment,
     ) {
         for gi in gis {
             self.glyphs.push(gi);
@@ -78,6 +82,7 @@ impl ShapedText {
         let size_len = self.sizes.len();
         let color_len = self.colors.len();
         let under_len = self.unders.len();
+        let align_len = self.alignments.len();
         if face_len > 0 && self.faces[face_len - 1].1 == face {
             self.faces[face_len - 1].0 = glyph_len;
         } else {
@@ -107,6 +112,19 @@ impl ShapedText {
         } else {
             self.unders.push((glyph_len, under));
         }
+
+        if align_len > 0 {
+            assert!(
+                !(align == TextAlignment::Left
+                    && self.alignments[align_len - 1].1 == TextAlignment::Right),
+                "cannot have left-aligned text after right-aligned text"
+            );
+        }
+        if align_len > 0 && self.alignments[align_len - 1].1 == align {
+            self.alignments[align_len - 1].0 = glyph_len;
+        } else {
+            self.alignments.push((glyph_len, align));
+        }
     }
 }
 
@@ -118,6 +136,7 @@ pub(crate) struct ShapedStyledTextIter<'a> {
     sizes: &'a [(usize, TextSize)],
     colors: &'a [(usize, Color)],
     unders: &'a [(usize, Option<Color>)],
+    alignments: &'a [(usize, TextAlignment)],
     idx: usize,
 }
 
@@ -129,6 +148,7 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
         TextSize,
         Color,
         Option<Color>,
+        TextAlignment,
     );
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -140,11 +160,18 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
         let size = self.sizes[0].1;
         let color = self.colors[0].1;
         let under = self.unders[0].1;
+        let align = self.alignments[0].1;
         let minidx = min(
             self.faces[0].0,
             min(
                 self.styles[0].0,
-                min(self.sizes[0].0, min(self.colors[0].0, self.unders[0].0)),
+                min(
+                    self.sizes[0].0,
+                    min(
+                        self.colors[0].0,
+                        min(self.unders[0].0, self.alignments[0].0),
+                    ),
+                ),
             ),
         );
         let glyphs = &self.glyphs[self.idx..minidx];
@@ -164,6 +191,9 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
         if self.unders[0].0 == minidx {
             self.unders = &self.unders[1..];
         }
+        if self.alignments[0].0 == minidx {
+            self.alignments = &self.alignments[1..];
+        }
         let cii = if minidx == self.glyphs.len() {
             self.cursor_positions.len()
         } else {
@@ -182,10 +212,11 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
             gii: 0,
         };
         self.cursor_positions = &self.cursor_positions[cii..];
-        Some((cluster_iter, face, style, size, color, under))
+        Some((cluster_iter, face, style, size, color, under, align))
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct ShapedClusterIter<'a> {
     cursor_positions: &'a [usize],
     cpi: usize,
@@ -237,6 +268,7 @@ pub(crate) struct ShapedCluster<'a> {
     pub(crate) glyph_infos: &'a [GlyphInfo],
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct ShapedTextMetrics {
     pub(crate) ascender: i32,
     pub(crate) descender: i32,
@@ -262,4 +294,10 @@ impl ShapedTextMetrics {
             underline_thickness: metrics.underline_thickness,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TextAlignment {
+    Left,
+    Right,
 }

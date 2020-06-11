@@ -8,7 +8,7 @@ use std::slice;
 use euclid::{size2, Size2D};
 use freetype::freetype::{
     FT_Done_Face, FT_Done_FreeType, FT_Face, FT_Get_Char_Index, FT_Init_FreeType, FT_Library,
-    FT_Load_Glyph, FT_New_Face, FT_Set_Char_Size, FT_LOAD_FORCE_AUTOHINT, FT_LOAD_RENDER,
+    FT_Load_Glyph, FT_New_Face, FT_Set_Char_Size, FT_LOAD_RENDER,
 };
 
 use super::{RasterizedGlyph, ScaledFaceMetrics};
@@ -89,13 +89,7 @@ impl RasterFace {
         dpi: Size2D<u32, DPI>,
     ) -> Option<RasterizedGlyph> {
         self.set_char_size(size, dpi);
-        let ret = unsafe {
-            FT_Load_Glyph(
-                self.face,
-                gid,
-                (FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT) as i32,
-            )
-        };
+        let ret = unsafe { FT_Load_Glyph(self.face, gid, FT_LOAD_RENDER as i32) };
         if ret != 0 {
             return None;
         }

@@ -13,7 +13,7 @@ use crate::opengl::{
     gl_set_stencil_writing, gl_viewport, ElemArr, Mat4, ShaderProgram,
 };
 use crate::style::{Color, TextSize, TextStyle};
-use crate::text::{ShapedText, TextShaper};
+use crate::text::{ShapedClusterIter, ShapedText, ShapedTextMetrics, TextAlignment, TextShaper};
 use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
 
 mod glyphrender;
@@ -86,7 +86,7 @@ impl Painter {
     pub(crate) fn widget_ctx(&mut self, rect: Rect<i32, PixelSize>, bgcol: Color) -> WidgetPainter {
         let mut ret = WidgetPainter {
             painter: self,
-            rect: rect,
+            rect,
             background_color: bgcol,
         };
         ret.draw_bg_stencil();
@@ -145,14 +145,96 @@ impl<'a> WidgetPainter<'a> {
     pub(crate) fn draw_shaped_text(
         &mut self,
         shaper: &mut TextShaper,
-        mut pos: Point2D<i32, PixelSize>,
+        pos: Point2D<i32, PixelSize>,
         line: &ShapedText,
         cursor: Option<(usize, Color, CursorStyle)>,
         width: u32,
     ) {
-        let mut gidx = 0;
-        for (cluters, face, style, size, color, opt_under) in line.styled_iter() {
-            for cluster in cluters {
+        let collected = line.styled_iter().collect::<Vec<_>>();
+        let mut i = 0;
+
+        // Draw left-aligned text
+        while i < collected.len() && collected[i].6 == TextAlignment::Left {
+            i += 1;
+        }
+        let (mut pos, mut gidx) = self.draw_shaped_text_inner(
+            shaper,
+            pos,
+            &collected[..i],
+            line.metrics,
+            0,
+            cursor,
+            width,
+        );
+
+        // Draw right-aligned text
+        if pos.x <= width as i32 && i < collected.len() {
+            let space_remaining = width as i32 - pos.x;
+            let mut rem_width = 0;
+            for (clusters, _, _, _, _, _, _) in &collected[i..] {
+                for clus in *clusters {
+                    rem_width += clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
+                }
+            }
+            if rem_width <= space_remaining {
+                pos.x += space_remaining - rem_width;
+            }
+            let (pos_here, gidx_here) = self.draw_shaped_text_inner(
+                shaper,
+                pos,
+                &collected[i..],
+                line.metrics,
+                gidx,
+                cursor,
+                width,
+            );
+            pos = pos_here;
+            gidx = gidx_here;
+        }
+
+        if let Some((cgidx, ccolor, cstyle)) = cursor {
+            if gidx == cgidx {
+                let cwidth = match cstyle {
+                    CursorStyle::Line => CURSOR_LINE_WIDTH,
+                    _ => CURSOR_BLOCK_WIDTH,
+                };
+                let (cy, cheight) = match cstyle {
+                    CursorStyle::Underline => (
+                        pos.y - line.metrics.underline_position,
+                        line.metrics.underline_thickness,
+                    ),
+                    _ => (
+                        pos.y - line.metrics.ascender,
+                        line.metrics.ascender - line.metrics.descender,
+                    ),
+                };
+                self.color_quad(Rect::new(point2(pos.x, cy), size2(cwidth, cheight)), ccolor);
+            }
+        }
+    }
+
+    fn draw_shaped_text_inner<'b>(
+        &mut self,
+        shaper: &mut TextShaper,
+        mut pos: Point2D<i32, PixelSize>,
+        line: &'b [(
+            ShapedClusterIter<'b>,
+            FaceKey,
+            TextStyle,
+            TextSize,
+            Color,
+            Option<Color>,
+            TextAlignment,
+        )],
+        metrics: ShapedTextMetrics,
+        mut gidx: usize,
+        cursor: Option<(usize, Color, CursorStyle)>,
+        width: u32,
+    ) -> (Point2D<i32, PixelSize>, usize) {
+        for (clusters, face, style, size, color, opt_under, _) in line {
+            let (clusters, face, style, size, color, opt_under) =
+                (*clusters, *face, *style, *size, *color, *opt_under);
+            for cluster in clusters {
                 if pos.x >= width as i32 {
                     break;
                 }
@@ -181,12 +263,12 @@ impl<'a> WidgetPainter<'a> {
                         };
                         let (cy, cheight) = match cstyle {
                             CursorStyle::Underline => (
-                                pos.y - line.metrics.underline_position,
-                                line.metrics.underline_thickness,
+                                pos.y - metrics.underline_position,
+                                metrics.underline_thickness,
                             ),
                             _ => (
-                                pos.y - line.metrics.ascender,
-                                line.metrics.ascender - line.metrics.descender,
+                                pos.y - metrics.ascender,
+                                metrics.ascender - metrics.descender,
                             ),
                         };
                         self.color_quad(Rect::new(point2(cx, cy), size2(cwidth, cheight)), ccolor);
@@ -195,8 +277,8 @@ impl<'a> WidgetPainter<'a> {
                 if let Some(under) = opt_under {
                     self.color_quad(
                         Rect::new(
-                            point2(start_x, pos.y - line.metrics.underline_position),
-                            size2(width, line.metrics.underline_thickness),
+                            point2(start_x, pos.y - metrics.underline_position),
+                            size2(width, metrics.underline_thickness),
                         ),
                         under,
                     );
@@ -204,25 +286,7 @@ impl<'a> WidgetPainter<'a> {
                 gidx += cluster.num_graphemes;
             }
         }
-        if let Some((cgidx, ccolor, cstyle)) = cursor {
-            if gidx == cgidx {
-                let cwidth = match cstyle {
-                    CursorStyle::Line => CURSOR_LINE_WIDTH,
-                    _ => CURSOR_BLOCK_WIDTH,
-                };
-                let (cy, cheight) = match cstyle {
-                    CursorStyle::Underline => (
-                        pos.y - line.metrics.underline_position,
-                        line.metrics.underline_thickness,
-                    ),
-                    _ => (
-                        pos.y - line.metrics.ascender,
-                        line.metrics.ascender - line.metrics.descender,
-                    ),
-                };
-                self.color_quad(Rect::new(point2(pos.x, cy), size2(cwidth, cheight)), ccolor);
-            }
-        }
+        (pos, gidx)
     }
 
     fn draw_bg_stencil(&mut self) {

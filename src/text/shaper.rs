@@ -8,7 +8,7 @@ use crate::common::DPI;
 use crate::font::{harfbuzz, FaceKey, FontCore, RasterFace};
 use crate::style::{Color, TextSize, TextStyle};
 
-use super::{RopeOrStr, ShapedText, ShapedTextMetrics};
+use super::{RopeOrStr, ShapedText, ShapedTextMetrics, TextAlignment};
 
 // TODO: Evaluate performance on caching shaped words
 
@@ -43,6 +43,7 @@ impl TextShaper {
         sizes: &[(usize, TextSize)],
         colors: &[(usize, Color)],
         unders: &[(usize, Option<Color>)],
+        alignments: &[(usize, TextAlignment)],
     ) -> ShapedText {
         // We need this information even to shape an empty line (with a space)
         assert!(faces.len() > 0 && styles.len() > 0 && sizes.len() > 0);
@@ -74,13 +75,14 @@ impl TextShaper {
             sizes,
             colors,
             unders,
+            alignments,
             cidx: 0,
         };
 
         let mut cidx = 0;
         let mut x = 0;
 
-        for (slice, base_face, style, size, color, under) in
+        for (slice, base_face, style, size, color, under, align) in
             input_iter.filter(|x| x.0.len_chars() > 0)
         {
             let mut chars = slice.chars().peekable();
@@ -146,13 +148,13 @@ impl TextShaper {
                     font.shaper.set_scale(size, dpi);
                     buf.guess_segment_properties();
                     let gis = harfbuzz::shape(&font.shaper, buf);
-                    ret.push(gis, face_key, style, size, color, under);
+                    ret.push(gis, face_key, style, size, color, under, align);
                     continue 'outer;
                 }
                 font.shaper.set_scale(size, dpi);
                 buf.guess_segment_properties();
                 let gis = harfbuzz::shape(&font.shaper, buf);
-                ret.push(gis, face_key, style, size, color, under);
+                ret.push(gis, face_key, style, size, color, under, align);
                 break;
             }
         }
@@ -185,6 +187,7 @@ impl TextShaper {
             sizes: vec![(1, size)],
             colors: vec![(1, Color::new(0, 0, 0, 0xff))],
             unders: vec![(1, None)],
+            alignments: vec![(1, TextAlignment::Left)],
         }
     }
 }
@@ -196,6 +199,7 @@ struct InputRangesIter<'a> {
     sizes: &'a [(usize, TextSize)],
     colors: &'a [(usize, Color)],
     unders: &'a [(usize, Option<Color>)],
+    alignments: &'a [(usize, TextAlignment)],
     cidx: usize,
 }
 
@@ -207,6 +211,7 @@ impl<'a> Iterator for InputRangesIter<'a> {
         TextSize,
         Color,
         Option<Color>,
+        TextAlignment,
     );
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -218,14 +223,21 @@ impl<'a> Iterator for InputRangesIter<'a> {
         let size = self.sizes[0].1;
         let color = self.colors[0].1;
         let under = self.unders[0].1;
+        let align = self.alignments[0].1;
         let minidx = min(
             self.faces[0].0,
             min(
                 self.styles[0].0,
-                min(self.sizes[0].0, min(self.colors[0].0, self.unders[0].0)),
+                min(
+                    self.sizes[0].0,
+                    min(
+                        self.colors[0].0,
+                        min(self.unders[0].0, self.alignments[0].0),
+                    ),
+                ),
             ),
         );
-        let slice = self.slice.slice(self.cidx..minidx);
+        let ret_slice = self.slice.slice(self.cidx..minidx);
         self.cidx = minidx;
         if self.faces[0].0 == minidx {
             self.faces = &self.faces[1..];
@@ -242,6 +254,9 @@ impl<'a> Iterator for InputRangesIter<'a> {
         if self.unders[0].0 == minidx {
             self.unders = &self.unders[1..];
         }
-        Some((slice, face, style, size, color, under))
+        if self.alignments[0].0 == minidx {
+            self.alignments = &self.alignments[1..];
+        }
+        Some((ret_slice, face, style, size, color, under, align))
     }
 }

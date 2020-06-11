@@ -5,18 +5,21 @@ use std::path::Path;
 
 use ropey::Rope;
 
+use crate::completion_popup::CompletionOption;
+use crate::style::Color;
+
 pub(super) enum CompletionSource {
     Path,
 }
 
 impl CompletionSource {
-    pub(super) fn complete(&self, data: &Rope, offset: usize, list: &mut Vec<String>) {
+    pub(super) fn complete(&self, data: &Rope, offset: usize, list: &mut Vec<CompletionOption>) {
         match self {
             CompletionSource::Path => self.complete_path(data, offset, list),
         }
     }
 
-    fn complete_path(&self, data: &Rope, offset: usize, list: &mut Vec<String>) {
+    fn complete_path(&self, data: &Rope, offset: usize, list: &mut Vec<CompletionOption>) {
         // Heuristics. TODO: Improve
         let mut chars = data.chars_at(offset);
         let mut is_dir_start = false;
@@ -63,12 +66,14 @@ impl CompletionSource {
                     if let Ok(mut string) = dirent.file_name().into_string() {
                         if let Ok(typ) = dirent.file_type() {
                             if string.starts_with(base) {
-                                if typ.is_dir() {
-                                    string = " ".to_owned() + &string + "/";
+                                let (annotation, color) = if typ.is_dir() {
+                                    string.push('/');
+                                    ("".to_owned(), Color::new(0x5c, 0xcf, 0xe6, 0xff))
                                 } else {
-                                    string = " ".to_owned() + &string;
-                                }
-                                list.push(string);
+                                    ("".to_owned(), Color::new(0xff, 0xd5, 0x80, 0xff))
+                                };
+                                string.push(' ');
+                                list.push(CompletionOption::new(string, annotation, color));
                             }
                         }
                     }

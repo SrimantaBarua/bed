@@ -87,7 +87,7 @@ impl<'a> RopeOrStr<'a> {
                 }
                 let bs = bs.expect("slice indices out of range");
                 while let Some((i, _)) = ci.next() {
-                    if cc == crange.start {
+                    if cc == crange.end {
                         return RopeOrStr::Str(&s[bs..i]);
                     }
                     cc += 1;

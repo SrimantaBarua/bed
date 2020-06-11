@@ -9,11 +9,12 @@ use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
+use crate::completion_popup::CompletionOption;
 use crate::completion_popup::CompletionPopup;
 use crate::config::Config;
 use crate::painter::Painter;
 use crate::style::TextStyle;
-use crate::text::{RopeOrStr, ShapedText, TextShaper};
+use crate::text::{RopeOrStr, ShapedText, TextAlignment, TextShaper};
 use crate::theme::Theme;
 use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
 
@@ -112,7 +113,7 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn start_completion(&mut self, list: Vec<String>) {
+    pub(crate) fn start_completion(&mut self, list: Vec<CompletionOption>) {
         if let Some(origin) = self.cursor_baseline_to_relative_point() {
             self.completion = CompletionPopup::new(
                 origin,
@@ -202,7 +203,7 @@ impl BufferView {
         }
         let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
         let (mut gidx, mut x) = (0, 0);
-        'outer: for (clusters, _, _, _, _, _) in line.styled_iter() {
+        'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
             for clus in clusters {
                 let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
                 if x + width < point.x as i32 {
@@ -254,7 +255,7 @@ impl BufferView {
         let mut cursor_x = 0;
         let mut cursor_width = 0;
         let cgidx = self.cursor.line_gidx;
-        for (clusters, _, _, _, _, _) in line.styled_iter() {
+        for (clusters, _, _, _, _, _, _) in line.styled_iter() {
             for clus in clusters {
                 let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
                 if gidx + clus.num_graphemes <= cgidx {
@@ -304,12 +305,17 @@ impl BufferView {
         {
             let shaper = &mut *self.text_shaper.borrow_mut();
             let mut painter = painter.widget_ctx(gutter_rect.cast(), self.theme.gutter.background);
-            let basex = (self.gutter_width - self.config.gutter_padding) as i32;
+            let basex = self.config.gutter_padding as i32;
             let mut pos = point2(basex, -(self.yoff as i32));
             for line in &self.shaped_gutter {
-                pos.x -= line.width();
                 pos.y += self.ascender;
-                painter.draw_shaped_text(shaper, pos, line, None, gutter_rect.size.width);
+                painter.draw_shaped_text(
+                    shaper,
+                    pos,
+                    line,
+                    None,
+                    gutter_rect.size.width - self.config.gutter_padding,
+                );
                 pos.y -= self.descender;
                 pos.x = basex;
             }
@@ -386,6 +392,7 @@ impl BufferView {
                 &[(len_chars, self.config.textview_font_size)],
                 &styled.colors,
                 &styled.unders,
+                &[(len_chars, TextAlignment::Left)],
             );
             height += self.height;
             self.shaped_lines.push_back(shaped);
@@ -405,6 +412,7 @@ impl BufferView {
                 &[(lc, self.config.gutter_font_size)],
                 &[(lc, self.theme.gutter.foreground)],
                 &[(lc, None)],
+                &[(lc, TextAlignment::Right)],
             );
             self.shaped_gutter.push_back(shaped);
 
@@ -443,6 +451,7 @@ impl BufferView {
                 &[(len_chars, self.config.textview_font_size)],
                 &styled.colors,
                 &styled.unders,
+                &[(len_chars, TextAlignment::Left)],
             );
             new_height += self.height;
             new_shaped_lines.push(shaped);
@@ -462,6 +471,7 @@ impl BufferView {
                 &[(lc, self.config.gutter_font_size)],
                 &[(lc, self.theme.gutter.foreground)],
                 &[(lc, None)],
+                &[(lc, TextAlignment::Right)],
             );
             new_shaped_gutter.push(shaped);
 
@@ -528,6 +538,7 @@ impl BufferView {
                 &[(len_chars, self.config.textview_font_size)],
                 &styled.colors,
                 &styled.unders,
+                &[(len_chars, TextAlignment::Left)],
             );
             height += self.height;
             new_shaped_lines.push(shaped);
@@ -546,6 +557,7 @@ impl BufferView {
                 &[(lc, self.config.gutter_font_size)],
                 &[(lc, self.theme.gutter.foreground)],
                 &[(lc, None)],
+                &[(lc, TextAlignment::Right)],
             );
             new_shaped_gutter.push(shaped);
 
@@ -604,6 +616,7 @@ impl BufferView {
             &[(lc, self.config.gutter_font_size)],
             &[(lc, self.theme.gutter.foreground)],
             &[(lc, None)],
+            &[(lc, TextAlignment::Right)],
         );
         let width = shaped.width();
         let width = if width < 0 { 0u32 } else { width as u32 };
@@ -624,7 +637,7 @@ impl BufferView {
         }
         let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
         let (mut gidx, mut x) = (0, 0);
-        'outer: for (clusters, _, _, _, _, _) in line.styled_iter() {
+        'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
             for clus in clusters {
                 let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
                 if gidx + clus.num_graphemes < self.cursor.line_gidx {

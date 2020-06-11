@@ -12,7 +12,7 @@ use crate::config::Config;
 use crate::input::{Action, Motion, MotionOrObj};
 use crate::painter::Painter;
 use crate::style::TextStyle;
-use crate::text::{RopeOrStr, ShapedText, TextShaper};
+use crate::text::{RopeOrStr, ShapedText, TextAlignment, TextShaper};
 use crate::theme::Theme;
 
 const TAB_WIDTH: usize = 8;
@@ -58,6 +58,7 @@ impl CmdPrompt {
                 &[(0, config.prompt_font_size)],
                 &[(0, theme.prompt.foreground)],
                 &[(0, None)],
+                &[(0, TextAlignment::Left)],
             );
             (metrics.ascender, metrics.descender, shaped)
         };
@@ -284,6 +285,7 @@ impl CmdPrompt {
             &[(lc, self.config.prompt_font_size)],
             &[(lc, self.theme.prompt.foreground)],
             &[(lc, None)],
+            &[(lc, TextAlignment::Left)],
         );
     }
 }
