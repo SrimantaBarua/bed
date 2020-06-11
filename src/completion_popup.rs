@@ -60,6 +60,8 @@ impl CompletionPopup {
         config: Rc<Config>,
         text_shaper: Rc<RefCell<TextShaper>>,
         dpi: Size2D<u32, DPI>,
+        text_ascender: i32,
+        text_descender: i32,
     ) -> Option<CompletionPopup> {
         let (ascender, descender) = {
             let shaper = &mut *text_shaper.borrow_mut();
@@ -69,14 +71,14 @@ impl CompletionPopup {
             let metrics = raster.get_metrics(config.completion_font_size, dpi);
             (metrics.ascender, metrics.descender)
         };
-        let height = (ascender - descender) as u32;
+        let height = (ascender - descender) as u32 + 2 * config.completion_line_padding;
         let mut origin = relative_origin;
 
         if options.len() == 0 {
             return None;
         }
-        let height_below = constrain_rect.size.height - (origin.y as i32 - descender) as u32;
-        let height_above = origin.y - ascender as u32;
+        let height_below = constrain_rect.size.height - (origin.y as i32 - text_descender) as u32;
+        let height_above = origin.y - text_ascender as u32;
         let max_height = max(height_above, height_below);
         let mut shaped_lines = VecDeque::new();
 
@@ -119,9 +121,9 @@ impl CompletionPopup {
         width += 2 * config.completion_padding_horizontal + MIDDLE_PADDING;
 
         if total_height > height_below {
-            origin.y -= ascender as u32 + total_height;
+            origin.y -= text_ascender as u32 + total_height;
         } else {
-            origin.y = (origin.y as i32 - descender) as u32;
+            origin.y = (origin.y as i32 - text_descender) as u32;
         }
         width = min(width, constrain_rect.size.width);
         if origin.x + width > constrain_rect.size.width {
@@ -152,7 +154,7 @@ impl CompletionPopup {
         let basex = self.config.completion_padding_horizontal as i32;
         let mut pos = point2(basex, self.config.completion_padding_vertical as i32);
         for line in &self.shaped {
-            pos.y += self.ascender;
+            pos.y += self.ascender + self.config.completion_line_padding as i32;
             painter.draw_shaped_text(
                 shaper,
                 pos,
@@ -160,7 +162,7 @@ impl CompletionPopup {
                 None,
                 self.rect.size.width - (basex as u32) * 2,
             );
-            pos.y -= self.descender;
+            pos.y -= self.descender - self.config.completion_line_padding as i32;
             pos.x = basex;
         }
     }

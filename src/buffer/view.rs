@@ -84,7 +84,7 @@ impl BufferView {
             text_shaper: params.text_shaper,
             ascender,
             descender,
-            height: (ascender - descender) as u32,
+            height: (ascender - descender) as u32 + 2 * config.textview_line_padding,
             shaped_lines: VecDeque::new(),
             shaped_gutter: VecDeque::new(),
             start_line: 0,
@@ -126,6 +126,8 @@ impl BufferView {
                 self.config.clone(),
                 self.text_shaper.clone(),
                 self.dpi,
+                self.ascender + self.config.textview_line_padding as i32,
+                self.descender - self.config.textview_line_padding as i32,
             );
         }
         self.needs_redraw = true;
@@ -311,7 +313,7 @@ impl BufferView {
             let basex = self.config.gutter_padding as i32;
             let mut pos = point2(basex, -(self.yoff as i32));
             for line in &self.shaped_gutter {
-                pos.y += self.ascender;
+                pos.y += self.ascender + self.config.textview_line_padding as i32;
                 painter.draw_shaped_text(
                     shaper,
                     pos,
@@ -319,7 +321,7 @@ impl BufferView {
                     None,
                     gutter_rect.size.width - self.config.gutter_padding,
                 );
-                pos.y -= self.descender;
+                pos.y -= self.descender - self.config.textview_line_padding as i32;
                 pos.x = basex;
             }
         }
@@ -355,9 +357,9 @@ impl BufferView {
                 } else {
                     None
                 };
-                pos.y += self.ascender;
+                pos.y += self.ascender + self.config.textview_line_padding as i32;
                 painter.draw_shaped_text(shaper, pos, line, cursor, text_rect.size.width);
-                pos.y -= self.descender;
+                pos.y -= self.descender - self.config.textview_line_padding as i32;
                 linum += 1;
             }
         }
@@ -633,8 +635,9 @@ impl BufferView {
         {
             return None;
         }
-        let y =
-            (self.cursor.line_num - self.start_line) as u32 * self.height + self.ascender as u32;
+        let y = (self.cursor.line_num - self.start_line) as u32 * self.height
+            + self.config.textview_line_padding
+            + self.ascender as u32;
         if y < self.yoff {
             return None;
         }

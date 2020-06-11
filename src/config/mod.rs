@@ -33,10 +33,6 @@ fn default_indent_tabs() -> bool {
     DEFAULT_INDENT_TABS
 }
 
-fn default_completion_annotation() -> String {
-    "".to_owned()
-}
-
 #[derive(Deserialize)]
 pub(crate) struct ConfigLanguage {
     #[serde(
@@ -67,6 +63,7 @@ pub(crate) struct Config {
     // Textview
     pub(crate) textview_face: FaceKey,
     pub(crate) textview_font_size: TextSize,
+    pub(crate) textview_line_padding: u32,
     // Gutter
     pub(crate) gutter_face: FaceKey,
     pub(crate) gutter_font_size: TextSize,
@@ -81,6 +78,7 @@ pub(crate) struct Config {
     pub(crate) completion_font_size: TextSize,
     pub(crate) completion_padding_vertical: u32,
     pub(crate) completion_padding_horizontal: u32,
+    pub(crate) completion_line_padding: u32,
     pub(crate) completion_annotation: ConfigCompletionAnnotation,
 }
 
@@ -108,6 +106,8 @@ struct ConfigInner {
     textview_font_family: Option<String>,
     #[serde(rename(deserialize = "editor.font_size"))]
     textview_font_size: Option<f32>,
+    #[serde(rename(deserialize = "editor.line_padding"), default)]
+    textview_line_padding: u32,
     #[serde(rename(deserialize = "editor.tab_width"))]
     tab_width: Option<usize>,
     #[serde(rename(deserialize = "editor.indent_tabs"))]
@@ -137,6 +137,8 @@ struct ConfigInner {
     completion_padding_vertical: Option<u32>,
     #[serde(rename(deserialize = "completion.padding_horizontal"))]
     completion_padding_horizontal: Option<u32>,
+    #[serde(rename(deserialize = "completion.line_padding"), default)]
+    completion_line_padding: u32,
     #[serde(rename(deserialize = "completion.annotation"), default)]
     completion_annotation: ConfigCompletionAnnotation,
     // Language-specific
@@ -160,7 +162,14 @@ impl ConfigInner {
             .gutter_font_family
             .and_then(|s| font_core.find(&s))
             .unwrap_or(textview_face);
-        let gutter_font_size = textview_font_size.scale(self.gutter_font_scale.unwrap_or(1.0));
+        let gutter_font_size = textview_font_size.scale({
+            let scale = self.gutter_font_scale.unwrap_or(1.0);
+            if scale >= 1.0 {
+                1.0
+            } else {
+                scale
+            }
+        });
         let gutter_padding = self.gutter_padding.unwrap_or(DEFAULT_GUTTER_PADDING);
         // Prompt
         let prompt_face = self
@@ -195,6 +204,7 @@ impl ConfigInner {
             language: self.language,
             textview_face,
             textview_font_size,
+            textview_line_padding: self.textview_line_padding,
             gutter_face,
             gutter_font_size,
             gutter_padding,
@@ -206,6 +216,7 @@ impl ConfigInner {
             completion_font_size,
             completion_padding_vertical,
             completion_padding_horizontal,
+            completion_line_padding: self.completion_line_padding,
             completion_annotation: self.completion_annotation,
         }
     }
