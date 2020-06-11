@@ -8,6 +8,7 @@ use crate::style::{Color, TextStyle};
 // All indices here are codepoint indices
 #[derive(Debug)]
 pub(super) struct StyledText {
+    pub(crate) indent_depth: usize,
     pub(super) styles: Vec<(usize, TextStyle)>,
     pub(super) colors: Vec<(usize, Color)>,
     pub(super) unders: Vec<(usize, Option<Color>)>,
@@ -16,11 +17,13 @@ pub(super) struct StyledText {
 impl StyledText {
     pub(super) fn new(
         len: usize,
+        indent_depth: usize,
         style: TextStyle,
         color: Color,
         under: Option<Color>,
     ) -> StyledText {
         StyledText {
+            indent_depth,
             styles: vec![(len, style)],
             colors: vec![(len, color)],
             unders: vec![(len, under)],

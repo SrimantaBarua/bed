@@ -6,7 +6,8 @@
             "cursor" : "#FFCC66",
             "cursor_line" : "#242B38",
             "border_width" : 1,
-            "border_color" : "#5C677399"
+            "border_color" : "#5C677399",
+            "indent_guide" : "#707A8C4D"
         },
         "gutter" : {
             "background" : "#1F2430",

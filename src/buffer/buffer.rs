@@ -26,9 +26,16 @@ use super::styled::StyledText;
 use super::view::{BufferView, BufferViewCreateParams};
 use super::{BufferID, BufferViewID, CursorStyle};
 
-fn default_hl_for_line(line: RopeSlice, color: Color) -> StyledText {
-    let lch = rope_trim_newlines(line).len_chars();
-    StyledText::new(lch, TextStyle::default(), color, None)
+fn default_hl_for_line(
+    line: RopeSlice,
+    color: Color,
+    tab_width: usize,
+    indent_tabs: bool,
+) -> StyledText {
+    let trimmed = rope_trim_newlines(line);
+    let lch = trimmed.len_chars();
+    let depth = indent_depth(&trimmed, indent_tabs, tab_width);
+    StyledText::new(lch, depth, TextStyle::default(), color, None)
 }
 
 pub(crate) struct Buffer {
@@ -336,10 +343,22 @@ impl Buffer {
         }
 
         let fgcol = self.theme.textview.foreground;
-        self.styled_lines[linum] = default_hl_for_line(self.data.line(linum), fgcol);
+        self.styled_lines[linum] = default_hl_for_line(
+            self.data.line(linum),
+            fgcol,
+            self.tab_width,
+            self.indent_tabs,
+        );
         for i in linum..end_linum {
-            self.styled_lines
-                .insert(i + 1, default_hl_for_line(self.data.line(i + 1), fgcol));
+            self.styled_lines.insert(
+                i + 1,
+                default_hl_for_line(
+                    self.data.line(i + 1),
+                    fgcol,
+                    self.tab_width,
+                    self.indent_tabs,
+                ),
+            );
         }
 
         self.edit_tree(self.data.clone(), cidx, cidx, end_cidx);
@@ -506,8 +525,12 @@ impl Buffer {
         let old_rope = self.data.clone();
 
         self.data.remove(start_cidx..end_cidx);
-        self.styled_lines[linum] =
-            default_hl_for_line(self.data.line(linum), self.theme.textview.foreground);
+        self.styled_lines[linum] = default_hl_for_line(
+            self.data.line(linum),
+            self.theme.textview.foreground,
+            self.tab_width,
+            self.indent_tabs,
+        );
 
         self.edit_tree(old_rope, start_cidx, end_cidx, start_cidx);
 
@@ -549,7 +572,7 @@ impl Buffer {
 
     // -------- Create buffer ----------------
     pub(super) fn empty(buffer_id: BufferID, config: Rc<Config>, theme: Rc<Theme>) -> Buffer {
-        let styled = StyledText::new(0, TextStyle::default(), theme.textview.foreground, None);
+        let styled = StyledText::new(0, 0, TextStyle::default(), theme.textview.foreground, None);
         let tab_width = config.tab_width;
         let indent_tabs = config.indent_tabs;
         Buffer {
@@ -582,10 +605,6 @@ impl Buffer {
         } else {
             Rope::new()
         };
-        let mut styled_lines = Vec::new();
-        for line in rope.lines() {
-            styled_lines.push(default_hl_for_line(line, theme.textview.foreground));
-        }
         let (filetype, parser, hl_query) = Path::new(path)
             .extension()
             .and_then(|s| s.to_str())
@@ -601,6 +620,15 @@ impl Buffer {
         if let Some(project) = &project {
             tab_width = project.tab_width.unwrap_or(tab_width);
             indent_tabs = project.indent_tabs.unwrap_or(indent_tabs);
+        }
+        let mut styled_lines = Vec::new();
+        for line in rope.lines() {
+            styled_lines.push(default_hl_for_line(
+                line,
+                theme.textview.foreground,
+                tab_width,
+                indent_tabs,
+            ));
         }
         let mut ret = Buffer {
             buffer_id,
@@ -633,10 +661,6 @@ impl Buffer {
                 self.data = rope;
                 self.project = project;
                 self.styled_lines.clear();
-                for line in self.data.lines() {
-                    self.styled_lines
-                        .push(default_hl_for_line(line, self.theme.textview.foreground));
-                }
                 let (filetype, parser, hl_query) = Path::new(path)
                     .extension()
                     .and_then(|s| s.to_str())
@@ -648,6 +672,14 @@ impl Buffer {
                     .and_then(|ft| self.config.language.get(ft))
                     .map(|ft| (ft.tab_width, ft.indent_tabs))
                     .unwrap_or((self.config.tab_width, self.config.indent_tabs));
+                for line in self.data.lines() {
+                    self.styled_lines.push(default_hl_for_line(
+                        line,
+                        self.theme.textview.foreground,
+                        tab_width,
+                        indent_tabs,
+                    ));
+                }
                 self.tab_width = tab_width;
                 self.indent_tabs = indent_tabs;
                 self.filetype = filetype;
@@ -699,22 +731,27 @@ impl Buffer {
                 .unwrap_or((self.config.tab_width, self.config.indent_tabs));
             self.tab_width = tab_width;
             self.indent_tabs = indent_tabs;
-            self.filetype = filetype;
             self.parser = parser;
             self.hl_query = hl_query;
-
-            self.styled_lines.clear();
-            for line in self.data.lines() {
-                self.styled_lines
-                    .push(default_hl_for_line(line, self.theme.textview.foreground));
-            }
-            self.recreate_parse_tree();
         }
-
         if let Some(project) = &self.project {
             self.tab_width = project.tab_width.unwrap_or(self.tab_width);
             self.indent_tabs = project.indent_tabs.unwrap_or(self.indent_tabs);
         }
+        if filetype != self.filetype {
+            self.filetype = filetype;
+            self.styled_lines.clear();
+            for line in self.data.lines() {
+                self.styled_lines.push(default_hl_for_line(
+                    line,
+                    self.theme.textview.foreground,
+                    self.tab_width,
+                    self.indent_tabs,
+                ));
+            }
+            self.recreate_parse_tree();
+        }
+
         for view in self.views.values_mut() {
             if view.is_active {
                 view.reshape(&self.data, &self.styled_lines);
@@ -825,7 +862,12 @@ impl Buffer {
 
         let mut linum = range.start_point.row;
         for line in self.data.lines_at(range.start_point.row) {
-            self.styled_lines[linum] = default_hl_for_line(line, self.theme.textview.foreground);
+            self.styled_lines[linum] = default_hl_for_line(
+                line,
+                self.theme.textview.foreground,
+                self.tab_width,
+                self.indent_tabs,
+            );
             linum += 1;
             if linum >= range.end_point.row {
                 break;
@@ -894,8 +936,12 @@ impl Buffer {
                                     if linum >= end.row {
                                         break;
                                     }
-                                    let lc = rope_trim_newlines(line).len_chars();
-                                    self.styled_lines[linum] = StyledText::new(lc, style, fg, None);
+                                    let trimmed = rope_trim_newlines(line);
+                                    let lc = trimmed.len_chars();
+                                    let depth =
+                                        indent_depth(&trimmed, self.indent_tabs, self.tab_width);
+                                    self.styled_lines[linum] =
+                                        StyledText::new(lc, depth, style, fg, None);
                                     linum += 1;
                                 }
                             }
@@ -995,4 +1041,35 @@ fn get_indent(data: &Rope, linum: usize, indent_tabs: bool) -> (char, usize) {
         count += 1;
     }
     (ich, count)
+}
+
+fn indent_depth(line: &RopeSlice, indent_tabs: bool, tab_width: usize) -> usize {
+    let mut depth = 0;
+    if indent_tabs {
+        for c in line.chars() {
+            if c != '\t' {
+                if c.is_whitespace() {
+                    depth += 1;
+                }
+                break;
+            }
+            depth += 1;
+        }
+    } else {
+        let mut count = 0;
+        for c in line.chars() {
+            if c != ' ' {
+                if count > 0 {
+                    depth += 1;
+                }
+                break;
+            }
+            count += 1;
+            if count == tab_width {
+                depth += 1;
+                count = 0;
+            }
+        }
+    }
+    depth
 }

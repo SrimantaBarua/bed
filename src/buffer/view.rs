@@ -21,6 +21,8 @@ use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
 use super::cursor::{Cursor, CursorStyle};
 use super::styled::StyledText;
 
+const INDENT_GUIDE_WIDTH: i32 = 1;
+
 #[derive(Clone)]
 pub(crate) struct BufferViewCreateParams {
     pub(crate) config: Rc<Config>,
@@ -39,11 +41,12 @@ pub(super) struct BufferView {
     dpi: Size2D<u32, DPI>,
     text_shaper: Rc<RefCell<TextShaper>>,
     // Shaped lines and gutter
-    shaped_lines: VecDeque<ShapedText>,
+    shaped_lines: VecDeque<(ShapedText, usize)>,
     shaped_gutter: VecDeque<ShapedText>,
     ascender: i32,
     descender: i32,
     height: u32,
+    prev_depth: usize,
     // View start line, and offsets
     start_line: usize,
     yoff: u32,
@@ -85,6 +88,7 @@ impl BufferView {
             ascender,
             descender,
             height: (ascender - descender) as u32 + 2 * config.textview_line_padding,
+            prev_depth: 0,
             shaped_lines: VecDeque::new(),
             shaped_gutter: VecDeque::new(),
             start_line: 0,
@@ -110,6 +114,11 @@ impl BufferView {
         self.fill_or_truncate_view(data, styled_lines);
         self.update_gutter_width(data);
         self.is_active = true;
+        self.prev_depth = if self.start_line > 0 {
+            styled_lines[self.start_line - 1].indent_depth
+        } else {
+            0
+        };
         self.needs_redraw = true;
     }
 
@@ -181,6 +190,11 @@ impl BufferView {
             }
         }
 
+        self.prev_depth = if self.start_line > 0 {
+            styled_lines[self.start_line - 1].indent_depth
+        } else {
+            0
+        };
         self.needs_redraw = true;
     }
 
@@ -206,7 +220,7 @@ impl BufferView {
         if self.cursor.line_num >= data.len_lines() {
             self.cursor.line_num = data.len_lines() - 1;
         }
-        let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
+        let line = &self.shaped_lines[self.cursor.line_num - self.start_line].0;
         let (mut gidx, mut x) = (0, 0);
         'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
             for clus in clusters {
@@ -224,6 +238,12 @@ impl BufferView {
         self.cursor.line_gidx = gidx;
         self.cursor.sync_gidx(data, tab_width);
         self.snap_to_cursor(data, styled_lines);
+
+        self.prev_depth = if self.start_line > 0 {
+            styled_lines[self.start_line - 1].indent_depth
+        } else {
+            0
+        };
         self.needs_redraw = true;
     }
 
@@ -236,6 +256,11 @@ impl BufferView {
         self.rect = rect;
         self.fill_or_truncate_view(data, styled_lines);
         self.snap_to_cursor(data, styled_lines);
+        self.prev_depth = if self.start_line > 0 {
+            styled_lines[self.start_line - 1].indent_depth
+        } else {
+            0
+        };
         self.needs_redraw = true;
     }
 
@@ -244,6 +269,11 @@ impl BufferView {
         self.shaped_gutter.clear();
         self.fill_or_truncate_view(data, styled_lines);
         self.update_gutter_width(data);
+        self.prev_depth = if self.start_line > 0 {
+            styled_lines[self.start_line - 1].indent_depth
+        } else {
+            0
+        };
         self.needs_redraw = true;
     }
 
@@ -255,7 +285,7 @@ impl BufferView {
             self.move_view_down_to_cursor(data, styled_lines);
         }
         // Sync X
-        let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
+        let line = &self.shaped_lines[self.cursor.line_num - self.start_line].0;
         let mut gidx = 0;
         let mut cursor_x = 0;
         let mut cursor_width = 0;
@@ -288,11 +318,17 @@ impl BufferView {
             self.xoff = cursor_x + cursor_width + self.gutter_width - self.rect.size.width;
         }
         self.update_gutter_width(data);
+        self.prev_depth = if self.start_line > 0 {
+            styled_lines[self.start_line - 1].indent_depth
+        } else {
+            0
+        };
         self.needs_redraw = true;
     }
 
     pub(super) fn draw(&mut self, painter: &mut Painter) {
         self.needs_redraw = false;
+        let line_pad = self.config.textview_line_padding as i32;
 
         let gutter_rect = Rect::new(
             self.rect.origin,
@@ -313,7 +349,7 @@ impl BufferView {
             let basex = self.config.gutter_padding as i32;
             let mut pos = point2(basex, -(self.yoff as i32));
             for line in &self.shaped_gutter {
-                pos.y += self.ascender + self.config.textview_line_padding as i32;
+                pos.y += self.ascender + line_pad;
                 painter.draw_shaped_text(
                     shaper,
                     pos,
@@ -321,7 +357,7 @@ impl BufferView {
                     None,
                     gutter_rect.size.width - self.config.gutter_padding,
                 );
-                pos.y -= self.descender - self.config.textview_line_padding as i32;
+                pos.y -= self.descender - line_pad;
                 pos.x = basex;
             }
         }
@@ -344,7 +380,8 @@ impl BufferView {
             let mut pos = point2(-(self.xoff as i32), -(self.yoff as i32));
             let mut linum = self.start_line;
 
-            for line in &self.shaped_lines {
+            let mut prev_depth = self.prev_depth;
+            for (line, depth) in &self.shaped_lines {
                 let cursor = if linum == self.cursor.line_num {
                     painter.color_quad(
                         Rect::new(
@@ -357,10 +394,38 @@ impl BufferView {
                 } else {
                     None
                 };
-                pos.y += self.ascender + self.config.textview_line_padding as i32;
+                if *depth > 1 {
+                    let (mut x, mut count, mut i) = (pos.x, 0, 0);
+                    'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
+                        for clus in clusters {
+                            for gi in clus.glyph_infos {
+                                x += gi.advance.width;
+                                count += 1;
+                                if count == self.tab_width {
+                                    count = 0;
+                                    i += 1;
+                                    if i >= *depth {
+                                        break 'outer;
+                                    }
+                                    let (y, height) = if i < prev_depth {
+                                        (pos.y - line_pad, self.height as i32 - line_pad)
+                                    } else {
+                                        (pos.y + line_pad, self.height as i32 - 2 * line_pad)
+                                    };
+                                    painter.color_quad(
+                                        Rect::new(point2(x, y), size2(INDENT_GUIDE_WIDTH, height)),
+                                        self.theme.textview.indent_guide,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                pos.y += self.ascender + line_pad;
                 painter.draw_shaped_text(shaper, pos, line, cursor, text_rect.size.width);
-                pos.y -= self.descender - self.config.textview_line_padding as i32;
+                pos.y -= self.descender - line_pad;
                 linum += 1;
+                prev_depth = *depth;
             }
         }
 
@@ -400,7 +465,7 @@ impl BufferView {
                 &[(len_chars, TextAlignment::Left)],
             );
             height += self.height;
-            self.shaped_lines.push_back(shaped);
+            self.shaped_lines.push_back((shaped, styled.indent_depth));
 
             // Shape gutter
             linum += 1;
@@ -459,7 +524,7 @@ impl BufferView {
                 &[(len_chars, TextAlignment::Left)],
             );
             new_height += self.height;
-            new_shaped_lines.push(shaped);
+            new_shaped_lines.push((shaped, styled.indent_depth));
 
             // Shape gutter
             linum += 1;
@@ -546,7 +611,7 @@ impl BufferView {
                 &[(len_chars, TextAlignment::Left)],
             );
             height += self.height;
-            new_shaped_lines.push(shaped);
+            new_shaped_lines.push((shaped, styled.indent_depth));
 
             // Shape gutter
             buf.clear();
@@ -641,7 +706,7 @@ impl BufferView {
         if y < self.yoff {
             return None;
         }
-        let line = &self.shaped_lines[self.cursor.line_num - self.start_line];
+        let (line, _) = &self.shaped_lines[self.cursor.line_num - self.start_line];
         let (mut gidx, mut x) = (0, 0);
         'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
             for clus in clusters {

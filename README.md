@@ -10,4 +10,4 @@ Current features -
 
 Here's what it looks like, editing its own source code -
 
-![screenshot_1](screenshots/bed_editing_buffer.png)
+![screenshot_1](screenshots/bed_v0p1.png)
