@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn test_new_styled() {
-        let styled = StyledText::new(5, TextStyle::default(), Color::new(0, 0, 0, 0), None);
+        let styled = StyledText::new(5, 0, TextStyle::default(), Color::new(0, 0, 0, 0), None);
         assert_eq!(styled.colors, vec![(5, Color::new(0, 0, 0, 0))]);
         assert_eq!(styled.unders, vec![(5, None)]);
         assert_eq!(styled.styles, vec![(5, TextStyle::default())]);
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_set() {
-        let mut styled = StyledText::new(10, TextStyle::default(), Color::new(0, 0, 0, 0), None);
+        let mut styled = StyledText::new(10, 0, TextStyle::default(), Color::new(0, 0, 0, 0), None);
 
         styled.set(
             1..4,

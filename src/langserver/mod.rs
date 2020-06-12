@@ -14,6 +14,8 @@ use crate::common::abspath;
 use crate::config::Config;
 use crate::language::Language;
 
+mod proto;
+
 pub(crate) struct LangClientMgr {
     clients: FnvHashMap<(String, Language), Rc<RefCell<LangClient>>>,
     config: Rc<Config>,
@@ -32,7 +34,6 @@ impl LangClientMgr {
         file_path: &str,
         language: Language,
     ) -> Option<IOResult<Rc<RefCell<LangClient>>>> {
-        let path = file_path.to_owned();
         let config = self.config.clone();
         config
             .language
