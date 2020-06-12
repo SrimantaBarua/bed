@@ -45,7 +45,6 @@ pub(crate) struct CompletionPopup {
     ascender: i32,
     descender: i32,
     height: u32,
-    dpi: Size2D<u32, DPI>,
     theme: Rc<Theme>,
     config: Rc<Config>,
     text_shaper: Rc<RefCell<TextShaper>>,
@@ -80,15 +79,22 @@ impl CompletionPopup {
         let height_below = constrain_rect.size.height - (origin.y as i32 - text_descender) as u32;
         let height_above = origin.y - text_ascender as u32;
         let max_height = max(height_above, height_below);
-        let mut shaped_lines = VecDeque::new();
+        let shaped_len = min(max_height / height, options.len() as u32);
+        if shaped_len == 0 {
+            return None;
+        }
+        let total_height = shaped_len * height + 2 * config.completion_padding_vertical;
+        if total_height > height_below {
+            origin.y -= text_ascender as u32 + total_height;
+        } else {
+            origin.y = (origin.y as i32 - text_descender) as u32;
+        }
 
-        let (mut total_height, mut width) = (config.completion_padding_vertical * 2, 0);
+        let mut width = 0;
+        let mut shaped_lines = VecDeque::new();
         {
             let shaper = &mut *text_shaper.borrow_mut();
             for item in &options {
-                if total_height + height > max_height {
-                    break;
-                }
                 let olc = item.option.chars().count();
                 let combined = item.option.clone() + &item.annotation;
                 let rs = RopeOrStr::from(combined.as_ref());
@@ -110,21 +116,11 @@ impl CompletionPopup {
                     &[(lc, None)],
                     &[(olc, TextAlignment::Left), (lc, TextAlignment::Right)],
                 );
-                total_height += height;
                 width = max(width, shaped.width() as u32);
                 shaped_lines.push_back(shaped);
             }
         }
-        if shaped_lines.len() == 0 {
-            return None;
-        }
         width += 2 * config.completion_padding_horizontal + MIDDLE_PADDING;
-
-        if total_height > height_below {
-            origin.y -= text_ascender as u32 + total_height;
-        } else {
-            origin.y = (origin.y as i32 - text_descender) as u32;
-        }
         width = min(width, constrain_rect.size.width);
         if origin.x + width > constrain_rect.size.width {
             origin.x = constrain_rect.size.width - width;
@@ -141,7 +137,6 @@ impl CompletionPopup {
             ascender,
             descender,
             height,
-            dpi,
             theme,
             config,
             text_shaper,
@@ -153,6 +148,12 @@ impl CompletionPopup {
             self.selected = Some((idx + 1) % self.options.len());
         } else {
             self.selected = Some(0);
+        }
+        let idx = self.selected.unwrap();
+        if idx < self.start {
+            self.start = idx;
+        } else if idx >= self.start + self.visible_len() {
+            self.start = idx - self.visible_len() + 1;
         }
     }
 
@@ -166,6 +167,12 @@ impl CompletionPopup {
         } else {
             self.selected = Some(self.options.len() - 1);
         }
+        let idx = self.selected.unwrap();
+        if idx < self.start {
+            self.start = idx;
+        } else if idx >= self.start + self.visible_len() {
+            self.start = idx - self.visible_len() + 1;
+        }
     }
 
     pub(crate) fn draw(&self, painter: &mut Painter) {
@@ -173,8 +180,9 @@ impl CompletionPopup {
         let mut painter = painter.widget_ctx(self.rect.cast(), self.theme.completion.background);
         let basex = self.config.completion_padding_horizontal as i32;
         let mut pos = point2(basex, self.config.completion_padding_vertical as i32);
-        let mut linum = self.start;
-        for line in &self.shaped {
+
+        for linum in self.start..(min(self.start + self.visible_len(), self.shaped.len())) {
+            let line = &self.shaped[linum];
             if let Some(idx) = self.selected {
                 if linum == idx {
                     painter.color_quad(
@@ -196,11 +204,14 @@ impl CompletionPopup {
             );
             pos.y -= self.descender - self.config.completion_line_padding as i32;
             pos.x = basex;
-            linum += 1;
         }
     }
 
     pub(crate) fn get_choice(&self) -> Option<String> {
         self.selected.map(|i| self.options[i].option.clone())
+    }
+
+    fn visible_len(&self) -> usize {
+        (self.rect.size.height / self.height) as usize
     }
 }

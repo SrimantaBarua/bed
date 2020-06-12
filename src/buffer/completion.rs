@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cmp::Ordering;
 use std::fs::read_dir;
 use std::path::Path;
 
@@ -105,7 +106,21 @@ impl CompletionSource {
                 }
             }
         }
-        if list.len() > 0 {
+        list.retain(|x| x.option.len() > 0);
+        list.sort_by(|a, b| {
+            if a.option.chars().next_back() == Some('/') {
+                if b.option.chars().next_back() == Some('/') {
+                    a.option.cmp(&b.option)
+                } else {
+                    Ordering::Less
+                }
+            } else if b.option.chars().next_back() == Some('/') {
+                Ordering::Greater
+            } else {
+                a.option.cmp(&b.option)
+            }
+        });
+        if list.len() > 1 || (list.len() > 0 && list[0].option.len() > offset - compl_start) {
             Some((compl_start, list))
         } else {
             None
