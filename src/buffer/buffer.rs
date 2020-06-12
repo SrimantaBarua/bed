@@ -14,7 +14,7 @@ use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::config::Config;
-use crate::input::{Motion, MotionOrObj, Object};
+use crate::input::{ComplAction, Motion, MotionOrObj, Object};
 use crate::painter::Painter;
 use crate::project::Project;
 use crate::style::{Color, TextStyle};
@@ -229,6 +229,23 @@ impl Buffer {
     // -------- View edits -----------------
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
         let view = self.views.get_mut(id).unwrap();
+        if c == '\t' {
+            if let Some((i, s)) = view.get_completion() {
+                assert!(i <= view.cursor.char_idx);
+                let slice_start = if i < view.cursor.char_idx {
+                    let start_bidx = self.data.char_to_byte(i);
+                    let end_bidx = self.data.char_to_byte(view.cursor.char_idx);
+                    let len = end_bidx - start_bidx;
+                    assert!(len <= s.len());
+                    self.data.remove(i..view.cursor.char_idx);
+                    self.data.insert(i, &s[..len]);
+                    len
+                } else {
+                    0
+                };
+                return self.view_insert_str(id, &s[slice_start..]);
+            }
+        }
         view.stop_completion();
 
         let cidx = view.cursor.char_idx;
@@ -331,16 +348,11 @@ impl Buffer {
             }
         }
 
-        let mut completion_list = Vec::new();
-        if is_completion_trigger {
-            CompletionSource::Path.complete(
-                &self.data,
-                end_cidx,
-                &mut completion_list,
-                &self.config,
-                &self.theme,
-            );
-        }
+        let completion = if is_completion_trigger {
+            CompletionSource::Path.complete(&self.data, end_cidx, &self.config, &self.theme)
+        } else {
+            None
+        };
 
         let fgcol = self.theme.textview.foreground;
         self.styled_lines[linum] = default_hl_for_line(
@@ -386,11 +398,75 @@ impl Buffer {
             }
         }
 
-        if is_completion_trigger {
+        if let Some((start, list)) = completion {
             self.views
                 .get_mut(id)
                 .unwrap()
-                .start_completion(completion_list);
+                .start_completion(list, start);
+        }
+    }
+
+    pub(crate) fn view_insert_str(&mut self, id: &BufferViewID, s: &str) {
+        let view = self.views.get_mut(id).unwrap();
+        view.stop_completion();
+
+        let cidx = view.cursor.char_idx;
+        let linum = view.cursor.line_num;
+        self.data.insert(cidx, s);
+        let end_cidx = cidx + s.chars().count();
+        let end_linum = self.data.char_to_line(end_cidx);
+
+        let fgcol = self.theme.textview.foreground;
+        self.styled_lines[linum] = default_hl_for_line(
+            self.data.line(linum),
+            fgcol,
+            self.tab_width,
+            self.indent_tabs,
+        );
+        for i in linum..end_linum {
+            self.styled_lines.insert(
+                i + 1,
+                default_hl_for_line(
+                    self.data.line(i + 1),
+                    fgcol,
+                    self.tab_width,
+                    self.indent_tabs,
+                ),
+            );
+        }
+
+        self.edit_tree(self.data.clone(), cidx, cidx, end_cidx);
+        let (end_byte, end_col) = {
+            let llen = self.data.line(end_linum).len_bytes();
+            let lb = self.data.line_to_byte(end_linum);
+            (lb + llen, llen)
+        };
+        self.rehighlight_range(tree_sitter::Range {
+            start_byte: self.data.line_to_byte(linum),
+            end_byte,
+            start_point: Point::new(linum, 0),
+            end_point: Point::new(end_linum, end_col),
+        });
+
+        for view in self.views.values_mut() {
+            if view.cursor.char_idx >= cidx {
+                view.cursor.char_idx += end_cidx - cidx;
+                view.cursor
+                    .sync_and_update_char_idx_left(&self.data, self.tab_width);
+            }
+            if view.is_active {
+                view.reshape(&self.data, &self.styled_lines);
+                view.snap_to_cursor(&self.data, &self.styled_lines);
+            }
+        }
+
+        let completion =
+            CompletionSource::Path.complete(&self.data, end_cidx, &self.config, &self.theme);
+        if let Some((start, list)) = completion {
+            self.views
+                .get_mut(id)
+                .unwrap()
+                .start_completion(list, start);
         }
     }
 
@@ -568,6 +644,10 @@ impl Buffer {
                 view.snap_to_cursor(&self.data, &self.styled_lines);
             }
         }
+    }
+
+    pub(crate) fn view_completion_action(&mut self, id: &BufferViewID, action: ComplAction) {
+        self.views.get_mut(id).unwrap().completion_action(action);
     }
 
     // -------- Create buffer ----------------

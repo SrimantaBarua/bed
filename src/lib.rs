@@ -223,6 +223,9 @@ impl Bed {
                     }
                     BedAction::GetCmd => unreachable!(),
                     BedAction::StopCmdPrompt => unreachable!(),
+                    BedAction::Completion(c) => {
+                        self.textview_tree.active_mut().completion_action(*c)
+                    }
                 }
             }
         }

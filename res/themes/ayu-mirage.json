@@ -21,6 +21,7 @@
         "completion" : {
             "background" : "#343945",
             "foreground" : "#CBCCC6",
+            "active_background" : "#242B38",
             "path.file" : "#FFD580",
             "path.directory" : "#5CCFE6"
         },

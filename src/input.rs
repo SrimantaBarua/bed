@@ -39,6 +39,12 @@ pub(crate) enum MotionOrObj {
     Object(Object),
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum ComplAction {
+    Next,
+    Prev,
+}
+
 pub(crate) enum Action {
     Move(MotionOrObj),
     Delete(MotionOrObj),
@@ -47,6 +53,7 @@ pub(crate) enum Action {
     StartCmdPrompt(String),
     StopCmdPrompt,
     GetCmd,
+    Completion(ComplAction),
 }
 
 macro_rules! thing {
@@ -102,6 +109,12 @@ macro_rules! act {
     (DEL, $th:ident, $n:expr) => {
         $crate::input::Action::Delete(thing!($th, $n))
     };
+    (COMPL, NEXT) => {
+        $crate::input::Action::Completion(ComplAction::Next)
+    };
+    (COMPL, PREV) => {
+        $crate::input::Action::Completion(ComplAction::Prev)
+    };
 }
 
 pub(crate) struct State {
@@ -146,8 +159,8 @@ impl State {
                 Key::Right => actions.push(act!(MOV, RIGHT, 1)),
                 Key::Home => actions.push(act!(MOV, LINE_START)),
                 Key::End => actions.push(act!(MOV, LINE_END)),
-                Key::N if md.contains(Modifiers::Control) => actions.push(act!(MOV, DOWN, 1)),
-                Key::P if md.contains(Modifiers::Control) => actions.push(act!(MOV, UP, 1)),
+                Key::N if md.contains(Modifiers::Control) => actions.push(act!(COMPL, NEXT)),
+                Key::P if md.contains(Modifiers::Control) => actions.push(act!(COMPL, PREV)),
                 // Insert
                 Key::Enter => actions.push(Action::InsertChar('\n')),
                 Key::Tab => actions.push(Action::InsertChar('\t')),

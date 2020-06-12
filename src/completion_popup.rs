@@ -148,12 +148,44 @@ impl CompletionPopup {
         })
     }
 
+    pub(crate) fn next(&mut self) {
+        if let Some(idx) = self.selected {
+            self.selected = Some((idx + 1) % self.options.len());
+        } else {
+            self.selected = Some(0);
+        }
+    }
+
+    pub(crate) fn prev(&mut self) {
+        if let Some(idx) = self.selected {
+            if idx == 0 {
+                self.selected = Some(self.options.len() - 1);
+            } else {
+                self.selected = Some(idx - 1);
+            }
+        } else {
+            self.selected = Some(self.options.len() - 1);
+        }
+    }
+
     pub(crate) fn draw(&self, painter: &mut Painter) {
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut painter = painter.widget_ctx(self.rect.cast(), self.theme.completion.background);
         let basex = self.config.completion_padding_horizontal as i32;
         let mut pos = point2(basex, self.config.completion_padding_vertical as i32);
+        let mut linum = self.start;
         for line in &self.shaped {
+            if let Some(idx) = self.selected {
+                if linum == idx {
+                    painter.color_quad(
+                        Rect::new(
+                            point2(0, pos.y),
+                            size2(self.rect.size.width, self.height).cast(),
+                        ),
+                        self.theme.completion.active_background,
+                    );
+                }
+            }
             pos.y += self.ascender + self.config.completion_line_padding as i32;
             painter.draw_shaped_text(
                 shaper,
@@ -164,14 +196,11 @@ impl CompletionPopup {
             );
             pos.y -= self.descender - self.config.completion_line_padding as i32;
             pos.x = basex;
+            linum += 1;
         }
     }
 
-    pub(crate) fn interacted(&self) -> bool {
-        self.selected.is_some()
-    }
-
-    pub(crate) fn get_choice(&self) -> Option<&str> {
-        self.selected.map(|i| self.options[i].option.as_ref())
+    pub(crate) fn get_choice(&self) -> Option<String> {
+        self.selected.map(|i| self.options[i].option.clone())
     }
 }

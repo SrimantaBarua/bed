@@ -9,7 +9,7 @@ use euclid::{vec2, Point2D, Rect, Vector2D};
 
 use crate::buffer::{Buffer, BufferID, BufferViewCreateParams, BufferViewID, CursorStyle};
 use crate::common::PixelSize;
-use crate::input::MotionOrObj;
+use crate::input::{ComplAction, MotionOrObj};
 use crate::painter::Painter;
 
 struct TextView {
@@ -118,6 +118,13 @@ impl TextView {
         {
             let buffer = &mut *self.buffer.borrow_mut();
             buffer.stop_view_completion(&self.id)
+        }
+    }
+
+    fn completion_action(&mut self, action: ComplAction) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.view_completion_action(&self.id, action)
         }
     }
 
@@ -242,6 +249,10 @@ impl TextPane {
             }
             self.views[self.active].activate();
         }
+    }
+
+    pub(crate) fn completion_action(&mut self, action: ComplAction) {
+        self.views[self.active].completion_action(action)
     }
 
     pub(super) fn new(

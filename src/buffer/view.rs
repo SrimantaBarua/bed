@@ -12,6 +12,7 @@ use crate::common::{rope_trim_newlines, PixelSize, DPI};
 use crate::completion_popup::CompletionOption;
 use crate::completion_popup::CompletionPopup;
 use crate::config::Config;
+use crate::input::ComplAction;
 use crate::painter::Painter;
 use crate::style::TextStyle;
 use crate::text::{RopeOrStr, ShapedText, TextAlignment, TextShaper};
@@ -54,7 +55,7 @@ pub(super) struct BufferView {
     // Gutter
     gutter_width: u32,
     // Completion popup
-    completion: Option<CompletionPopup>,
+    completion: Option<(usize, CompletionPopup)>,
     // Misc.
     config: Rc<Config>,
     theme: Rc<Theme>,
@@ -122,7 +123,7 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn start_completion(&mut self, list: Vec<CompletionOption>) {
+    pub(crate) fn start_completion(&mut self, list: Vec<CompletionOption>, start_cidx: usize) {
         if let Some(origin) = self.cursor_baseline_to_relative_point() {
             let mut rect = self.rect;
             rect.origin.x += self.gutter_width;
@@ -137,9 +138,27 @@ impl BufferView {
                 self.dpi,
                 self.ascender + self.config.textview_line_padding as i32,
                 self.descender - self.config.textview_line_padding as i32,
-            );
+            )
+            .map(|c| (start_cidx, c));
         }
         self.needs_redraw = true;
+    }
+
+    pub(crate) fn get_completion(&self) -> Option<(usize, String)> {
+        if let Some((i, c)) = &self.completion {
+            c.get_choice().map(|s| (*i, s))
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn completion_action(&mut self, action: ComplAction) {
+        if let Some((_, comp)) = &mut self.completion {
+            match action {
+                ComplAction::Next => comp.next(),
+                ComplAction::Prev => comp.prev(),
+            }
+        }
     }
 
     pub(crate) fn stop_completion(&mut self) {
@@ -430,7 +449,7 @@ impl BufferView {
         }
 
         // Draw completion
-        if let Some(completion) = &self.completion {
+        if let Some((_, completion)) = &self.completion {
             completion.draw(painter)
         }
     }

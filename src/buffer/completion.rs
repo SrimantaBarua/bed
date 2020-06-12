@@ -18,12 +18,11 @@ impl CompletionSource {
         &self,
         data: &Rope,
         offset: usize,
-        list: &mut Vec<CompletionOption>,
         config: &Config,
         theme: &Theme,
-    ) {
+    ) -> Option<(usize, Vec<CompletionOption>)> {
         match self {
-            CompletionSource::Path => self.complete_path(data, offset, list, config, theme),
+            CompletionSource::Path => self.complete_path(data, offset, config, theme),
         }
     }
 
@@ -31,16 +30,16 @@ impl CompletionSource {
         &self,
         data: &Rope,
         offset: usize,
-        list: &mut Vec<CompletionOption>,
         config: &Config,
         theme: &Theme,
-    ) {
+    ) -> Option<(usize, Vec<CompletionOption>)> {
+        let mut list = Vec::new();
         // Heuristics. TODO: Improve
         let mut chars = data.chars_at(offset);
         let mut is_dir_start = false;
         match chars.prev() {
             Some('/') => is_dir_start = true,
-            None => return,
+            None => return None,
             _ => {}
         }
         let mut start_off = offset - 1;
@@ -59,21 +58,27 @@ impl CompletionSource {
             if let Some(s) = path.file_name().and_then(|os| os.to_str()) {
                 s
             } else {
-                return;
+                return None;
             }
         };
         let parent = if is_dir_start {
             if let Some(s) = path.to_str() {
                 s
             } else {
-                return;
+                return None;
             }
         } else {
             if let Some(s) = path.parent().and_then(|p| p.to_str()) {
                 s
             } else {
-                return;
+                return None;
             }
+        };
+        let base_len = base.chars().count();
+        let compl_start = if base_len > offset {
+            0
+        } else {
+            offset - base_len
         };
         if let Ok(contents) = read_dir(parent) {
             for dirent in contents {
@@ -93,13 +98,17 @@ impl CompletionSource {
                                         theme.completion.path_file,
                                     )
                                 };
-                                string.push(' ');
                                 list.push(CompletionOption::new(string, annotation, color));
                             }
                         }
                     }
                 }
             }
+        }
+        if list.len() > 0 {
+            Some((compl_start, list))
+        } else {
+            None
         }
     }
 }
