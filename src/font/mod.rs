@@ -37,10 +37,7 @@ impl Face {
     fn new(core: &RasterCore, path: CString, idx: u32) -> Option<Face> {
         let raster = core.new_face(&path, idx)?;
         let shaper = HbFont::new(&path, idx)?;
-        Some(Face {
-            raster: raster,
-            shaper: shaper,
-        })
+        Some(Face { raster, shaper })
     }
 }
 
@@ -52,7 +49,7 @@ struct FaceFamily {
 impl FaceFamily {
     fn empty(name: String) -> FaceFamily {
         FaceFamily {
-            name: name,
+            name,
             faces: FnvHashMap::default(),
         }
     }
@@ -80,7 +77,7 @@ impl FaceGroup {
         let mut family = FaceFamily::empty(family);
         family.set_face(style, face);
         FaceGroup {
-            family: family,
+            family,
             fallbacks: Vec::new(),
         }
     }
@@ -101,11 +98,11 @@ impl FontCore {
         let raster_core = RasterCore::new()?;
         let hb_buffer = HbBuffer::new()?;
         Some(FontCore {
-            source: source,
+            source,
             path_face_map: FnvHashMap::default(),
             key_face_map: FnvHashMap::default(),
-            raster_core: raster_core,
-            hb_buffer: hb_buffer,
+            raster_core,
+            hb_buffer,
             next_key: 0,
         })
     }

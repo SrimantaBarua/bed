@@ -105,7 +105,7 @@ impl RasterFace {
             Some(RasterizedGlyph {
                 size: size2(width, rows),
                 bearing: size2(bitmap_left, bitmap_top),
-                buffer: buffer,
+                buffer,
             })
         }
     }

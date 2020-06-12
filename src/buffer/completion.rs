@@ -38,10 +38,8 @@ impl CompletionSource {
         // Heuristics. TODO: Improve
         let mut chars = data.chars_at(offset);
         let mut is_dir_start = false;
-        match chars.prev() {
-            Some('/') => is_dir_start = true,
-            None => return None,
-            _ => {}
+        if chars.prev()? == '/' {
+            is_dir_start = true;
         }
         let mut start_off = offset - 1;
         while let Some(c) = chars.prev() {
@@ -56,24 +54,12 @@ impl CompletionSource {
         let base = if is_dir_start {
             ""
         } else {
-            if let Some(s) = path.file_name().and_then(|os| os.to_str()) {
-                s
-            } else {
-                return None;
-            }
+            path.file_name().and_then(|os| os.to_str())?
         };
         let parent = if is_dir_start {
-            if let Some(s) = path.to_str() {
-                s
-            } else {
-                return None;
-            }
+            path.to_str()?
         } else {
-            if let Some(s) = path.parent().and_then(|p| p.to_str()) {
-                s
-            } else {
-                return None;
-            }
+            path.parent().and_then(|p| p.to_str())?
         };
         let base_len = base.chars().count();
         let compl_start = if base_len > offset {

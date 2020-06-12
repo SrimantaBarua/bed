@@ -116,11 +116,7 @@ impl HbBuffer {
             assert!(len1 == len2, "unequal lengths for info and position arrays");
             let info = slice::from_raw_parts(info_ptr, len1 as usize);
             let pos = slice::from_raw_parts(pos_ptr, len2 as usize);
-            GlyphInfoIter {
-                info: info,
-                pos: pos,
-                i: 0,
-            }
+            GlyphInfoIter { info, pos, i: 0 }
         }
     }
 }

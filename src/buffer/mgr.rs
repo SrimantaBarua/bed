@@ -104,11 +104,7 @@ impl BufferMgr {
         let path = if let Some(path) = opth {
             path
         } else {
-            if let Some(path) = self.id_path_map.get(&id) {
-                path.to_owned()
-            } else {
-                return None;
-            }
+            self.id_path_map.get(&id).map(|p| p.to_owned())?
         };
         if let Some(rcbuf) = self.id_buf_map.get_mut(&id).and_then(|wr| wr.upgrade()) {
             let buf = &mut *rcbuf.borrow_mut();
@@ -140,12 +136,10 @@ impl BufferMgr {
         if let Some(path) = opth {
             Some(self.from_file(&path))
         } else {
-            if let Some(path) = self.id_path_map.get(&id) {
-                let path = path.to_owned();
-                Some(self.from_file(&path))
-            } else {
-                return None;
-            }
+            self.id_path_map
+                .get(&id)
+                .map(|p| p.to_owned())
+                .map(|p| self.from_file(&p.to_owned()))
         }
     }
 
