@@ -21,6 +21,8 @@ mod completion_popup;
 mod config;
 mod font;
 mod input;
+mod langserver;
+mod language;
 mod opengl;
 mod painter;
 mod project;
@@ -57,6 +59,7 @@ impl Bed {
         let ts_core = ts::TsCore::new();
         let theme_set = theme::ThemeSet::load();
         let projects = project::Projects::load();
+        let lang_client_manager = langserver::LangClientMgr::new(config.clone());
 
         let input_state = input::State::new();
         let mut input_actions = Vec::new();
@@ -75,8 +78,13 @@ impl Bed {
             .unwrap_or_else(|| theme_set.0.get(DEFAULT_THEME).unwrap())
             .clone();
 
-        let mut buffer_mgr =
-            buffer::BufferMgr::new(ts_core, projects, config.clone(), theme.clone());
+        let mut buffer_mgr = buffer::BufferMgr::new(
+            ts_core,
+            projects,
+            config.clone(),
+            theme.clone(),
+            lang_client_manager,
+        );
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
                 .from_file(&abspath(path))

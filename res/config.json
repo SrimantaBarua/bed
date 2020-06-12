@@ -1,35 +1,52 @@
 {
-    "theme": "ayu-mirage",
-    "font_family": "monospace",
-    "font_size": 7.25,
-    "gutter_font_family" : "monospace",
-    "gutter_font_scale" : 0.9,
-    "gutter_padding" : 12,
-    "prompt_font_family" : "monospace",
-    "prompt_font_size" : 7.25,
-    "tab_width" : 8,
-    "indent_tabs" : true,
+    "theme" : "ayu-light",
 
-    "filetypes" : {
-        "css" : {
-            "tab_width" : 2,
-            "indent_tabs" : false
+    "editor.font_family" : "Roboto Mono",
+    "editor.font_size" : 7.5,
+    "editor.tab_width" : 8,
+    "editor.indent_tabs" : true,
+    "editor.line_padding" : 1,
+
+    "gutter.padding" : 12,
+    "gutter.font_scale" : 0.9,
+
+    "prompt.padding_vertical" : 4,
+    "prompt.padding_horizontal" : 4,
+
+    "completion.padding_vertical" : 2,
+    "completion.padding_horizontal" : 4,
+    "completion.line_padding" : 1,
+    "completion.annotation" : {
+        "path.file" : "",
+        "path.directory" : ""
+    },
+    "completion.language_server.root_markers" : [ ".git" ],
+
+    "language" : {
+        "c" : {
+            "completion.language_server" : {
+                "executable" : "clangd",
+                "root_markers" : [ "compile_commands.json" ]
+            }
         },
-        "html" : {
-            "tab_width" : 2,
-            "indent_tabs" : false
+        "cpp" : {
+            "completion.language_server" : {
+                "executable" : "clangd",
+                "root_markers" : [ "compile_commands.json" ]
+            }
         },
-        "javascript" : {
-            "tab_width" : 4,
-            "indent_tabs" : false
-        },
+
         "python" : {
-            "tab_width" : 4,
-            "indent_tabs" : false
+            "editor.tab_width" : 4,
+            "editor.indent_tabs" : false
         },
+
         "rust" : {
-            "tab_width" : 4,
-            "indent_tabs" : false
+            "editor.tab_width" : 4,
+            "editor.indent_tabs" : false,
+            "completion.language_server" : {
+                "executable" : "rls"
+            }
         }
     }
 }

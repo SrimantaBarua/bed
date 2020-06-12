@@ -48,7 +48,13 @@ impl Projects {
             let cfg_dir_path = proj_dirs.config_dir();
             std::fs::read_to_string(cfg_dir_path.join("projects.json"))
                 .ok()
-                .and_then(|data| serde_json::from_str(&data).ok())
+                .and_then(|data| match serde_json::from_str(&data) {
+                    Ok(c) => Some(c),
+                    Err(e) => {
+                        error!("could not parse projects: {}", e);
+                        None
+                    }
+                })
                 .map(|inner: FnvHashMap<String, ProjectInner>| {
                     let mut ret = FnvHashMap::default();
                     for (k, v) in inner {

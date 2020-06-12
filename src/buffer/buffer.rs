@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cell::RefCell;
 use std::cmp::min;
 use std::fs::File;
 use std::io::Result as IOResult;
@@ -15,6 +16,8 @@ use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::config::Config;
 use crate::input::{ComplAction, Motion, MotionOrObj, Object};
+use crate::langserver::{LangClient, LangClientMgr};
+use crate::language::Language;
 use crate::painter::Painter;
 use crate::project::Project;
 use crate::style::{Color, TextStyle};
@@ -45,13 +48,14 @@ pub(crate) struct Buffer {
     styled_lines: Vec<StyledText>,
     tab_width: usize,
     indent_tabs: bool,
-    filetype: Option<String>,
+    language: Option<Language>,
     parser: Option<Parser>,
     hl_query: Option<Rc<Query>>,
     tree: Option<Tree>,
     project: Option<Rc<Project>>,
     theme: Rc<Theme>,
     config: Rc<Config>,
+    language_client: Option<Rc<RefCell<LangClient>>>,
 }
 
 impl Buffer {
@@ -660,7 +664,7 @@ impl Buffer {
             data: Rope::new(),
             views: FnvHashMap::default(),
             styled_lines: vec![styled],
-            filetype: None,
+            language: None,
             parser: None,
             hl_query: None,
             tree: None,
@@ -669,6 +673,7 @@ impl Buffer {
             tab_width,
             indent_tabs,
             project: None,
+            language_client: None,
         }
     }
 
@@ -679,19 +684,20 @@ impl Buffer {
         ts_core: &TsCore,
         config: Rc<Config>,
         theme: Rc<Theme>,
+        lang_client_manager: &mut LangClientMgr,
     ) -> IOResult<Buffer> {
         let rope = if let Ok(file) = File::open(path) {
             Rope::from_reader(file)?
         } else {
             Rope::new()
         };
-        let (filetype, parser, hl_query) = Path::new(path)
+        let (language, parser, hl_query) = Path::new(path)
             .extension()
             .and_then(|s| s.to_str())
             .and_then(|s| ts_core.parser_from_extension(s))
             .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
             .unwrap_or((None, None, None));
-        let (mut tab_width, mut indent_tabs) = filetype
+        let (mut tab_width, mut indent_tabs) = language
             .as_ref()
             .and_then(|ft| config.language.get(ft))
             .map(|ft| (ft.tab_width, ft.indent_tabs))
@@ -710,12 +716,21 @@ impl Buffer {
                 indent_tabs,
             ));
         }
+        let language_client = language
+            .and_then(|language| lang_client_manager.get_client(path, language))
+            .and_then(|lc| match lc {
+                Ok(lc) => Some(lc),
+                Err(e) => {
+                    debug!("failed to get language server for path: {}: {}", path, e);
+                    None
+                }
+            });
         let mut ret = Buffer {
             buffer_id,
             data: rope,
             views: FnvHashMap::default(),
             styled_lines,
-            filetype,
+            language,
             parser,
             hl_query,
             tree: None,
@@ -724,6 +739,7 @@ impl Buffer {
             tab_width,
             indent_tabs,
             project,
+            language_client,
         };
         ret.recreate_parse_tree();
         Ok(ret)
@@ -734,6 +750,7 @@ impl Buffer {
         path: &str,
         project: Option<Rc<Project>>,
         ts_core: &TsCore,
+        lang_client_manager: &mut LangClientMgr,
     ) -> IOResult<()> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
@@ -741,13 +758,13 @@ impl Buffer {
                 self.data = rope;
                 self.project = project;
                 self.styled_lines.clear();
-                let (filetype, parser, hl_query) = Path::new(path)
+                let (language, parser, hl_query) = Path::new(path)
                     .extension()
                     .and_then(|s| s.to_str())
                     .and_then(|s| ts_core.parser_from_extension(s))
                     .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
                     .unwrap_or((None, None, None));
-                let (tab_width, indent_tabs) = filetype
+                let (tab_width, indent_tabs) = language
                     .as_ref()
                     .and_then(|ft| self.config.language.get(ft))
                     .map(|ft| (ft.tab_width, ft.indent_tabs))
@@ -762,7 +779,7 @@ impl Buffer {
                 }
                 self.tab_width = tab_width;
                 self.indent_tabs = indent_tabs;
-                self.filetype = filetype;
+                self.language = language;
                 self.parser = parser;
                 self.hl_query = hl_query;
                 self.recreate_parse_tree();
@@ -782,6 +799,16 @@ impl Buffer {
                         view.snap_to_cursor(&self.data, &self.styled_lines);
                     }
                 }
+
+                self.language_client = language
+                    .and_then(|language| lang_client_manager.get_client(path, language))
+                    .and_then(|lc| match lc {
+                        Ok(lc) => Some(lc),
+                        Err(e) => {
+                            debug!("failed to get language server for path: {}: {}", path, e);
+                            None
+                        }
+                    });
             })
     }
 
@@ -792,19 +819,20 @@ impl Buffer {
         path: &str,
         project: Option<Rc<Project>>,
         ts_core: &TsCore,
+        lang_client_manager: &mut LangClientMgr,
     ) -> IOResult<usize> {
         self.project = project;
         let len = self.data.len_bytes();
 
-        let (filetype, parser, hl_query) = Path::new(path)
+        let (language, parser, hl_query) = Path::new(path)
             .extension()
             .and_then(|s| s.to_str())
             .and_then(|s| ts_core.parser_from_extension(s))
             .map(|(f, p, q)| (Some(f), Some(p), Some(q)))
             .unwrap_or((None, None, None));
 
-        if filetype != self.filetype {
-            let (tab_width, indent_tabs) = filetype
+        if language != self.language {
+            let (tab_width, indent_tabs) = language
                 .as_ref()
                 .and_then(|ft| self.config.language.get(ft))
                 .map(|ft| (ft.tab_width, ft.indent_tabs))
@@ -818,8 +846,8 @@ impl Buffer {
             self.tab_width = project.tab_width.unwrap_or(self.tab_width);
             self.indent_tabs = project.indent_tabs.unwrap_or(self.indent_tabs);
         }
-        if filetype != self.filetype {
-            self.filetype = filetype;
+        if language != self.language {
+            self.language = language;
             self.styled_lines.clear();
             for line in self.data.lines() {
                 self.styled_lines.push(default_hl_for_line(
@@ -837,6 +865,16 @@ impl Buffer {
                 view.reshape(&self.data, &self.styled_lines);
             }
         }
+
+        self.language_client = language
+            .and_then(|language| lang_client_manager.get_client(path, language))
+            .and_then(|lc| match lc {
+                Ok(lc) => Some(lc),
+                Err(e) => {
+                    debug!("failed to get language server for path: {}: {}", path, e);
+                    None
+                }
+            });
 
         match File::create(path) {
             Ok(mut f) => {

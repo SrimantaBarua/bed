@@ -7,6 +7,7 @@ use fnv::FnvHashMap;
 use serde::Deserialize;
 
 use crate::font::{FaceKey, FontCore};
+use crate::language::Language;
 use crate::style::TextSize;
 
 use super::DEFAULT_THEME;
@@ -25,26 +26,42 @@ static DEFAULT_PROMPT_PADDING_VERTICAL: u32 = 2;
 static DEFAULT_COMPLETION_PADDING_HORIZONTAL: u32 = 4;
 static DEFAULT_COMPLETION_PADDING_VERTICAL: u32 = 2;
 
-fn default_tab_width() -> usize {
-    DEFAULT_TAB_WIDTH
-}
-
-fn default_indent_tabs() -> bool {
-    DEFAULT_INDENT_TABS
+pub(crate) struct ConfigLanguage {
+    pub(crate) tab_width: usize,
+    pub(crate) indent_tabs: bool,
+    pub(crate) language_server: Option<ConfigLanguageServer>,
 }
 
 #[derive(Deserialize)]
-pub(crate) struct ConfigLanguage {
+pub(crate) struct ConfigLanguageServer {
+    pub(crate) executable: String,
+    #[serde(default)]
+    pub(crate) arguments: Vec<String>,
     #[serde(
-        rename(deserialize = "editor.tab_width"),
-        default = "default_tab_width"
+        rename(deserialize = "completion.language_server.root_markers"),
+        default
     )]
-    pub(crate) tab_width: usize,
-    #[serde(
-        rename(deserialize = "editor.indent_tabs"),
-        default = "default_indent_tabs"
-    )]
-    pub(crate) indent_tabs: bool,
+    pub(crate) root_markers: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ConfigLanguageInner {
+    #[serde(rename(deserialize = "editor.tab_width"))]
+    tab_width: Option<usize>,
+    #[serde(rename(deserialize = "editor.indent_tabs"))]
+    indent_tabs: Option<bool>,
+    #[serde(rename(deserialize = "completion.language_server"))]
+    language_server: Option<ConfigLanguageServer>,
+}
+
+impl ConfigLanguageInner {
+    fn finalize(self, tab_width: usize, indent_tabs: bool) -> ConfigLanguage {
+        ConfigLanguage {
+            tab_width: self.tab_width.unwrap_or(tab_width),
+            indent_tabs: self.indent_tabs.unwrap_or(indent_tabs),
+            language_server: self.language_server,
+        }
+    }
 }
 
 #[derive(Default, Deserialize)]
@@ -59,7 +76,7 @@ pub(crate) struct Config {
     pub(crate) theme: String,
     pub(crate) tab_width: usize,
     pub(crate) indent_tabs: bool,
-    pub(crate) language: FnvHashMap<String, ConfigLanguage>,
+    pub(crate) language: FnvHashMap<Language, ConfigLanguage>,
     // Textview
     pub(crate) textview_face: FaceKey,
     pub(crate) textview_font_size: TextSize,
@@ -80,6 +97,7 @@ pub(crate) struct Config {
     pub(crate) completion_padding_horizontal: u32,
     pub(crate) completion_line_padding: u32,
     pub(crate) completion_annotation: ConfigCompletionAnnotation,
+    pub(crate) completion_langserver_root_markers: Vec<String>,
 }
 
 impl Config {
@@ -89,7 +107,13 @@ impl Config {
             let cfg_dir_path = proj_dirs.config_dir();
             std::fs::read_to_string(cfg_dir_path.join("config.json"))
                 .ok()
-                .and_then(|data| serde_json::from_str::<ConfigInner>(&data).ok())
+                .and_then(|data| match serde_json::from_str::<ConfigInner>(&data) {
+                    Ok(c) => Some(c),
+                    Err(e) => {
+                        error!("could not parse config: {}", e);
+                        None
+                    }
+                })
                 .unwrap_or_default()
                 .finalize(font_core)
         } else {
@@ -141,8 +165,13 @@ struct ConfigInner {
     completion_line_padding: u32,
     #[serde(rename(deserialize = "completion.annotation"), default)]
     completion_annotation: ConfigCompletionAnnotation,
+    #[serde(
+        rename(deserialize = "completion.language_server.root_markers"),
+        default
+    )]
+    completion_langserver_root_markers: Vec<String>,
     // Language-specific
-    language: FnvHashMap<String, ConfigLanguage>,
+    language: FnvHashMap<Language, ConfigLanguageInner>,
 }
 
 impl ConfigInner {
@@ -196,12 +225,17 @@ impl ConfigInner {
         let completion_padding_vertical = self
             .completion_padding_vertical
             .unwrap_or(DEFAULT_COMPLETION_PADDING_VERTICAL);
+        // Language config
+        let mut language = FnvHashMap::default();
+        for (k, v) in self.language {
+            language.insert(k, v.finalize(tab_width, indent_tabs));
+        }
         // Return
         Config {
             theme,
             tab_width,
             indent_tabs,
-            language: self.language,
+            language,
             textview_face,
             textview_font_size,
             textview_line_padding: self.textview_line_padding,
@@ -218,6 +252,7 @@ impl ConfigInner {
             completion_padding_horizontal,
             completion_line_padding: self.completion_line_padding,
             completion_annotation: self.completion_annotation,
+            completion_langserver_root_markers: self.completion_langserver_root_markers,
         }
     }
 }

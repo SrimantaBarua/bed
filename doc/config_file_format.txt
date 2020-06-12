@@ -19,20 +19,36 @@
     "completion.font_scale" : <float>,
     "completion.padding_vertical" : <integer>,
     "completion.padding_horizontal" : <integer>,
-
     "completion.annotation" : {
         "path.file" : <string>,
         "path.directory" : <string>
     },
+    "completion.language_server.root_markers" : [ ".git" ],
 
     "language" : {
         "rust" : {
             "editor.tab_width" : <integer>,
             "editor.indent_tabs" : <bool>,
+            "completion.language_server" : {
+                "executable" : "rls"
+            },
+            "completion.language_server.root_markers" : [ "Cargo.toml" ]
         },
         "c" : {
             "editor.tab_width" : <integer>,
-            "editor.indent_tabs" : <bool>,
+            "editor.indent_tabs" : <bool>
+            "completion.language_server" : {
+                "executable" : "clangd",
+                "arguments" : [
+                    "-j=8",
+                    "--suggest-missing-includes"
+                ]
+            },
+            "completion.language_server.root_markers" : [ "compile_commands.json" ]
+        },
+        "python" : {
+            "editor.tab_width" : <integer>,
+            "editor.indent_tabs" : <bool>
         }
     }
 }

@@ -3,17 +3,19 @@
 use std::rc::Rc;
 
 use fnv::FnvHashMap;
-use tree_sitter::{Language, Parser, Query};
+use tree_sitter::{Language as TSLanguage, Parser, Query};
+
+use crate::language::Language;
 
 #[link(name = "tslangs")]
 extern "C" {
-    fn tree_sitter_c() -> Language;
-    fn tree_sitter_cpp() -> Language;
-    fn tree_sitter_css() -> Language;
-    fn tree_sitter_html() -> Language;
-    fn tree_sitter_javascript() -> Language;
-    fn tree_sitter_python() -> Language;
-    fn tree_sitter_rust() -> Language;
+    fn tree_sitter_c() -> TSLanguage;
+    fn tree_sitter_cpp() -> TSLanguage;
+    fn tree_sitter_css() -> TSLanguage;
+    fn tree_sitter_html() -> TSLanguage;
+    fn tree_sitter_javascript() -> TSLanguage;
+    fn tree_sitter_python() -> TSLanguage;
+    fn tree_sitter_rust() -> TSLanguage;
 }
 
 static C_HIGHLIGHTS: &str = include_str!("../res/tree-sitter/c/highlights.scm");
@@ -25,9 +27,9 @@ static PYTHON_HIGHLIGHTS: &str = include_str!("../res/tree-sitter/python/highlig
 static RUST_HIGHLIGHTS: &str = include_str!("../res/tree-sitter/rust/highlights.scm");
 
 pub(crate) struct TsCore {
-    languages: Vec<Language>,
+    languages: Vec<TSLanguage>,
     hl_queries: Vec<Rc<Query>>,
-    exts: FnvHashMap<String, (String, usize)>,
+    exts: FnvHashMap<String, (Language, usize)>,
 }
 
 impl TsCore {
@@ -72,23 +74,23 @@ impl TsCore {
             ),
         ];
         let mut exts = FnvHashMap::default();
-        exts.insert("c".to_owned(), ("c".to_owned(), 0));
-        exts.insert("h".to_owned(), ("c".to_owned(), 0));
-        exts.insert("cpp".to_owned(), ("c++".to_owned(), 1));
-        exts.insert("hpp".to_owned(), ("c++".to_owned(), 1));
-        exts.insert("css".to_owned(), ("css".to_owned(), 2));
-        exts.insert("html".to_owned(), ("css".to_owned(), 3));
-        exts.insert("js".to_owned(), ("javascript".to_owned(), 4));
-        exts.insert("py".to_owned(), ("python".to_owned(), 5));
-        exts.insert("rs".to_owned(), ("rust".to_owned(), 6));
+        exts.insert("c".to_owned(), (Language::C, 0));
+        exts.insert("h".to_owned(), (Language::C, 0));
+        exts.insert("cpp".to_owned(), (Language::Cpp, 1));
+        exts.insert("hpp".to_owned(), (Language::Cpp, 1));
+        exts.insert("css".to_owned(), (Language::CSS, 2));
+        exts.insert("html".to_owned(), (Language::CSS, 3));
+        exts.insert("js".to_owned(), (Language::JavaScript, 4));
+        exts.insert("py".to_owned(), (Language::Python, 5));
+        exts.insert("rs".to_owned(), (Language::Rust, 6));
         TsCore {
-            languages: languages,
-            hl_queries: hl_queries,
-            exts: exts,
+            languages,
+            hl_queries,
+            exts,
         }
     }
 
-    pub(crate) fn parser_from_extension(&self, ext: &str) -> Option<(String, Parser, Rc<Query>)> {
+    pub(crate) fn parser_from_extension(&self, ext: &str) -> Option<(Language, Parser, Rc<Query>)> {
         self.exts.get(ext).map(|(ft, i)| {
             let mut parser = Parser::new();
             parser

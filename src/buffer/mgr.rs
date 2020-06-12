@@ -7,6 +7,7 @@ use std::rc::{Rc, Weak};
 use fnv::FnvHashMap;
 
 use crate::config::Config;
+use crate::langserver::LangClientMgr;
 use crate::project::Projects;
 use crate::theme::Theme;
 use crate::ts::TsCore;
@@ -24,6 +25,7 @@ pub(crate) struct BufferMgr {
     ts_core: TsCore,
     theme: Rc<Theme>,
     config: Rc<Config>,
+    lang_client_manager: LangClientMgr,
 }
 
 // TODO: Periodically clear out Weak buffers with a strong count of 0
@@ -34,6 +36,7 @@ impl BufferMgr {
         projects: Projects,
         config: Rc<Config>,
         theme: Rc<Theme>,
+        lang_client_manager: LangClientMgr,
     ) -> BufferMgr {
         BufferMgr {
             path_id_map: FnvHashMap::default(),
@@ -45,6 +48,7 @@ impl BufferMgr {
             theme,
             projects,
             config,
+            lang_client_manager,
         }
     }
 
@@ -67,7 +71,12 @@ impl BufferMgr {
             .and_then(|weak_ref| weak_ref.upgrade())
             .map(|buffer| {
                 (&mut *buffer.borrow_mut())
-                    .reload_from_file(path, self.projects.project_for_path(path), &self.ts_core)
+                    .reload_from_file(
+                        path,
+                        self.projects.project_for_path(path),
+                        &self.ts_core,
+                        &mut self.lang_client_manager,
+                    )
                     .map(|_| buffer.clone())
             })
             .unwrap_or_else(|| {
@@ -85,6 +94,7 @@ impl BufferMgr {
                     &self.ts_core,
                     self.config.clone(),
                     self.theme.clone(),
+                    &mut self.lang_client_manager,
                 )
                 .map(|buffer| {
                     let buffer = Rc::new(RefCell::new(buffer));
@@ -109,15 +119,20 @@ impl BufferMgr {
         if let Some(rcbuf) = self.id_buf_map.get_mut(&id).and_then(|wr| wr.upgrade()) {
             let buf = &mut *rcbuf.borrow_mut();
             Some(
-                buf.write(&path, self.projects.project_for_path(&path), &self.ts_core)
-                    .map(|nb| {
-                        if let Some(p) = self.id_path_map.get(&id) {
-                            self.path_id_map.remove(p);
-                        }
-                        self.id_path_map.insert(id, path.to_owned());
-                        self.path_id_map.insert(path, id);
-                        nb
-                    }),
+                buf.write(
+                    &path,
+                    self.projects.project_for_path(&path),
+                    &self.ts_core,
+                    &mut self.lang_client_manager,
+                )
+                .map(|nb| {
+                    if let Some(p) = self.id_path_map.get(&id) {
+                        self.path_id_map.remove(p);
+                    }
+                    self.id_path_map.insert(id, path.to_owned());
+                    self.path_id_map.insert(path, id);
+                    nb
+                }),
             )
         } else {
             self.id_buf_map.remove(&id);
