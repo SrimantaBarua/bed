@@ -79,7 +79,7 @@ impl TsCore {
         exts.insert("cpp".to_owned(), (Language::Cpp, 1));
         exts.insert("hpp".to_owned(), (Language::Cpp, 1));
         exts.insert("css".to_owned(), (Language::CSS, 2));
-        exts.insert("html".to_owned(), (Language::CSS, 3));
+        exts.insert("html".to_owned(), (Language::HTML, 3));
         exts.insert("js".to_owned(), (Language::JavaScript, 4));
         exts.insert("py".to_owned(), (Language::Python, 5));
         exts.insert("rs".to_owned(), (Language::Rust, 6));

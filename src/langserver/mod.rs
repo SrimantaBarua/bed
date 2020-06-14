@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::fs::read_dir;
 use std::io::Result as IOResult;
+use std::io::Write;
 use std::ops::Drop;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -14,7 +15,9 @@ use crate::common::abspath;
 use crate::config::Config;
 use crate::language::Language;
 
+mod glue;
 mod proto;
+mod types;
 
 pub(crate) struct LangClientMgr {
     clients: FnvHashMap<(String, Language), Rc<RefCell<LangClient>>>,
@@ -94,10 +97,67 @@ impl LangClient {
             .spawn()?;
         Ok(LangClient { child })
     }
+
+    fn send(&mut self, message: proto::Message) -> IOResult<()> {
+        if let Some(stdin) = &mut self.child.stdin {
+            write!(stdin, "{}", message)
+        } else {
+            unreachable!()
+        }
+    }
+
+    /*
+    fn recv(&mut self) -> IOResult<Option<RawMessage>> {
+        if let Some(stdout) = &mut self.child.stdout {
+            let mut buf = vec![0; 8192];
+            let len = stdout.read(&mut buf)?;
+            buf.truncate(len);
+            //Ok(String::from_utf8(buf).unwrap())
+        } else {
+            unreachable!()
+        }
+    }
+    */
 }
 
 impl Drop for LangClient {
     fn drop(&mut self) {
         let _ = self.child.kill();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::proto::*;
+    use super::types::*;
+    use super::*;
+
+    fn setup_server(command: &str) -> LangClient {
+        LangClient::new(command, &[]).unwrap()
+    }
+
+    #[test]
+    fn test_initialize() {
+        let mut rls = setup_server("rls");
+        let msg = Message::new(MessageContent::Call {
+            id: Id::Num(0),
+            method: "initialize".to_owned(),
+            params: Some(
+                serde_json::to_value(InitializeParams {
+                    processID: None,
+                    clientInfo: Some(ClientInfo {
+                        name: "bed".to_owned(),
+                        version: Some("0.1.0".to_owned()),
+                    }),
+                    rootUri: Uri::new("file:///home/barua/Documents/text_editor/bed").ok(),
+                    capabilities: ClientCapabilities {},
+                    trace: None,
+                })
+                .unwrap(),
+            ),
+        });
+        eprintln!("msg: {}", msg);
+        rls.send(msg).unwrap();
+        //assert_eq!(&rls.recv().unwrap(), "nothing");
     }
 }

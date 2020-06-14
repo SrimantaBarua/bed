@@ -8,6 +8,7 @@ pub(crate) enum Language {
     C,
     Cpp,
     CSS,
+    HTML,
     JavaScript,
     Python,
     Rust,
