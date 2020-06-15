@@ -1,5 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use language_client::BufferKey;
+
 mod buffer;
 mod completion;
 mod cursor;
@@ -18,6 +20,8 @@ impl BufferViewID {
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub(crate) struct BufferID(usize);
+
+impl BufferKey for BufferID {}
 
 pub(crate) use buffer::Buffer;
 pub(crate) use cursor::CursorStyle;

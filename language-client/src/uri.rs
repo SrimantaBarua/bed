@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 #[serde(try_from = "&str")]
 #[derive(Clone, Debug, Deserialize)]
-pub(in crate::langserver) struct Uri {
+pub(crate) struct Uri {
     content: String,
     scheme: usize,
     authority: usize,
@@ -36,15 +36,23 @@ impl Serialize for Uri {
 }
 
 impl Uri {
-    pub(in crate::langserver) fn new(s: &str) -> Result<Uri, String> {
+    pub(crate) fn new(s: &str) -> Result<Uri, String> {
         Uri::parse(s)
     }
 
-    pub(in crate::langserver) fn scheme(&self) -> &str {
+    pub(crate) fn from_path(s: &str) -> Result<Uri, String> {
+        if s.starts_with('/') {
+            Uri::parse(&format!("file://{}", s))
+        } else {
+            Uri::parse(&format!("file://{}", crate::absolute_path(s)))
+        }
+    }
+
+    pub(crate) fn scheme(&self) -> &str {
         &self.content[..self.scheme]
     }
 
-    pub(in crate::langserver) fn authority(&self) -> Option<&str> {
+    pub(crate) fn authority(&self) -> Option<&str> {
         if self.has_authority() {
             assert!(self.authority >= self.scheme + 3);
             Some(&self.content[self.scheme + 3..self.authority])
@@ -54,7 +62,7 @@ impl Uri {
         }
     }
 
-    pub(in crate::langserver) fn path(&self) -> &str {
+    pub(crate) fn path(&self) -> &str {
         &self.content[self.authority..self.path]
     }
 
@@ -276,6 +284,18 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&uri).unwrap(),
             "\"file://authority/user/document.txt\""
+        );
+    }
+
+    #[test]
+    fn uri_from_path() {
+        let uri = Uri::from_path("/home/user/document.txt").unwrap();
+        assert_eq!(uri.scheme(), "file");
+        assert_eq!(uri.authority(), Some(""));
+        assert_eq!(uri.path(), "/home/user/document.txt");
+        assert_eq!(
+            serde_json::to_string(&uri).unwrap(),
+            "\"file:///home/user/document.txt\""
         );
     }
 }

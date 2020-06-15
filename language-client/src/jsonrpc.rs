@@ -3,10 +3,10 @@
 use std::fmt;
 
 use serde::ser::{SerializeStruct, Serializer};
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
-pub(super) struct Message {
+pub(crate) struct Message {
     content_type: Option<String>,
     content: MessageContent,
 }
@@ -24,7 +24,7 @@ impl fmt::Display for Message {
 }
 
 impl Message {
-    pub(super) fn new(content: MessageContent) -> Message {
+    pub(crate) fn new(content: MessageContent) -> Message {
         Message {
             content_type: None,
             content,
@@ -109,7 +109,7 @@ pub(super) struct Error {
     data: Option<Value>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[serde(untagged)]
 pub(super) enum Id {
     Str(String),

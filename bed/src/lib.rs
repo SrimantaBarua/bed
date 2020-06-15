@@ -5,10 +5,13 @@ use std::env;
 use std::rc::Rc;
 use std::{thread, time};
 
-extern crate crossbeam_channel;
+#[macro_use]
+extern crate clap;
 
+use crossbeam_channel::unbounded;
 use euclid::{size2, vec2, Rect, Size2D};
 use glfw::{Action, MouseButtonLeft, WindowEvent};
+use language_client::{LanguageClientManager, LanguageConfig};
 
 #[macro_use]
 mod log;
@@ -21,7 +24,6 @@ mod completion_popup;
 mod config;
 mod font;
 mod input;
-mod langserver;
 mod language;
 mod opengl;
 mod painter;
@@ -59,7 +61,33 @@ impl Bed {
         let ts_core = ts::TsCore::new();
         let theme_set = theme::ThemeSet::load();
         let projects = project::Projects::load();
-        let lang_client_manager = langserver::LangClientMgr::new(config.clone());
+
+        let (lsp_tx, lsp_rx) = unbounded();
+        let language_client_manager = LanguageClientManager::new(
+            /*
+            |language_id| {
+                config
+                    .language
+                    .get(language_id)
+                    .and_then(|language_config| {
+                        language_config
+                            .language_server
+                            .map(|lsconfig| LanguageConfig {
+                                command: lsconfig.executable.clone(),
+                                args: lsconfig.arguments.clone(),
+                                root_markers: config
+                                    .completion_langserver_root_markers
+                                    .iter()
+                                    .chain(lsconfig.root_markers.iter())
+                                    .collect(),
+                            })
+                    })
+            },
+            */
+            lsp_tx,
+            Some(crate_name!().to_owned()),
+            Some(crate_version!().to_owned()),
+        );
 
         let input_state = input::State::new();
         let mut input_actions = Vec::new();
@@ -83,7 +111,7 @@ impl Bed {
             projects,
             config.clone(),
             theme.clone(),
-            lang_client_manager,
+            language_client_manager
         );
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr
