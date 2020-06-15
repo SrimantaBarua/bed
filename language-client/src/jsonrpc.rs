@@ -3,7 +3,7 @@
 use std::fmt;
 
 use serde::ser::{SerializeStruct, Serializer};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub(crate) struct Message {

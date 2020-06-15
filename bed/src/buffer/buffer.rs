@@ -55,7 +55,7 @@ pub(crate) struct Buffer {
     project: Option<Rc<Project>>,
     theme: Rc<Theme>,
     config: Rc<Config>,
-    language_client: Option<Rc<RefCell<LanguageClient<BufferID>>>>,
+    language_client: Option<Rc<RefCell<LanguageClient>>>,
 }
 
 impl Buffer {
@@ -684,7 +684,7 @@ impl Buffer {
         ts_core: &TsCore,
         config: Rc<Config>,
         theme: Rc<Theme>,
-        lang_client_manager: &mut LanguageClientManager<Language, BufferID>,
+        lang_client_manager: &mut LanguageClientManager<Language>,
     ) -> IOResult<Buffer> {
         let rope = if let Ok(file) = File::open(path) {
             Rope::from_reader(file)?
@@ -721,7 +721,7 @@ impl Buffer {
                 config
                     .language_config(language)
                     .and_then(|language_config| {
-                        lang_client_manager.get_client(language, path, buffer_id, &language_config)
+                        lang_client_manager.get_client(language, path, &language_config)
                     })
             })
             .and_then(|lc| match lc {
@@ -756,7 +756,7 @@ impl Buffer {
         path: &str,
         project: Option<Rc<Project>>,
         ts_core: &TsCore,
-        lang_client_manager: &mut LanguageClientManager<Language, BufferID>,
+        lang_client_manager: &mut LanguageClientManager<Language>,
     ) -> IOResult<()> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
@@ -811,12 +811,7 @@ impl Buffer {
                         self.config
                             .language_config(language)
                             .and_then(|language_config| {
-                                lang_client_manager.get_client(
-                                    language,
-                                    path,
-                                    self.buffer_id,
-                                    &language_config,
-                                )
+                                lang_client_manager.get_client(language, path, &language_config)
                             })
                     })
                     .and_then(|lc| match lc {
@@ -836,7 +831,7 @@ impl Buffer {
         path: &str,
         project: Option<Rc<Project>>,
         ts_core: &TsCore,
-        lang_client_manager: &mut LanguageClientManager<Language, BufferID>,
+        lang_client_manager: &mut LanguageClientManager<Language>,
     ) -> IOResult<usize> {
         self.project = project;
         let len = self.data.len_bytes();
@@ -888,12 +883,7 @@ impl Buffer {
                 self.config
                     .language_config(language)
                     .and_then(|language_config| {
-                        lang_client_manager.get_client(
-                            language,
-                            path,
-                            self.buffer_id,
-                            &language_config,
-                        )
+                        lang_client_manager.get_client(language, path, &language_config)
                     })
             })
             .and_then(|lc| match lc {

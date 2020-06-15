@@ -26,7 +26,7 @@ pub(crate) struct BufferMgr {
     ts_core: TsCore,
     theme: Rc<Theme>,
     config: Rc<Config>,
-    lang_client_manager: LanguageClientManager<Language, BufferID>,
+    lang_client_manager: LanguageClientManager<Language>,
 }
 
 // TODO: Periodically clear out Weak buffers with a strong count of 0
@@ -37,7 +37,7 @@ impl BufferMgr {
         projects: Projects,
         config: Rc<Config>,
         theme: Rc<Theme>,
-        lang_client_manager: LanguageClientManager<Language, BufferID>,
+        lang_client_manager: LanguageClientManager<Language>,
     ) -> BufferMgr {
         BufferMgr {
             path_id_map: FnvHashMap::default(),

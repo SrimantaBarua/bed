@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::uri::Uri;
 
@@ -28,8 +28,7 @@ pub(super) struct ClientCapabilities {}
 
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
-pub(super) struct InitializeResult {
-}
+pub(super) struct InitializeResult {}
 
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]

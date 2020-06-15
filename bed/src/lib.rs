@@ -64,26 +64,6 @@ impl Bed {
 
         let (lsp_tx, lsp_rx) = unbounded();
         let language_client_manager = LanguageClientManager::new(
-            /*
-            |language_id| {
-                config
-                    .language
-                    .get(language_id)
-                    .and_then(|language_config| {
-                        language_config
-                            .language_server
-                            .map(|lsconfig| LanguageConfig {
-                                command: lsconfig.executable.clone(),
-                                args: lsconfig.arguments.clone(),
-                                root_markers: config
-                                    .completion_langserver_root_markers
-                                    .iter()
-                                    .chain(lsconfig.root_markers.iter())
-                                    .collect(),
-                            })
-                    })
-            },
-            */
             lsp_tx,
             Some(crate_name!().to_owned()),
             Some(crate_version!().to_owned()),
@@ -111,7 +91,7 @@ impl Bed {
             projects,
             config.clone(),
             theme.clone(),
-            language_client_manager
+            language_client_manager,
         );
         let buf = match args.value_of("FILE") {
             Some(path) => buffer_mgr

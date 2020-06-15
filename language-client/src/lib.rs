@@ -6,7 +6,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::{BufRead, BufReader, Read, Result as IOResult, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command};
+use std::process::{ChildStdin, ChildStdout, Command};
 use std::rc::Rc;
 use std::str;
 use std::sync::{Arc, Mutex};
@@ -23,7 +23,6 @@ mod uri;
 pub use api::{LanguageServerCommand, LanguageServerResponse};
 
 pub trait LanguageKey: Clone + Eq + Hash + PartialEq {}
-pub trait BufferKey: 'static + Clone + Copy + Eq + Hash + PartialEq + Send + Sync {}
 
 pub struct LanguageConfig<S, P>
 where
@@ -35,24 +34,22 @@ where
     pub root_markers: Vec<P>,
 }
 
-pub struct LanguageClientManager<L, B>
+pub struct LanguageClientManager<L>
 where
     L: LanguageKey,
-    B: BufferKey,
 {
-    clients: FnvHashMap<(String, L), Rc<RefCell<LanguageClient<B>>>>,
-    api_tx: Sender<(B, LanguageServerResponse)>,
+    clients: FnvHashMap<(String, L), Rc<RefCell<LanguageClient>>>,
+    api_tx: Sender<LanguageServerResponse>,
     client_name: Option<String>,
     client_version: Option<String>,
 }
 
-impl<L, B> LanguageClientManager<L, B>
+impl<L> LanguageClientManager<L>
 where
     L: LanguageKey,
-    B: BufferKey,
 {
     pub fn new(
-        api_tx: Sender<(B, LanguageServerResponse)>,
+        api_tx: Sender<LanguageServerResponse>,
         client_name: Option<String>,
         client_version: Option<String>,
     ) -> Self {
@@ -68,9 +65,8 @@ where
         &mut self,
         language: L,
         file_path: &str,
-        buffer_key: B,
         config: &LanguageConfig<S, P>,
-    ) -> Option<IOResult<Rc<RefCell<LanguageClient<B>>>>>
+    ) -> Option<IOResult<Rc<RefCell<LanguageClient>>>>
     where
         S: AsRef<OsStr>,
         P: AsRef<Path>,
@@ -101,7 +97,6 @@ where
                         &config.command,
                         &config.args,
                         self.api_tx.clone(),
-                        buffer_key,
                         &path,
                         self.client_name.clone(),
                         self.client_version.clone(),
@@ -122,28 +117,14 @@ enum WriterMessage {
     Message(jsonrpc::Message),
 }
 
-pub struct LanguageClient<B>
-where
-    B: BufferKey,
-{
+pub struct LanguageClient {
     writer_thread: Option<thread::JoinHandle<()>>,
     reader_thread: Option<thread::JoinHandle<()>>,
-    sync_state: Arc<Mutex<LanguageClientSyncState<B>>>,
     wmsg_tx: Sender<WriterMessage>,
     next_id: i64,
 }
 
-struct LanguageClientSyncState<B>
-where
-    B: BufferKey,
-{
-    id_buf_map: FnvHashMap<jsonrpc::Id, B>,
-}
-
-impl<B> Drop for LanguageClient<B>
-where
-    B: BufferKey,
-{
+impl Drop for LanguageClient {
     fn drop(&mut self) {
         self.wmsg_tx.send(WriterMessage::Exit).unwrap();
         if let Some(thread) = self.writer_thread.take() {
@@ -155,19 +136,15 @@ where
     }
 }
 
-impl<B> LanguageClient<B>
-where
-    B: BufferKey,
-{
+impl LanguageClient {
     pub fn new<S>(
         command: &str,
         args: &[S],
-        api_tx: Sender<(B, LanguageServerResponse)>,
-        buffer_key: B,
+        api_tx: Sender<LanguageServerResponse>,
         root_path: &str,
         client_name: Option<String>,
         client_version: Option<String>,
-    ) -> IOResult<LanguageClient<B>>
+    ) -> IOResult<LanguageClient>
     where
         S: AsRef<OsStr>,
     {
@@ -181,21 +158,14 @@ where
         let writer = Box::new(child.stdin.unwrap());
         let (wmsg_tx, wmsg_rx) = unbounded();
 
-        let sync_state = Arc::new(Mutex::new(LanguageClientSyncState {
-            id_buf_map: FnvHashMap::default(),
-        }));
-        let sync_state_1 = sync_state.clone();
-        let sync_state_2 = sync_state.clone();
-
         let reader_thread = Some(thread::spawn(move || {
-            language_client_reader(sync_state_1, reader, api_tx)
+            language_client_reader(reader, api_tx)
         }));
         let writer_thread = Some(thread::spawn(move || {
-            language_client_writer(sync_state_2, writer, wmsg_rx)
+            language_client_writer(writer, wmsg_rx)
         }));
 
         let ret = LanguageClient {
-            sync_state,
             reader_thread,
             writer_thread,
             wmsg_tx,
@@ -233,13 +203,10 @@ where
     }
 }
 
-fn language_client_reader<B>(
-    sync_state: Arc<Mutex<LanguageClientSyncState<B>>>,
+fn language_client_reader(
     mut reader: Box<BufReader<ChildStdout>>,
-    api_tx: Sender<(B, LanguageServerResponse)>,
-) where
-    B: BufferKey,
-{
+    api_tx: Sender<LanguageServerResponse>,
+) {
     let mut line = String::new();
     let mut content = Vec::new();
     let mut opt_content_length;
@@ -278,17 +245,18 @@ fn language_client_reader<B>(
     }
 }
 
-fn language_client_writer<B>(
-    sync_state: Arc<Mutex<LanguageClientSyncState<B>>>,
-    mut writer: Box<ChildStdin>,
-    wmsg_rx: Receiver<WriterMessage>,
-) where
-    B: BufferKey,
-{
+fn language_client_writer(mut writer: Box<ChildStdin>, wmsg_rx: Receiver<WriterMessage>) {
     while let Ok(message) = wmsg_rx.recv() {
         match message {
             WriterMessage::Exit => {
-                // TODO: Send exit message
+                let _ = write!(
+                    &mut writer,
+                    "{}",
+                    jsonrpc::Message::new(jsonrpc::MessageContent::Notification {
+                        method: "exit".to_owned(),
+                        params: None,
+                    })
+                );
                 break;
             }
             WriterMessage::Message(message) => {
