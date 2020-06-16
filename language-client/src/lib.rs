@@ -9,7 +9,7 @@ use std::path::Path;
 use std::process::{ChildStdin, ChildStdout, Command};
 use std::rc::Rc;
 use std::str;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -17,10 +17,13 @@ use fnv::FnvHashMap;
 
 mod api;
 mod jsonrpc;
+mod language_server_protocol;
 mod types;
 mod uri;
 
 pub use api::{LanguageServerCommand, LanguageServerResponse};
+use jsonrpc::{Error, Id, Message, MessageContent};
+use language_server_protocol as lsp;
 
 pub trait LanguageKey: Clone + Eq + Hash + PartialEq {}
 
@@ -114,12 +117,17 @@ where
 
 enum WriterMessage {
     Exit,
-    Message(jsonrpc::Message),
+    Message(Message),
+}
+
+struct LanguageClientSyncState {
+    id_method_map: FnvHashMap<Id, String>,
 }
 
 pub struct LanguageClient {
     writer_thread: Option<thread::JoinHandle<()>>,
     reader_thread: Option<thread::JoinHandle<()>>,
+    sync_state: Arc<Mutex<LanguageClientSyncState>>,
     wmsg_tx: Sender<WriterMessage>,
     next_id: i64,
 }
@@ -158,8 +166,20 @@ impl LanguageClient {
         let writer = Box::new(child.stdin.unwrap());
         let (wmsg_tx, wmsg_rx) = unbounded();
 
+        let mut sync_state = LanguageClientSyncState {
+            id_method_map: FnvHashMap::default(),
+        };
+        sync_state
+            .id_method_map
+            .insert(Id::Num(0), "initialize".to_owned());
+        let sync_state = Arc::new(Mutex::new(sync_state));
+        let sync_state_1 = sync_state.clone();
+
+        let cond = Arc::new((Mutex::new(false), Condvar::new()));
+        let cond2 = cond.clone();
+
         let reader_thread = Some(thread::spawn(move || {
-            language_client_reader(reader, api_tx)
+            language_client_reader(reader, sync_state_1, api_tx, cond2)
         }));
         let writer_thread = Some(thread::spawn(move || {
             language_client_writer(writer, wmsg_rx)
@@ -170,27 +190,40 @@ impl LanguageClient {
             writer_thread,
             wmsg_tx,
             next_id: 1,
+            sync_state,
         };
-        {}
         let root_uri = uri::Uri::from_path(&root_path).expect("failed to parse root URI");
         ret.wmsg_tx
-            .send(WriterMessage::Message(jsonrpc::Message::new(
-                jsonrpc::MessageContent::Call {
-                    id: jsonrpc::Id::Num(0),
-                    method: "initialize".to_owned(),
-                    params: Some(
-                        serde_json::to_value(types::InitializeParams {
-                            processId: Some(process_id),
-                            clientInfo: client_name.map(|name| types::ClientInfo {
-                                name,
-                                version: client_version,
-                            }),
-                            rootUri: Some(root_uri),
-                            capabilities: types::ClientCapabilities {},
-                            trace: None,
-                        })
-                        .unwrap(),
-                    ),
+            .send(WriterMessage::Message(Message::new(MessageContent::Call {
+                id: Id::Num(0),
+                method: "initialize".to_owned(),
+                params: Some(
+                    serde_json::to_value(types::InitializeParams {
+                        processId: Some(process_id),
+                        clientInfo: client_name.map(|name| types::ClientInfo {
+                            name,
+                            version: client_version,
+                        }),
+                        rootUri: Some(root_uri),
+                        capabilities: types::ClientCapabilities {},
+                        trace: None,
+                    })
+                    .unwrap(),
+                ),
+            })))
+            .unwrap();
+
+        let (lock, cvar) = &*cond;
+        let mut initialized = lock.lock().unwrap();
+        while !*initialized {
+            initialized = cvar.wait(initialized).unwrap();
+        }
+
+        ret.wmsg_tx
+            .send(WriterMessage::Message(Message::new(
+                MessageContent::Notification {
+                    method: "initialized".to_owned(),
+                    params: Some(serde_json::to_value(types::InitializedParams {}).unwrap()),
                 },
             )))
             .unwrap();
@@ -205,7 +238,9 @@ impl LanguageClient {
 
 fn language_client_reader(
     mut reader: Box<BufReader<ChildStdout>>,
+    sync_state: Arc<Mutex<LanguageClientSyncState>>,
     api_tx: Sender<LanguageServerResponse>,
+    initialized_cond: Arc<(Mutex<bool>, Condvar)>,
 ) {
     let mut line = String::new();
     let mut content = Vec::new();
@@ -231,11 +266,44 @@ fn language_client_reader(
             if reader.read_exact(&mut content).is_err() {
                 break;
             }
-            if let Ok(raw_message) = serde_json::from_slice::<jsonrpc::MessageContent>(&content) {
-                eprintln!(
-                    "raw_message: {}",
-                    serde_json::to_string_pretty(&raw_message).unwrap()
-                );
+            if let Ok(raw_message) = serde_json::from_slice::<MessageContent>(&content) {
+                match raw_message {
+                    MessageContent::Result { id, result } => {
+                        if let Some(method) =
+                            { sync_state.lock().unwrap().id_method_map.remove(&id) }
+                        {
+                            match method.as_ref() {
+                                "initialize" => {
+                                    lsp::handle_initialize_result(&api_tx, result);
+                                    let (lock, cvar) = &*initialized_cond;
+                                    let mut initialized = lock.lock().unwrap();
+                                    *initialized = true;
+                                    cvar.notify_one();
+                                }
+                                _ => {},
+                            }
+                        }
+                    }
+                    MessageContent::Error { id, error } => {
+                        if let Some(method) =
+                            { sync_state.lock().unwrap().id_method_map.remove(&id) }
+                        {
+                            match method.as_ref() {
+                                "initialize" => panic!(
+                                    "failed to initialize language server: {}",
+                                    serde_json::to_string(&error).unwrap()
+                                ),
+                                _ => {}
+                            }
+                        }
+                    }
+                    message => {
+                        eprintln!(
+                            "raw_message: {}",
+                            serde_json::to_string_pretty(&message).unwrap()
+                        );
+                    }
+                }
             } else {
                 break;
             }
@@ -252,7 +320,7 @@ fn language_client_writer(mut writer: Box<ChildStdin>, wmsg_rx: Receiver<WriterM
                 let _ = write!(
                     &mut writer,
                     "{}",
-                    jsonrpc::Message::new(jsonrpc::MessageContent::Notification {
+                    Message::new(MessageContent::Notification {
                         method: "exit".to_owned(),
                         params: None,
                     })

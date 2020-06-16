@@ -37,3 +37,6 @@ pub(super) enum Trace {
     Messages,
     Verbose,
 }
+
+#[derive(Serialize)]
+pub(crate) struct InitializedParams {}
