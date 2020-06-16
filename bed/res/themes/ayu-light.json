@@ -7,7 +7,9 @@
             "cursor_line" : "#959DA61A",
             "border_width" : 1,
             "border_color" : "#ABB0B6",
-            "indent_guide" : "#959DA62D"
+            "indent_guide" : "#959DA62D",
+            "underline_errors" : "#F07171",
+            "underline_warnings" : "#F2aE49"
         },
         "gutter" : {
             "background" : "#FAFAFA",

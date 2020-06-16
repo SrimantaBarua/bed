@@ -11,7 +11,7 @@ extern crate clap;
 use crossbeam_channel::unbounded;
 use euclid::{size2, vec2, Rect, Size2D};
 use glfw::{Action, MouseButtonLeft, WindowEvent};
-use language_client::{LanguageClientManager, LanguageConfig};
+use language_client::{LanguageClientManager, LanguageServerResponse};
 
 #[macro_use]
 mod log;
@@ -155,6 +155,11 @@ impl Bed {
                 input_actions.clear();
                 redraw = true;
 
+                // Get responses from language servers
+                while let Ok(server_message) = lsp_rx.try_recv() {
+                    bed.handle_language_server_response(server_message);
+                }
+
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
                         let viewable_rect = bed.window.viewable_rect();
@@ -242,6 +247,18 @@ impl Bed {
                     BedAction::Completion(c) => {
                         self.textview_tree.active_mut().completion_action(*c)
                     }
+                }
+            }
+        }
+    }
+
+    fn handle_language_server_response(&mut self, message: LanguageServerResponse) {
+        match message {
+            LanguageServerResponse::Diagnostic(diagnostics) => {
+                let path = diagnostics.uri.path();
+                if let Some(buffer) = self.buffer_mgr.get_buffer_for_path(path) {
+                    let buffer = &mut *buffer.borrow_mut();
+                    buffer.set_diagnostics(diagnostics.diagnostics);
                 }
             }
         }

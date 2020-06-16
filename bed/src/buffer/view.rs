@@ -21,6 +21,7 @@ use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
 
 use super::cursor::{Cursor, CursorStyle};
 use super::styled::StyledText;
+use super::types::Diagnostics;
 
 const INDENT_GUIDE_WIDTH: i32 = 1;
 
@@ -67,6 +68,7 @@ impl BufferView {
         theme: Rc<Theme>,
         data: &Rope,
         styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
         tab_width: usize,
     ) -> BufferView {
         let config = params.config;
@@ -100,7 +102,7 @@ impl BufferView {
             config,
             theme,
         };
-        view.fill_or_truncate_view(data, styled_lines);
+        view.fill_or_truncate_view(data, styled_lines, diagnostics);
         view.update_gutter_width(data);
         view
     }
@@ -111,8 +113,13 @@ impl BufferView {
         self.is_active = false;
     }
 
-    pub(crate) fn activate(&mut self, data: &Rope, styled_lines: &[StyledText]) {
-        self.fill_or_truncate_view(data, styled_lines);
+    pub(crate) fn activate(
+        &mut self,
+        data: &Rope,
+        styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
+    ) {
+        self.fill_or_truncate_view(data, styled_lines, diagnostics);
         self.update_gutter_width(data);
         self.is_active = true;
         self.prev_depth = if self.start_line > 0 {
@@ -171,6 +178,7 @@ impl BufferView {
         vec: Vector2D<i32, PixelSize>,
         data: &Rope,
         styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
     ) {
         // Scroll y
         if vec.y < 0 {
@@ -195,7 +203,7 @@ impl BufferView {
         }
         self.shaped_lines.clear();
         self.shaped_gutter.clear();
-        self.fill_or_truncate_view(data, styled_lines);
+        self.fill_or_truncate_view(data, styled_lines, diagnostics);
         self.update_gutter_width(data);
 
         // Scroll x
@@ -222,6 +230,7 @@ impl BufferView {
         mut point: Point2D<u32, PixelSize>,
         data: &Rope,
         styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
         tab_width: usize,
     ) {
         assert!(self.rect.contains(point));
@@ -256,7 +265,7 @@ impl BufferView {
         }
         self.cursor.line_gidx = gidx;
         self.cursor.sync_gidx(data, tab_width);
-        self.snap_to_cursor(data, styled_lines);
+        self.snap_to_cursor(data, styled_lines, diagnostics);
 
         self.prev_depth = if self.start_line > 0 {
             styled_lines[self.start_line - 1].indent_depth
@@ -271,10 +280,11 @@ impl BufferView {
         rect: Rect<u32, PixelSize>,
         data: &Rope,
         styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
     ) {
         self.rect = rect;
-        self.fill_or_truncate_view(data, styled_lines);
-        self.snap_to_cursor(data, styled_lines);
+        self.fill_or_truncate_view(data, styled_lines, diagnostics);
+        self.snap_to_cursor(data, styled_lines, diagnostics);
         self.prev_depth = if self.start_line > 0 {
             styled_lines[self.start_line - 1].indent_depth
         } else {
@@ -283,10 +293,15 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(super) fn reshape(&mut self, data: &Rope, styled_lines: &[StyledText]) {
+    pub(super) fn reshape(
+        &mut self,
+        data: &Rope,
+        styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
+    ) {
         self.shaped_lines.clear();
         self.shaped_gutter.clear();
-        self.fill_or_truncate_view(data, styled_lines);
+        self.fill_or_truncate_view(data, styled_lines, diagnostics);
         self.update_gutter_width(data);
         self.prev_depth = if self.start_line > 0 {
             styled_lines[self.start_line - 1].indent_depth
@@ -296,12 +311,17 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
-    pub(super) fn snap_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
+    pub(super) fn snap_to_cursor(
+        &mut self,
+        data: &Rope,
+        styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
+    ) {
         // Sync Y
         if self.cursor.line_num <= self.start_line {
-            self.move_view_up_to_cursor(data, styled_lines);
+            self.move_view_up_to_cursor(data, styled_lines, diagnostics);
         } else {
-            self.move_view_down_to_cursor(data, styled_lines);
+            self.move_view_down_to_cursor(data, styled_lines, diagnostics);
         }
         // Sync X
         let line = &self.shaped_lines[self.cursor.line_num - self.start_line].0;
@@ -454,7 +474,12 @@ impl BufferView {
         }
     }
 
-    fn fill_or_truncate_view(&mut self, data: &Rope, styled_lines: &[StyledText]) {
+    fn fill_or_truncate_view(
+        &mut self,
+        data: &Rope,
+        styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
+    ) {
         let mut buf = String::new();
         let shaper = &mut *self.text_shaper.borrow_mut();
         let mut height = self.shaped_lines.len() as u32 * self.height;
@@ -511,7 +536,12 @@ impl BufferView {
         }
     }
 
-    fn move_view_up_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
+    fn move_view_up_to_cursor(
+        &mut self,
+        data: &Rope,
+        styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
+    ) {
         let mut buf = String::new();
         self.yoff = 0;
         let shaper = &mut *self.text_shaper.borrow_mut();
@@ -596,7 +626,12 @@ impl BufferView {
         }
     }
 
-    fn move_view_down_to_cursor(&mut self, data: &Rope, styled_lines: &[StyledText]) {
+    fn move_view_down_to_cursor(
+        &mut self,
+        data: &Rope,
+        styled_lines: &[StyledText],
+        diagnostics: &Diagnostics,
+    ) {
         let mut buf = String::new();
         if self.cursor.line_num < self.start_line + self.shaped_lines.len() {
             let height = (self.cursor.line_num as u32 - self.start_line as u32 + 1) * self.height;

@@ -159,6 +159,13 @@ impl BufferMgr {
         }
     }
 
+    pub(crate) fn get_buffer_for_path(&self, path: &str) -> Option<Rc<RefCell<Buffer>>> {
+        self.path_id_map
+            .get(path)
+            .and_then(|id| self.id_buf_map.get(id))
+            .and_then(|buf| buf.upgrade())
+    }
+
     pub(crate) fn next_view_id(&mut self) -> BufferViewID {
         let ret = BufferViewID(self.next_view_id);
         self.next_view_id += 1;

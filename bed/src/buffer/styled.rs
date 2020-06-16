@@ -41,6 +41,10 @@ impl StyledText {
         set(&mut self.colors, range.clone(), color);
         set(&mut self.unders, range, under);
     }
+
+    pub(super) fn set_under(&mut self, range: Range<usize>, under: Option<Color>) {
+        set(&mut self.unders, range, under);
+    }
 }
 
 fn set<T>(vec: &mut Vec<(usize, T)>, range: Range<usize>, val: T)

@@ -5,6 +5,7 @@ mod completion;
 mod cursor;
 mod mgr;
 mod styled;
+mod types;
 mod view;
 
 #[derive(Eq, Hash, PartialEq)]

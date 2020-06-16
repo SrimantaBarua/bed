@@ -22,6 +22,11 @@ mod types;
 mod uri;
 
 pub use api::{LanguageServerCommand, LanguageServerResponse};
+pub use types::{
+    Diagnostic, DiagnosticCode, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag,
+    Location, Position, PublishDiagnosticParams, Range,
+};
+
 use jsonrpc::{Error, Id, Message, MessageContent};
 use language_server_protocol as lsp;
 
@@ -268,6 +273,22 @@ fn language_client_reader(
             }
             if let Ok(raw_message) = serde_json::from_slice::<MessageContent>(&content) {
                 match raw_message {
+                    MessageContent::Call { id, method, params } => {}
+                    MessageContent::Notification { method, params } => match method.as_ref() {
+                        "textDocument/publishDiagnostics" => {
+                            lsp::handle_publish_diagnostics_notification(&api_tx, params)
+                        }
+                        _ => {
+                            eprintln!(
+                                "raw_message: {}",
+                                serde_json::to_string_pretty(&MessageContent::Notification {
+                                    method,
+                                    params,
+                                })
+                                .unwrap()
+                            );
+                        }
+                    },
                     MessageContent::Result { id, result } => {
                         if let Some(method) =
                             { sync_state.lock().unwrap().id_method_map.remove(&id) }
@@ -280,8 +301,26 @@ fn language_client_reader(
                                     *initialized = true;
                                     cvar.notify_one();
                                 }
-                                _ => {},
+                                _ => {
+                                    eprintln!(
+                                        "raw_message: {}",
+                                        serde_json::to_string_pretty(&MessageContent::Result {
+                                            id,
+                                            result
+                                        })
+                                        .unwrap()
+                                    );
+                                }
                             }
+                        } else {
+                            eprintln!(
+                                "ERROR: Result without ID: {}",
+                                serde_json::to_string_pretty(&MessageContent::Result {
+                                    id,
+                                    result
+                                })
+                                .unwrap()
+                            )
                         }
                     }
                     MessageContent::Error { id, error } => {
@@ -293,15 +332,24 @@ fn language_client_reader(
                                     "failed to initialize language server: {}",
                                     serde_json::to_string(&error).unwrap()
                                 ),
-                                _ => {}
+                                _ => {
+                                    eprintln!(
+                                        "raw_message: {}",
+                                        serde_json::to_string_pretty(&MessageContent::Error {
+                                            id,
+                                            error
+                                        })
+                                        .unwrap()
+                                    );
+                                }
                             }
+                        } else {
+                            eprintln!(
+                                "ERROR: Error without ID: {}",
+                                serde_json::to_string_pretty(&MessageContent::Error { id, error })
+                                    .unwrap()
+                            )
                         }
-                    }
-                    message => {
-                        eprintln!(
-                            "raw_message: {}",
-                            serde_json::to_string_pretty(&message).unwrap()
-                        );
                     }
                 }
             } else {

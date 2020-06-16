@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
-use language_client::{LanguageClient, LanguageClientManager};
+use language_client::{Diagnostic as LCDiagnostic, LanguageClient, LanguageClientManager};
 use ropey::{Rope, RopeSlice};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
@@ -26,6 +26,7 @@ use crate::ts::TsCore;
 
 use super::completion::CompletionSource;
 use super::styled::StyledText;
+use super::types::Diagnostics;
 use super::view::{BufferView, BufferViewCreateParams};
 use super::{BufferID, BufferViewID, CursorStyle};
 
@@ -48,6 +49,7 @@ pub(crate) struct Buffer {
     styled_lines: Vec<StyledText>,
     tab_width: usize,
     indent_tabs: bool,
+    path: Option<String>,
     language: Option<Language>,
     parser: Option<Parser>,
     hl_query: Option<Rc<Query>>,
@@ -56,6 +58,7 @@ pub(crate) struct Buffer {
     theme: Rc<Theme>,
     config: Rc<Config>,
     language_client: Option<Rc<RefCell<LanguageClient>>>,
+    diagnostics: Diagnostics,
 }
 
 impl Buffer {
@@ -68,16 +71,19 @@ impl Buffer {
                 self.theme.clone(),
                 &self.data,
                 &self.styled_lines,
+                &self.diagnostics,
                 self.tab_width,
             ),
         );
     }
 
     pub(crate) fn set_view_rect(&mut self, id: &BufferViewID, rect: Rect<u32, PixelSize>) {
-        self.views
-            .get_mut(id)
-            .unwrap()
-            .set_rect(rect, &self.data, &self.styled_lines);
+        self.views.get_mut(id).unwrap().set_rect(
+            rect,
+            &self.data,
+            &self.styled_lines,
+            &self.diagnostics,
+        );
     }
 
     pub(crate) fn draw_view(&mut self, id: &BufferViewID, painter: &mut Painter) {
@@ -96,7 +102,7 @@ impl Buffer {
         self.views
             .get_mut(id)
             .unwrap()
-            .activate(&self.data, &self.styled_lines);
+            .activate(&self.data, &self.styled_lines, &self.diagnostics);
     }
 
     pub(crate) fn deactivate_view(&mut self, id: &BufferViewID) {
@@ -108,10 +114,12 @@ impl Buffer {
     }
 
     pub(crate) fn scroll_view(&mut self, id: &BufferViewID, vec: Vector2D<i32, PixelSize>) {
-        self.views
-            .get_mut(id)
-            .unwrap()
-            .scroll(vec, &self.data, &self.styled_lines);
+        self.views.get_mut(id).unwrap().scroll(
+            vec,
+            &self.data,
+            &self.styled_lines,
+            &self.diagnostics,
+        );
     }
 
     // -------- View cursor manipulation ----------------
@@ -204,7 +212,7 @@ impl Buffer {
             MotionOrObj::Object(Object::Lines(_)) => unreachable!(),
         }
         let view = self.views.get_mut(id).unwrap();
-        view.snap_to_cursor(&self.data, &self.styled_lines);
+        view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
     }
 
     pub(crate) fn move_view_cursor_to_point(
@@ -213,7 +221,13 @@ impl Buffer {
         point: Point2D<u32, PixelSize>,
     ) {
         let view = self.views.get_mut(id).unwrap();
-        view.move_cursor_to_point(point, &self.data, &self.styled_lines, self.tab_width);
+        view.move_cursor_to_point(
+            point,
+            &self.data,
+            &self.styled_lines,
+            &self.diagnostics,
+            self.tab_width,
+        );
     }
 
     pub(crate) fn set_view_cursor_visible(&mut self, id: &BufferViewID, visible: bool) {
@@ -227,7 +241,7 @@ impl Buffer {
         view.cursor.style = style;
         view.cursor
             .sync_line_cidx_gidx_left(&self.data, self.tab_width);
-        view.snap_to_cursor(&self.data, &self.styled_lines);
+        view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
     }
 
     // -------- View edits -----------------
@@ -397,8 +411,8 @@ impl Buffer {
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines);
-                view.snap_to_cursor(&self.data, &self.styled_lines);
+                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
+                view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
             }
         }
 
@@ -459,8 +473,8 @@ impl Buffer {
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines);
-                view.snap_to_cursor(&self.data, &self.styled_lines);
+                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
+                view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
             }
         }
 
@@ -644,8 +658,8 @@ impl Buffer {
                 }
             }
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines);
-                view.snap_to_cursor(&self.data, &self.styled_lines);
+                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
+                view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
             }
         }
     }
@@ -669,11 +683,13 @@ impl Buffer {
             hl_query: None,
             tree: None,
             theme,
+            path: None,
             config,
             tab_width,
             indent_tabs,
             project: None,
             language_client: None,
+            diagnostics: Diagnostics::empty(),
         }
     }
 
@@ -740,12 +756,14 @@ impl Buffer {
             parser,
             hl_query,
             tree: None,
+            path: Some(path.to_owned()),
             theme,
             config,
             tab_width,
             indent_tabs,
             project,
             language_client,
+            diagnostics: Diagnostics::empty(),
         };
         ret.recreate_parse_tree();
         Ok(ret)
@@ -783,11 +801,13 @@ impl Buffer {
                         indent_tabs,
                     ));
                 }
+                self.path = Some(path.to_owned());
                 self.tab_width = tab_width;
                 self.indent_tabs = indent_tabs;
                 self.language = language;
                 self.parser = parser;
                 self.hl_query = hl_query;
+                self.diagnostics.clear();
                 self.recreate_parse_tree();
 
                 if let Some(project) = &self.project {
@@ -801,8 +821,8 @@ impl Buffer {
                     view.cursor
                         .sync_and_update_char_idx_left(&self.data, self.tab_width);
                     if view.is_active {
-                        view.reshape(&self.data, &self.styled_lines);
-                        view.snap_to_cursor(&self.data, &self.styled_lines);
+                        view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
+                        view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
                     }
                 }
 
@@ -834,6 +854,7 @@ impl Buffer {
         lang_client_manager: &mut LanguageClientManager<Language>,
     ) -> IOResult<usize> {
         self.project = project;
+        self.diagnostics.clear();
         let len = self.data.len_bytes();
 
         let (language, parser, hl_query) = Path::new(path)
@@ -874,10 +895,11 @@ impl Buffer {
 
         for view in self.views.values_mut() {
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines);
+                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
             }
         }
 
+        self.path = Some(path.to_owned());
         self.language_client = language
             .and_then(|language| {
                 self.config
@@ -1098,6 +1120,13 @@ impl Buffer {
         let end_line = self.data.line(range.end_point.row);
         range.end_point.column = end_line.len_bytes();
         range.end_byte = self.data.line_to_byte(range.end_point.row) + range.end_point.column;
+    }
+
+    // -------- Language server ----------------
+    pub(crate) fn set_diagnostics(&mut self, diagnostics: Vec<LCDiagnostic>) {
+        self.diagnostics.set(diagnostics, &self.data);
+        self.diagnostics
+            .set_underline(&mut self.styled_lines, &self.theme);
     }
 }
 

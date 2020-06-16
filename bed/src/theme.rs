@@ -20,6 +20,8 @@ pub(crate) struct ThemeTextview {
     pub(crate) border_width: u32,
     pub(crate) border_color: Color,
     pub(crate) indent_guide: Color,
+    pub(crate) underline_warnings: Option<Color>,
+    pub(crate) underline_errors: Option<Color>,
 }
 
 impl Default for ThemeTextview {
@@ -32,6 +34,8 @@ impl Default for ThemeTextview {
             border_width: 1,
             border_color: Color::new(0, 0, 0, 0xff),
             indent_guide: Color::new(0xee, 0xee, 0xee, 0x88),
+            underline_warnings: Some(Color::new(0x88, 0x88, 0x22, 0xff)),
+            underline_errors: Some(Color::new(0xff, 0x22, 0x22, 0xff)),
         }
     }
 }

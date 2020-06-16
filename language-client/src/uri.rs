@@ -10,9 +10,9 @@ use std::fmt::Write;
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
-#[serde(try_from = "&str")]
+#[serde(try_from = "String")]
 #[derive(Clone, Debug, Deserialize)]
-pub(crate) struct Uri {
+pub struct Uri {
     content: String,
     scheme: usize,
     authority: usize,
@@ -48,11 +48,11 @@ impl Uri {
         }
     }
 
-    pub(crate) fn scheme(&self) -> &str {
+    pub fn scheme(&self) -> &str {
         &self.content[..self.scheme]
     }
 
-    pub(crate) fn authority(&self) -> Option<&str> {
+    pub fn authority(&self) -> Option<&str> {
         if self.has_authority() {
             assert!(self.authority >= self.scheme + 3);
             Some(&self.content[self.scheme + 3..self.authority])
@@ -62,7 +62,7 @@ impl Uri {
         }
     }
 
-    pub(crate) fn path(&self) -> &str {
+    pub fn path(&self) -> &str {
         &self.content[self.authority..self.path]
     }
 
@@ -138,11 +138,11 @@ impl Uri {
     }
 }
 
-impl TryFrom<&str> for Uri {
+impl TryFrom<String> for Uri {
     type Error = String;
 
-    fn try_from(s: &str) -> Result<Uri, Self::Error> {
-        Uri::parse(s)
+    fn try_from(s: String) -> Result<Uri, Self::Error> {
+        Uri::parse(&s)
     }
 }
 
