@@ -10,7 +10,6 @@ use std::rc::Rc;
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
-use language_client::{Diagnostic as LCDiagnostic, LanguageClient, LanguageClientManager};
 use ropey::{Rope, RopeSlice};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
 
@@ -18,6 +17,7 @@ use crate::common::{rope_trim_newlines, PixelSize};
 use crate::config::Config;
 use crate::input::{ComplAction, Motion, MotionOrObj, Object};
 use crate::language::Language;
+use crate::language_client::{Diagnostic as LCDiagnostic, LanguageClient, LanguageClientManager};
 use crate::painter::Painter;
 use crate::project::Project;
 use crate::style::{Color, TextStyle};
@@ -700,7 +700,7 @@ impl Buffer {
         ts_core: &TsCore,
         config: Rc<Config>,
         theme: Rc<Theme>,
-        lang_client_manager: &mut LanguageClientManager<Language>,
+        lang_client_manager: &mut LanguageClientManager,
     ) -> IOResult<Buffer> {
         let rope = if let Ok(file) = File::open(path) {
             Rope::from_reader(file)?
@@ -733,13 +733,7 @@ impl Buffer {
             ));
         }
         let language_client = language
-            .and_then(|language| {
-                config
-                    .language_config(language)
-                    .and_then(|language_config| {
-                        lang_client_manager.get_client(language, path, &language_config)
-                    })
-            })
+            .and_then(|language| lang_client_manager.get_client(language, path, &config))
             .and_then(|lc| match lc {
                 Ok(lc) => Some(lc),
                 Err(e) => {
@@ -774,7 +768,7 @@ impl Buffer {
         path: &str,
         project: Option<Rc<Project>>,
         ts_core: &TsCore,
-        lang_client_manager: &mut LanguageClientManager<Language>,
+        lang_client_manager: &mut LanguageClientManager,
     ) -> IOResult<()> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
@@ -828,11 +822,7 @@ impl Buffer {
 
                 self.language_client = language
                     .and_then(|language| {
-                        self.config
-                            .language_config(language)
-                            .and_then(|language_config| {
-                                lang_client_manager.get_client(language, path, &language_config)
-                            })
+                        lang_client_manager.get_client(language, path, &self.config)
                     })
                     .and_then(|lc| match lc {
                         Ok(lc) => Some(lc),
@@ -851,7 +841,7 @@ impl Buffer {
         path: &str,
         project: Option<Rc<Project>>,
         ts_core: &TsCore,
-        lang_client_manager: &mut LanguageClientManager<Language>,
+        lang_client_manager: &mut LanguageClientManager,
     ) -> IOResult<usize> {
         self.project = project;
         self.diagnostics.clear();
@@ -901,13 +891,7 @@ impl Buffer {
 
         self.path = Some(path.to_owned());
         self.language_client = language
-            .and_then(|language| {
-                self.config
-                    .language_config(language)
-                    .and_then(|language_config| {
-                        lang_client_manager.get_client(language, path, &language_config)
-                    })
-            })
+            .and_then(|language| lang_client_manager.get_client(language, path, &self.config))
             .and_then(|lc| match lc {
                 Ok(lc) => Some(lc),
                 Err(e) => {

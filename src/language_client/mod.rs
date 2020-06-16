@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::ffi::OsStr;
 use std::fs::read_dir;
-use std::hash::Hash;
 use std::io::{BufRead, BufReader, Read, Result as IOResult, Write};
 use std::path::Path;
 use std::process::{ChildStdin, ChildStdout, Command};
@@ -15,108 +14,89 @@ use std::thread;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use fnv::FnvHashMap;
 
+use crate::config::Config;
+use crate::language::Language;
+
 mod api;
 mod jsonrpc;
 mod language_server_protocol;
 mod types;
 mod uri;
 
-pub use api::{LanguageServerCommand, LanguageServerResponse};
-pub use types::{
+pub(crate) use api::LanguageServerResponse;
+pub(crate) use types::{
     Diagnostic, DiagnosticCode, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag,
-    Location, Position, PublishDiagnosticParams, Range,
+    Position, Range,
 };
 
-use jsonrpc::{Error, Id, Message, MessageContent};
+use jsonrpc::{Id, Message, MessageContent};
 use language_server_protocol as lsp;
 
-pub trait LanguageKey: Clone + Eq + Hash + PartialEq {}
-
-pub struct LanguageConfig<S, P>
-where
-    S: AsRef<OsStr>,
-    P: AsRef<Path>,
-{
-    pub command: String,
-    pub args: Vec<S>,
-    pub root_markers: Vec<P>,
-}
-
-pub struct LanguageClientManager<L>
-where
-    L: LanguageKey,
-{
-    clients: FnvHashMap<(String, L), Rc<RefCell<LanguageClient>>>,
+pub(crate) struct LanguageClientManager {
+    clients: FnvHashMap<(String, Language), Rc<RefCell<LanguageClient>>>,
     api_tx: Sender<LanguageServerResponse>,
-    client_name: Option<String>,
-    client_version: Option<String>,
 }
 
-impl<L> LanguageClientManager<L>
-where
-    L: LanguageKey,
-{
-    pub fn new(
-        api_tx: Sender<LanguageServerResponse>,
-        client_name: Option<String>,
-        client_version: Option<String>,
-    ) -> Self {
+impl LanguageClientManager {
+    pub(crate) fn new(api_tx: Sender<LanguageServerResponse>) -> Self {
         LanguageClientManager {
             clients: FnvHashMap::default(),
             api_tx,
-            client_name,
-            client_version,
         }
     }
 
-    pub fn get_client<S, P>(
+    pub(crate) fn get_client(
         &mut self,
-        language: L,
+        language: Language,
         file_path: &str,
-        config: &LanguageConfig<S, P>,
-    ) -> Option<IOResult<Rc<RefCell<LanguageClient>>>>
-    where
-        S: AsRef<OsStr>,
-        P: AsRef<Path>,
-    {
-        let abspath = absolute_path(file_path);
-        let path = Path::new(&abspath);
-        path.parent().and_then(|dirpath| {
-            let mut root_path = dirpath;
-            'outer: for path in dirpath.ancestors() {
-                if let Ok(readdir) = read_dir(path) {
-                    for entry in readdir.filter_map(|e| e.ok()) {
-                        let child = entry.path();
-                        for marker in &config.root_markers {
-                            if child == marker.as_ref() {
-                                root_path = path;
-                                break 'outer;
+        config: &Config,
+    ) -> Option<IOResult<Rc<RefCell<LanguageClient>>>> {
+        config
+            .language
+            .get(&language)
+            .and_then(|lang_config| lang_config.language_server.as_ref())
+            .and_then(|ls_config| {
+                let abspath = crate::common::abspath(file_path);
+                let path = Path::new(&abspath);
+                path.parent().and_then(|dirpath| {
+                    let mut root_path = dirpath;
+                    'outer: for path in dirpath.ancestors() {
+                        if let Ok(readdir) = read_dir(path) {
+                            for entry in readdir.filter_map(|e| e.ok()) {
+                                let child = entry.path();
+                                for marker in config
+                                    .completion_langserver_root_markers
+                                    .iter()
+                                    .chain(ls_config.root_markers.iter())
+                                {
+                                    if child == Path::new(&marker) {
+                                        root_path = path;
+                                        break 'outer;
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-            root_path.to_str().map(|path| {
-                let path = path.to_owned();
-                if let Some(lc) = self.clients.get(&(path.clone(), language.clone())) {
-                    Ok(lc.clone())
-                } else {
-                    LanguageClient::new(
-                        &config.command,
-                        &config.args,
-                        self.api_tx.clone(),
-                        &path,
-                        self.client_name.clone(),
-                        self.client_version.clone(),
-                    )
-                    .map(|lc| {
-                        let lc = Rc::new(RefCell::new(lc));
-                        self.clients.insert((path, language), lc.clone());
-                        lc
+                    root_path.to_str().map(|path| {
+                        let path = path.to_owned();
+                        if let Some(lc) = self.clients.get(&(path.clone(), language.clone())) {
+                            Ok(lc.clone())
+                        } else {
+                            LanguageClient::new(
+                                &ls_config.executable,
+                                &ls_config.arguments.clone(),
+                                self.api_tx.clone(),
+                                &path,
+                            )
+                            .map(|lc| {
+                                let lc = Rc::new(RefCell::new(lc));
+                                self.clients.insert((path, language), lc.clone());
+                                lc
+                            })
+                        }
                     })
-                }
+                })
             })
-        })
     }
 }
 
@@ -129,7 +109,7 @@ struct LanguageClientSyncState {
     id_method_map: FnvHashMap<Id, String>,
 }
 
-pub struct LanguageClient {
+pub(crate) struct LanguageClient {
     writer_thread: Option<thread::JoinHandle<()>>,
     reader_thread: Option<thread::JoinHandle<()>>,
     sync_state: Arc<Mutex<LanguageClientSyncState>>,
@@ -150,13 +130,11 @@ impl Drop for LanguageClient {
 }
 
 impl LanguageClient {
-    pub fn new<S>(
+    pub(crate) fn new<S>(
         command: &str,
         args: &[S],
         api_tx: Sender<LanguageServerResponse>,
         root_path: &str,
-        client_name: Option<String>,
-        client_version: Option<String>,
     ) -> IOResult<LanguageClient>
     where
         S: AsRef<OsStr>,
@@ -205,9 +183,9 @@ impl LanguageClient {
                 params: Some(
                     serde_json::to_value(types::InitializeParams {
                         processId: Some(process_id),
-                        clientInfo: client_name.map(|name| types::ClientInfo {
-                            name,
-                            version: client_version,
+                        clientInfo: Some(types::ClientInfo {
+                            name: crate_name!().to_owned(),
+                            version: Some(crate_version!().to_owned()),
                         }),
                         rootUri: Some(root_uri),
                         capabilities: types::ClientCapabilities {},
@@ -234,10 +212,6 @@ impl LanguageClient {
             .unwrap();
 
         Ok(ret)
-    }
-
-    pub fn send_command(&mut self, command: LanguageServerCommand) {
-        unimplemented!()
     }
 }
 
@@ -381,28 +355,5 @@ fn language_client_writer(mut writer: Box<ChildStdin>, wmsg_rx: Receiver<WriterM
                 }
             }
         }
-    }
-}
-
-fn absolute_path(spath: &str) -> String {
-    let path = std::path::Path::new(spath);
-    if path.is_absolute() {
-        spath.to_owned()
-    } else if path.starts_with("~") {
-        let mut home_dir = directories::BaseDirs::new()
-            .expect("failed to get base directories")
-            .home_dir()
-            .to_owned();
-        home_dir.push(path.strip_prefix("~").expect("failed to stip '~' prefix"));
-        home_dir
-            .to_str()
-            .expect("failed to convert path to string")
-            .to_owned()
-    } else {
-        let mut wdir = std::env::current_dir().expect("failed to get current directory");
-        wdir.push(spath);
-        wdir.to_str()
-            .expect("failed to convert path to string")
-            .to_owned()
     }
 }

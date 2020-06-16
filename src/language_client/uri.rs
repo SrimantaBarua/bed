@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 #[serde(try_from = "String")]
 #[derive(Clone, Debug, Deserialize)]
-pub struct Uri {
+pub(crate) struct Uri {
     content: String,
     scheme: usize,
     authority: usize,
@@ -44,15 +44,15 @@ impl Uri {
         if s.starts_with('/') {
             Uri::parse(&format!("file://{}", s))
         } else {
-            Uri::parse(&format!("file://{}", crate::absolute_path(s)))
+            Uri::parse(&format!("file://{}", crate::common::abspath(s)))
         }
     }
 
-    pub fn scheme(&self) -> &str {
+    pub(crate) fn scheme(&self) -> &str {
         &self.content[..self.scheme]
     }
 
-    pub fn authority(&self) -> Option<&str> {
+    pub(crate) fn authority(&self) -> Option<&str> {
         if self.has_authority() {
             assert!(self.authority >= self.scheme + 3);
             Some(&self.content[self.scheme + 3..self.authority])
@@ -62,7 +62,7 @@ impl Uri {
         }
     }
 
-    pub fn path(&self) -> &str {
+    pub(crate) fn path(&self) -> &str {
         &self.content[self.authority..self.path]
     }
 

@@ -7,52 +7,52 @@ use serde::{Deserialize, Serialize};
 use super::uri::Uri;
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Position {
-    pub line: usize,
-    pub character: usize,
+pub(crate) struct Position {
+    pub(crate) line: usize,
+    pub(crate) character: usize,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Range {
-    pub start: Position,
-    pub end: Position,
+pub(crate) struct Range {
+    pub(crate) start: Position,
+    pub(crate) end: Position,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Location {
-    pub uri: Uri,
-    pub range: Range,
+pub(crate) struct Location {
+    pub(crate) uri: Uri,
+    pub(crate) range: Range,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
-pub struct Diagnostic {
-    pub range: Range,
-    pub severity: Option<DiagnosticSeverity>,
-    pub code: Option<DiagnosticCode>,
-    pub source: Option<String>,
-    pub message: String,
-    pub tags: Option<Vec<DiagnosticTag>>,
-    pub relatedInformation: Option<Vec<DiagnosticRelatedInformation>>,
+pub(crate) struct Diagnostic {
+    pub(crate) range: Range,
+    pub(crate) severity: Option<DiagnosticSeverity>,
+    pub(crate) code: Option<DiagnosticCode>,
+    pub(crate) source: Option<String>,
+    pub(crate) message: String,
+    pub(crate) tags: Option<Vec<DiagnosticTag>>,
+    pub(crate) relatedInformation: Option<Vec<DiagnosticRelatedInformation>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct PublishDiagnosticParams {
-    pub uri: Uri,
-    pub version: Option<i64>,
-    pub diagnostics: Vec<Diagnostic>,
+pub(crate) struct PublishDiagnosticParams {
+    pub(crate) uri: Uri,
+    pub(crate) version: Option<i64>,
+    pub(crate) diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub enum DiagnosticCode {
+pub(crate) enum DiagnosticCode {
     Str(String),
     Num(i64),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "u8")]
-pub enum DiagnosticSeverity {
+pub(crate) enum DiagnosticSeverity {
     Error,
     Warning,
     Information,
@@ -75,7 +75,7 @@ impl TryFrom<u8> for DiagnosticSeverity {
 
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "u8")]
-pub enum DiagnosticTag {
+pub(crate) enum DiagnosticTag {
     Unnecesaary,
     Deprecated,
 }
@@ -93,15 +93,15 @@ impl TryFrom<u8> for DiagnosticTag {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct DiagnosticRelatedInformation {
-    pub location: Location,
-    pub message: String,
+pub(crate) struct DiagnosticRelatedInformation {
+    pub(crate) location: Location,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Serialize)]
 #[allow(non_snake_case)]
-pub(crate) struct InitializeParams {
-    pub(crate) processId: Option<u32>,
+pub(super) struct InitializeParams {
+    pub(super) processId: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) clientInfo: Option<ClientInfo>,
     pub(super) rootUri: Option<Uri>,
@@ -133,4 +133,4 @@ pub(super) enum Trace {
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) struct InitializedParams {}
+pub(super) struct InitializedParams {}

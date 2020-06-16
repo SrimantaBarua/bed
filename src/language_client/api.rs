@@ -2,8 +2,6 @@
 
 use super::types::PublishDiagnosticParams;
 
-pub enum LanguageServerCommand {}
-
-pub enum LanguageServerResponse {
+pub(crate) enum LanguageServerResponse {
     Diagnostic(PublishDiagnosticParams),
 }

@@ -4,7 +4,6 @@ use std::default::Default;
 
 use directories::ProjectDirs;
 use fnv::FnvHashMap;
-use language_client::LanguageConfig;
 use serde::Deserialize;
 
 use crate::font::{FaceKey, FontCore};
@@ -120,27 +119,6 @@ impl Config {
         } else {
             ConfigInner::default().finalize(font_core)
         }
-    }
-
-    pub(crate) fn language_config(
-        &self,
-        language: Language,
-    ) -> Option<LanguageConfig<String, String>> {
-        self.language.get(&language).and_then(|lang_config| {
-            lang_config
-                .language_server
-                .as_ref()
-                .map(|ls_config| LanguageConfig {
-                    command: ls_config.executable.clone(),
-                    args: ls_config.arguments.clone(),
-                    root_markers: self
-                        .completion_langserver_root_markers
-                        .iter()
-                        .chain(ls_config.root_markers.iter())
-                        .map(|s| s.clone())
-                        .collect(),
-                })
-        })
     }
 }
 

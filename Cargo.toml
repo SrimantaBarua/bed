@@ -1,17 +1,35 @@
-[workspace]
-
-members = [
-    "bed",
-    "language-client"
-]
-
-
-[profile.dev]
-opt-level = 0
-debug = 2
+[package]
+name = "bed"
+version = "0.1.0"
+authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
+description = "Barua's EDitor"
+edition = "2018"
+build = "build.rs"
 
 
-[profile.release]
-opt-level = 3
-lto = "thin"
-debug = 0
+[dependencies]
+clap = "2.33"
+crossbeam-channel = "0.4.2"
+directories = "2.0"
+euclid = "0.20.7"
+fnv = "1.0.6"
+freetype = "0.4.1"
+gl = "0.14"
+glfw  = "0.37"
+guillotiere = "0.4.3"
+harfbuzz-sys = "0.3.4"
+ropey = "1.1"
+serde = { version = "1.0", features = [ "derive", "rc" ] }
+serde_json = "1.0"
+tree-sitter = "0.16.0"
+unicode-segmentation = "1.6"
+walkdir = "2.3.1"
+
+
+[target.'cfg(unix)'.dependencies]
+servo-fontconfig = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+com-wrapper = "0.1.0"
+directwrite = "0.3.0-alpha4"
+winapi = "0.3.8"

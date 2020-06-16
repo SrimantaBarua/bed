@@ -11,7 +11,6 @@ extern crate clap;
 use crossbeam_channel::unbounded;
 use euclid::{size2, vec2, Rect, Size2D};
 use glfw::{Action, MouseButtonLeft, WindowEvent};
-use language_client::{LanguageClientManager, LanguageServerResponse};
 
 #[macro_use]
 mod log;
@@ -25,6 +24,7 @@ mod config;
 mod font;
 mod input;
 mod language;
+mod language_client;
 mod opengl;
 mod painter;
 mod project;
@@ -38,6 +38,7 @@ mod window;
 use buffer::{BufferViewCreateParams, CursorStyle};
 use common::{abspath, PixelSize};
 use input::{Action as BedAction, MotionOrObj as BedMotionOrObj};
+use language_client::{LanguageClientManager, LanguageServerResponse};
 
 static CURSOR_LINE_WIDTH: i32 = 2;
 static CURSOR_BLOCK_WIDTH: i32 = 10;
@@ -63,11 +64,7 @@ impl Bed {
         let projects = project::Projects::load();
 
         let (lsp_tx, lsp_rx) = unbounded();
-        let language_client_manager = LanguageClientManager::new(
-            lsp_tx,
-            Some(crate_name!().to_owned()),
-            Some(crate_version!().to_owned()),
-        );
+        let language_client_manager = LanguageClientManager::new(lsp_tx);
 
         let input_state = input::State::new();
         let mut input_actions = Vec::new();

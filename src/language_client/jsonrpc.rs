@@ -6,7 +6,7 @@ use serde::ser::{SerializeStruct, Serializer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub(crate) struct Message {
+pub(super) struct Message {
     content_type: Option<String>,
     content: MessageContent,
 }
@@ -24,7 +24,7 @@ impl fmt::Display for Message {
 }
 
 impl Message {
-    pub(crate) fn new(content: MessageContent) -> Message {
+    pub(super) fn new(content: MessageContent) -> Message {
         Message {
             content_type: None,
             content,

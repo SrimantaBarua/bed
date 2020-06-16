@@ -2,12 +2,12 @@
 
 use std::cmp::Ordering;
 
-use language_client::{
+use ropey::Rope;
+
+use crate::language_client::{
     Diagnostic as LCDiagnostic, DiagnosticCode, DiagnosticRelatedInformation, DiagnosticSeverity,
     DiagnosticTag, Position as LCPosition, Range as LCRange,
 };
-use ropey::Rope;
-
 use crate::theme::Theme;
 
 use super::styled::StyledText;

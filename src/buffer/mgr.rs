@@ -5,10 +5,9 @@ use std::io::Result as IOResult;
 use std::rc::{Rc, Weak};
 
 use fnv::FnvHashMap;
-use language_client::LanguageClientManager;
 
 use crate::config::Config;
-use crate::language::Language;
+use crate::language_client::LanguageClientManager;
 use crate::project::Projects;
 use crate::theme::Theme;
 use crate::ts::TsCore;
@@ -26,7 +25,7 @@ pub(crate) struct BufferMgr {
     ts_core: TsCore,
     theme: Rc<Theme>,
     config: Rc<Config>,
-    lang_client_manager: LanguageClientManager<Language>,
+    lang_client_manager: LanguageClientManager,
 }
 
 // TODO: Periodically clear out Weak buffers with a strong count of 0
@@ -37,7 +36,7 @@ impl BufferMgr {
         projects: Projects,
         config: Rc<Config>,
         theme: Rc<Theme>,
-        lang_client_manager: LanguageClientManager<Language>,
+        lang_client_manager: LanguageClientManager,
     ) -> BufferMgr {
         BufferMgr {
             path_id_map: FnvHashMap::default(),
