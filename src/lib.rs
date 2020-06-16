@@ -255,7 +255,7 @@ impl Bed {
                 let path = diagnostics.uri.path();
                 if let Some(buffer) = self.buffer_mgr.get_buffer_for_path(path) {
                     let buffer = &mut *buffer.borrow_mut();
-                    buffer.set_diagnostics(diagnostics.diagnostics);
+                    buffer.set_diagnostics(diagnostics);
                 }
             }
         }

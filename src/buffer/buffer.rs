@@ -1,6 +1,5 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::cell::RefCell;
 use std::cmp::min;
 use std::fs::File;
 use std::io::Result as IOResult;
@@ -17,7 +16,7 @@ use crate::common::{rope_trim_newlines, PixelSize};
 use crate::config::Config;
 use crate::input::{ComplAction, Motion, MotionOrObj, Object};
 use crate::language::Language;
-use crate::language_client::{Diagnostic as LCDiagnostic, LanguageClient, LanguageClientManager};
+use crate::language_client::{LanguageClient, LanguageClientManager, PublishDiagnosticParams};
 use crate::painter::Painter;
 use crate::project::Project;
 use crate::style::{Color, TextStyle};
@@ -46,6 +45,7 @@ pub(crate) struct Buffer {
     buffer_id: BufferID,
     data: Rope,
     views: FnvHashMap<BufferViewID, BufferView>,
+    version: usize,
     styled_lines: Vec<StyledText>,
     tab_width: usize,
     indent_tabs: bool,
@@ -57,7 +57,7 @@ pub(crate) struct Buffer {
     project: Option<Rc<Project>>,
     theme: Rc<Theme>,
     config: Rc<Config>,
-    language_client: Option<Rc<RefCell<LanguageClient>>>,
+    language_client: Option<LanguageClient>,
     diagnostics: Diagnostics,
 }
 
@@ -690,6 +690,7 @@ impl Buffer {
             project: None,
             language_client: None,
             diagnostics: Diagnostics::empty(),
+            version: 0,
         }
     }
 
@@ -735,7 +736,10 @@ impl Buffer {
         let language_client = language
             .and_then(|language| lang_client_manager.get_client(language, path, &config))
             .and_then(|lc| match lc {
-                Ok(lc) => Some(lc),
+                Ok(mut lc) => {
+                    lc.text_document_open(path, language.unwrap(), 0, &rope);
+                    Some(lc)
+                }
                 Err(e) => {
                     debug!("failed to get language server for path: {}: {}", path, e);
                     None
@@ -758,6 +762,7 @@ impl Buffer {
             project,
             language_client,
             diagnostics: Diagnostics::empty(),
+            version: 0,
         };
         ret.recreate_parse_tree();
         Ok(ret)
@@ -770,6 +775,11 @@ impl Buffer {
         ts_core: &TsCore,
         lang_client_manager: &mut LanguageClientManager,
     ) -> IOResult<()> {
+        if let Some(path) = self.path.as_ref() {
+            if let Some(lc) = &mut self.language_client {
+                lc.text_document_close(path);
+            }
+        }
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
             .map(|rope| {
@@ -803,6 +813,7 @@ impl Buffer {
                 self.hl_query = hl_query;
                 self.diagnostics.clear();
                 self.recreate_parse_tree();
+                self.version = 0;
 
                 if let Some(project) = &self.project {
                     self.tab_width = project.tab_width.unwrap_or(self.tab_width);
@@ -825,7 +836,15 @@ impl Buffer {
                         lang_client_manager.get_client(language, path, &self.config)
                     })
                     .and_then(|lc| match lc {
-                        Ok(lc) => Some(lc),
+                        Ok(mut lc) => {
+                            lc.text_document_open(
+                                path,
+                                self.language.unwrap(),
+                                self.version,
+                                &self.data,
+                            );
+                            Some(lc)
+                        }
                         Err(e) => {
                             debug!("failed to get language server for path: {}: {}", path, e);
                             None
@@ -844,8 +863,30 @@ impl Buffer {
         lang_client_manager: &mut LanguageClientManager,
     ) -> IOResult<usize> {
         self.project = project;
-        self.diagnostics.clear();
         let len = self.data.len_bytes();
+
+        match File::create(path) {
+            Ok(mut f) => {
+                for chunk in self.data.chunks() {
+                    f.write(chunk.as_bytes())?;
+                }
+            }
+            Err(e) => return Err(e),
+        };
+
+        if let Some(old_path) = self.path.as_ref() {
+            if old_path == path {
+                if let Some(lc) = &mut self.language_client {
+                    lc.text_document_save(old_path, &self.data);
+                }
+                return Ok(len);
+            }
+            if let Some(lc) = &mut self.language_client {
+                lc.text_document_close(old_path);
+            }
+        }
+
+        self.diagnostics.clear();
 
         let (language, parser, hl_query) = Path::new(path)
             .extension()
@@ -890,25 +931,22 @@ impl Buffer {
         }
 
         self.path = Some(path.to_owned());
+        self.version = 0;
         self.language_client = language
             .and_then(|language| lang_client_manager.get_client(language, path, &self.config))
             .and_then(|lc| match lc {
-                Ok(lc) => Some(lc),
+                Ok(mut lc) => {
+                    lc.text_document_open(path, self.language.unwrap(), self.version, &self.data);
+                    lc.text_document_save(path, &self.data);
+                    Some(lc)
+                }
                 Err(e) => {
                     debug!("failed to get language server for path: {}: {}", path, e);
                     None
                 }
             });
 
-        match File::create(path) {
-            Ok(mut f) => {
-                for chunk in self.data.chunks() {
-                    f.write(chunk.as_bytes())?;
-                }
-                Ok(len)
-            }
-            Err(e) => Err(e),
-        }
+        Ok(len)
     }
 
     // -------- Small utility ----------------
@@ -1027,7 +1065,7 @@ impl Buffer {
                     let range = node.byte_range();
                     let range = rope.byte_to_char(range.start)..rope.byte_to_char(range.end);
                     // FIXME: Optimize this
-                    format!("{}", rope.slice(range))
+                    rope.slice(range).to_string()
                 }) {
                     for capture in query_match.captures {
                         let node = capture.node;
@@ -1107,8 +1145,13 @@ impl Buffer {
     }
 
     // -------- Language server ----------------
-    pub(crate) fn set_diagnostics(&mut self, diagnostics: Vec<LCDiagnostic>) {
-        self.diagnostics.set(diagnostics, &self.data);
+    pub(crate) fn set_diagnostics(&mut self, diagnostics: PublishDiagnosticParams) {
+        if let Some(version) = diagnostics.version {
+            if version != self.version {
+                return;
+            }
+        }
+        self.diagnostics.set(diagnostics.diagnostics, &self.data);
         self.diagnostics
             .set_underline(&mut self.styled_lines, &self.theme);
     }

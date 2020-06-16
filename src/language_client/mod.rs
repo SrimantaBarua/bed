@@ -13,6 +13,7 @@ use std::thread;
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use fnv::FnvHashMap;
+use ropey::Rope;
 
 use crate::config::Config;
 use crate::language::Language;
@@ -26,14 +27,15 @@ mod uri;
 pub(crate) use api::LanguageServerResponse;
 pub(crate) use types::{
     Diagnostic, DiagnosticCode, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag,
-    Position, Range,
+    Position, PublishDiagnosticParams, Range,
 };
 
 use jsonrpc::{Id, Message, MessageContent};
 use language_server_protocol as lsp;
+use types::{InitializeResult, ServerCapabilities};
 
 pub(crate) struct LanguageClientManager {
-    clients: FnvHashMap<(String, Language), Rc<RefCell<LanguageClient>>>,
+    clients: FnvHashMap<(String, Language), LanguageClient>,
     api_tx: Sender<LanguageServerResponse>,
 }
 
@@ -50,7 +52,7 @@ impl LanguageClientManager {
         language: Language,
         file_path: &str,
         config: &Config,
-    ) -> Option<IOResult<Rc<RefCell<LanguageClient>>>> {
+    ) -> Option<IOResult<LanguageClient>> {
         config
             .language
             .get(&language)
@@ -63,7 +65,7 @@ impl LanguageClientManager {
                     'outer: for path in dirpath.ancestors() {
                         if let Ok(readdir) = read_dir(path) {
                             for entry in readdir.filter_map(|e| e.ok()) {
-                                let child = entry.path();
+                                let child = entry.file_name();
                                 for marker in config
                                     .completion_langserver_root_markers
                                     .iter()
@@ -89,7 +91,7 @@ impl LanguageClientManager {
                                 &path,
                             )
                             .map(|lc| {
-                                let lc = Rc::new(RefCell::new(lc));
+                                let lc = lc;
                                 self.clients.insert((path, language), lc.clone());
                                 lc
                             })
@@ -107,9 +109,118 @@ enum WriterMessage {
 
 struct LanguageClientSyncState {
     id_method_map: FnvHashMap<Id, String>,
+    server_capabilities: Option<ServerCapabilities>,
 }
 
+#[derive(Clone)]
 pub(crate) struct LanguageClient {
+    inner: Rc<RefCell<LanguageClientInner>>,
+}
+
+impl LanguageClient {
+    fn new<S>(
+        command: &str,
+        args: &[S],
+        api_tx: Sender<LanguageServerResponse>,
+        root_path: &str,
+    ) -> IOResult<LanguageClient>
+    where
+        S: AsRef<OsStr>,
+    {
+        LanguageClientInner::new(command, args, api_tx, root_path).map(|i| LanguageClient {
+            inner: Rc::new(RefCell::new(i)),
+        })
+    }
+
+    pub(crate) fn text_document_open(
+        &mut self,
+        path: &str,
+        language: Language,
+        version: usize,
+        text: &Rope,
+    ) {
+        let inner = &mut *self.inner.borrow_mut();
+        {
+            let sync_state = inner.sync_state.lock().unwrap();
+            if let Some(cap) = &sync_state.server_capabilities {
+                if !cap.send_open_close() {
+                    return;
+                }
+            }
+        }
+        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
+        inner
+            .wmsg_tx
+            .send(WriterMessage::Message(Message::new(
+                MessageContent::Notification {
+                    method: "textDocument/didOpen".to_owned(),
+                    params: Some(
+                        serde_json::to_value(types::DidOpenTextDocumentParams {
+                            textDocument: types::TextDocumentItem {
+                                uri,
+                                languageId: language.to_string(),
+                                version,
+                                text: text.to_string(),
+                            },
+                        })
+                        .unwrap(),
+                    ),
+                },
+            )))
+            .unwrap();
+    }
+
+    pub(crate) fn text_document_close(&mut self, path: &str) {
+        let inner = &mut *self.inner.borrow_mut();
+        {
+            let sync_state = inner.sync_state.lock().unwrap();
+            if let Some(cap) = &sync_state.server_capabilities {
+                if !cap.send_open_close() {
+                    return;
+                }
+            }
+        }
+        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
+        inner
+            .wmsg_tx
+            .send(WriterMessage::Message(Message::new(
+                MessageContent::Notification {
+                    method: "textDocument/didClose".to_owned(),
+                    params: Some(
+                        serde_json::to_value(types::DidCloseTextDocumentParams {
+                            textDocument: types::TextDocumentIdentifier { uri },
+                        })
+                        .unwrap(),
+                    ),
+                },
+            )))
+            .unwrap();
+    }
+
+    pub(crate) fn text_document_save(&mut self, path: &str, text: &Rope) {
+        /*
+        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
+        let inner = &mut *self.inner.borrow_mut();
+        let text = {
+            let sync = inner.sync_state.lock().unwrap();
+        };
+        inner
+            .wmsg_tx
+            .send(WriterMessage::Message(Message::new(
+                MessageContent::Notification {
+                    method: "textDocument/didSave".to_owned(),
+                    params: Some(serde_json::to_value(types::DidOpenTextDocumentParams {
+                        textDocument: types::TextDocumentIdentifier { uri },
+                        text,
+                    })),
+                },
+            )))
+            .unwrap();
+        */
+    }
+}
+
+struct LanguageClientInner {
     writer_thread: Option<thread::JoinHandle<()>>,
     reader_thread: Option<thread::JoinHandle<()>>,
     sync_state: Arc<Mutex<LanguageClientSyncState>>,
@@ -117,7 +228,7 @@ pub(crate) struct LanguageClient {
     next_id: i64,
 }
 
-impl Drop for LanguageClient {
+impl Drop for LanguageClientInner {
     fn drop(&mut self) {
         self.wmsg_tx.send(WriterMessage::Exit).unwrap();
         if let Some(thread) = self.writer_thread.take() {
@@ -129,13 +240,13 @@ impl Drop for LanguageClient {
     }
 }
 
-impl LanguageClient {
-    pub(crate) fn new<S>(
+impl LanguageClientInner {
+    fn new<S>(
         command: &str,
         args: &[S],
         api_tx: Sender<LanguageServerResponse>,
         root_path: &str,
-    ) -> IOResult<LanguageClient>
+    ) -> IOResult<LanguageClientInner>
     where
         S: AsRef<OsStr>,
     {
@@ -151,6 +262,7 @@ impl LanguageClient {
 
         let mut sync_state = LanguageClientSyncState {
             id_method_map: FnvHashMap::default(),
+            server_capabilities: None,
         };
         sync_state
             .id_method_map
@@ -168,7 +280,7 @@ impl LanguageClient {
             language_client_writer(writer, wmsg_rx)
         }));
 
-        let ret = LanguageClient {
+        let ret = LanguageClientInner {
             reader_thread,
             writer_thread,
             wmsg_tx,
@@ -189,7 +301,6 @@ impl LanguageClient {
                         }),
                         rootUri: Some(root_uri),
                         capabilities: types::ClientCapabilities {},
-                        trace: None,
                     })
                     .unwrap(),
                 ),
@@ -247,13 +358,23 @@ fn language_client_reader(
             }
             if let Ok(raw_message) = serde_json::from_slice::<MessageContent>(&content) {
                 match raw_message {
-                    MessageContent::Call { id, method, params } => {}
+                    MessageContent::Call { id, method, params } => {
+                        debug!(
+                            "raw_message: {}",
+                            serde_json::to_string_pretty(&MessageContent::Call {
+                                id,
+                                method,
+                                params,
+                            })
+                            .unwrap()
+                        );
+                    }
                     MessageContent::Notification { method, params } => match method.as_ref() {
                         "textDocument/publishDiagnostics" => {
                             lsp::handle_publish_diagnostics_notification(&api_tx, params)
                         }
                         _ => {
-                            eprintln!(
+                            debug!(
                                 "raw_message: {}",
                                 serde_json::to_string_pretty(&MessageContent::Notification {
                                     method,
@@ -264,19 +385,27 @@ fn language_client_reader(
                         }
                     },
                     MessageContent::Result { id, result } => {
-                        if let Some(method) =
-                            { sync_state.lock().unwrap().id_method_map.remove(&id) }
-                        {
+                        let mut locked_state = sync_state.lock().unwrap();
+                        if let Some(method) = locked_state.id_method_map.remove(&id) {
                             match method.as_ref() {
                                 "initialize" => {
-                                    lsp::handle_initialize_result(&api_tx, result);
+                                    let formatted = serde_json::to_string(&result).unwrap();
+                                    let params =
+                                        match serde_json::from_value::<InitializeResult>(result) {
+                                            Ok(params) => params,
+                                            Err(e) => panic!(
+                                                "failed to parse initialize result: {}: {}",
+                                                e, formatted
+                                            ),
+                                        };
+                                    locked_state.server_capabilities = Some(params.capabilities);
                                     let (lock, cvar) = &*initialized_cond;
                                     let mut initialized = lock.lock().unwrap();
                                     *initialized = true;
                                     cvar.notify_one();
                                 }
                                 _ => {
-                                    eprintln!(
+                                    debug!(
                                         "raw_message: {}",
                                         serde_json::to_string_pretty(&MessageContent::Result {
                                             id,
@@ -287,8 +416,8 @@ fn language_client_reader(
                                 }
                             }
                         } else {
-                            eprintln!(
-                                "ERROR: Result without ID: {}",
+                            error!(
+                                "Result without ID: {}",
                                 serde_json::to_string_pretty(&MessageContent::Result {
                                     id,
                                     result
@@ -307,7 +436,7 @@ fn language_client_reader(
                                     serde_json::to_string(&error).unwrap()
                                 ),
                                 _ => {
-                                    eprintln!(
+                                    debug!(
                                         "raw_message: {}",
                                         serde_json::to_string_pretty(&MessageContent::Error {
                                             id,
@@ -318,8 +447,8 @@ fn language_client_reader(
                                 }
                             }
                         } else {
-                            eprintln!(
-                                "ERROR: Error without ID: {}",
+                            error!(
+                                "Error without ID: {}",
                                 serde_json::to_string_pretty(&MessageContent::Error { id, error })
                                     .unwrap()
                             )

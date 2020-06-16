@@ -39,7 +39,7 @@ pub(crate) struct Diagnostic {
 #[derive(Debug, Deserialize)]
 pub(crate) struct PublishDiagnosticParams {
     pub(crate) uri: Uri,
-    pub(crate) version: Option<i64>,
+    pub(crate) version: Option<usize>,
     pub(crate) diagnostics: Vec<Diagnostic>,
 }
 
@@ -106,8 +106,6 @@ pub(super) struct InitializeParams {
     pub(super) clientInfo: Option<ClientInfo>,
     pub(super) rootUri: Option<Uri>,
     pub(super) capabilities: ClientCapabilities,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) trace: Option<Trace>,
 }
 
 #[derive(Debug, Serialize)]
@@ -122,15 +120,133 @@ pub(super) struct ClientCapabilities {}
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
-pub(super) struct InitializeResult {}
+pub(super) struct InitializeResult {
+    pub(super) capabilities: ServerCapabilities,
+    pub(super) serverInfo: Option<ServerInfo>,
+}
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub(super) enum Trace {
-    Off,
-    Messages,
-    Verbose,
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+pub(super) struct ServerCapabilities {
+    #[serde(default)]
+    pub(super) textDocumentSync: ServerTextDocumentSync,
+}
+
+impl ServerCapabilities {
+    pub(super) fn send_open_close(&self) -> bool {
+        match &self.textDocumentSync {
+            ServerTextDocumentSync::Kind(_) => true,
+            ServerTextDocumentSync::Options(o) => o.openClose,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(try_from = "u8")]
+pub(super) enum TextDocumentSyncKind {
+    None,
+    Full,
+    Incremental,
+}
+
+impl Default for TextDocumentSyncKind {
+    fn default() -> TextDocumentSyncKind {
+        TextDocumentSyncKind::None
+    }
+}
+
+impl TryFrom<u8> for TextDocumentSyncKind {
+    type Error = u8;
+
+    fn try_from(u: u8) -> Result<Self, u8> {
+        match u {
+            0 => Ok(TextDocumentSyncKind::None),
+            1 => Ok(TextDocumentSyncKind::Full),
+            2 => Ok(TextDocumentSyncKind::Incremental),
+            _ => Err(u),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+pub(super) struct TextDocumentSyncOptions {
+    #[serde(default)]
+    pub(super) openClose: bool,
+    #[serde(default)]
+    pub(super) change: TextDocumentSyncKind,
+    #[serde(default)]
+    pub(super) willSave: bool,
+    #[serde(default)]
+    pub(super) willSaveWaitUntil: bool,
+    #[serde(default)]
+    pub(super) save: TextDocumentSaveOptions,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+pub(super) struct SaveOptions {
+    #[serde(default)]
+    pub(super) includeText: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(super) enum TextDocumentSaveOptions {
+    Bool(bool),
+    Options(SaveOptions),
+}
+
+impl Default for TextDocumentSaveOptions {
+    fn default() -> TextDocumentSaveOptions {
+        TextDocumentSaveOptions::Bool(false)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(super) enum ServerTextDocumentSync {
+    Kind(TextDocumentSyncKind),
+    Options(TextDocumentSyncOptions),
+}
+
+impl Default for ServerTextDocumentSync {
+    fn default() -> ServerTextDocumentSync {
+        ServerTextDocumentSync::Kind(TextDocumentSyncKind::default())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct ServerInfo {
+    pub(super) name: String,
+    pub(super) version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub(super) struct InitializedParams {}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct DidOpenTextDocumentParams {
+    pub(super) textDocument: TextDocumentItem,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct TextDocumentItem {
+    pub(super) uri: Uri,
+    pub(super) languageId: String,
+    pub(super) version: usize,
+    pub(super) text: String,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct DidCloseTextDocumentParams {
+    pub(super) textDocument: TextDocumentIdentifier,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TextDocumentIdentifier {
+    pub(super) uri: Uri,
+}
