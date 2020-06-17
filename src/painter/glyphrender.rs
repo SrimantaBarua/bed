@@ -9,7 +9,7 @@ use crate::font::{FaceKey, RasterFace};
 use crate::opengl::{ElemArr, GlTexture, TexRed, TexUnit};
 use crate::style::{Color, TextSize, TextStyle};
 
-use super::quad::TexColorQuad;
+use super::shapes::TexColorQuad;
 
 const GL_TEX_SIZE: u32 = 4096;
 
@@ -40,9 +40,9 @@ impl RenderedGlyph {
     ) -> RenderedGlyph {
         tex.sub_image(rect, data);
         RenderedGlyph {
-            rect: rect,
-            bearing: bearing,
-            alloc: alloc,
+            rect,
+            bearing,
+            alloc,
         }
     }
 
@@ -83,9 +83,9 @@ impl GlyphRenderer {
         let mut atlas = GlTexture::new(TexUnit::Texture0, size2(GL_TEX_SIZE, GL_TEX_SIZE));
         atlas.activate();
         GlyphRenderer {
-            atlas: atlas,
+            atlas,
             glyph_map: FnvHashMap::default(),
-            dpi: dpi,
+            dpi,
             allocator: AtlasAllocator::with_options(
                 (GL_TEX_SIZE as i32, GL_TEX_SIZE as i32).into(),
                 &options,
@@ -106,10 +106,10 @@ impl GlyphRenderer {
         vert_buf: &mut ElemArr<TexColorQuad>,
     ) -> Option<()> {
         let key = GlyphKey {
-            gid: gid,
-            size: size,
-            face: face,
-            style: style,
+            gid,
+            size,
+            face,
+            style,
         };
         let optrg = if let Some(optrg) = self.glyph_map.get(&key) {
             optrg

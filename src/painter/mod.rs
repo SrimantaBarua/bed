@@ -17,16 +17,17 @@ use crate::text::{ShapedClusterIter, ShapedText, ShapedTextMetrics, TextAlignmen
 use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
 
 mod glyphrender;
-mod quad;
+mod shapes;
 
 use glyphrender::GlyphRenderer;
-use quad::{ColorQuad, TexColorQuad};
+use shapes::{ColorQuad, ColorTriangle, TexColorQuad};
 
 // Struct which handles drawing UI elements
 pub(crate) struct Painter {
     projection: Mat4,
     glyph_render: GlyphRenderer,
     // Vertex buffers
+    ct_arr: ElemArr<ColorTriangle>,
     cq_arr: ElemArr<ColorQuad>,
     tcq_arr: ElemArr<TexColorQuad>,
     // Shaders
@@ -41,6 +42,7 @@ impl Painter {
         dpi: Size2D<u32, DPI>,
     ) -> Painter {
         let projection = Mat4::projection(winsz);
+        let ct_arr = ElemArr::new(8);
         let cq_arr = ElemArr::new(8);
         let tcq_arr = ElemArr::new(128);
         let glyph_render = GlyphRenderer::new(dpi);
@@ -55,6 +57,7 @@ impl Painter {
         let mut ret = Painter {
             projection,
             glyph_render,
+            ct_arr,
             cq_arr,
             tcq_arr,
             cq_shader,
@@ -97,6 +100,7 @@ impl Painter {
         {
             let ash = self.cq_shader.use_program();
             self.cq_arr.flush(&ash);
+            self.ct_arr.flush(&ash);
         }
         {
             let ash = self.tcq_shader.use_program();
@@ -117,6 +121,16 @@ impl<'a> WidgetPainter<'a> {
         self.painter
             .cq_arr
             .push(ColorQuad::new(rect.translate(tvec).cast(), color));
+    }
+
+    pub(crate) fn color_triangle(&mut self, points: &[Point2D<i32, PixelSize>; 3], color: Color) {
+        let tvec = self.rect.origin.to_vector();
+        let points = [
+            (points[0] + tvec).cast(),
+            (points[1] + tvec).cast(),
+            (points[2] + tvec).cast(),
+        ];
+        self.painter.ct_arr.push(ColorTriangle::new(&points, color));
     }
 
     pub(crate) fn glyph(

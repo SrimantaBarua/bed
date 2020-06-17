@@ -71,23 +71,23 @@ impl Buffer {
                 self.theme.clone(),
                 &self.data,
                 &self.styled_lines,
-                &self.diagnostics,
                 self.tab_width,
             ),
         );
     }
 
     pub(crate) fn set_view_rect(&mut self, id: &BufferViewID, rect: Rect<u32, PixelSize>) {
-        self.views.get_mut(id).unwrap().set_rect(
-            rect,
-            &self.data,
-            &self.styled_lines,
-            &self.diagnostics,
-        );
+        self.views
+            .get_mut(id)
+            .unwrap()
+            .set_rect(rect, &self.data, &self.styled_lines);
     }
 
     pub(crate) fn draw_view(&mut self, id: &BufferViewID, painter: &mut Painter) {
-        self.views.get_mut(id).unwrap().draw(painter);
+        self.views
+            .get_mut(id)
+            .unwrap()
+            .draw(painter, &self.diagnostics);
     }
 
     pub(crate) fn check_view_needs_redraw(&mut self, id: &BufferViewID) -> bool {
@@ -102,7 +102,7 @@ impl Buffer {
         self.views
             .get_mut(id)
             .unwrap()
-            .activate(&self.data, &self.styled_lines, &self.diagnostics);
+            .activate(&self.data, &self.styled_lines);
     }
 
     pub(crate) fn deactivate_view(&mut self, id: &BufferViewID) {
@@ -114,12 +114,10 @@ impl Buffer {
     }
 
     pub(crate) fn scroll_view(&mut self, id: &BufferViewID, vec: Vector2D<i32, PixelSize>) {
-        self.views.get_mut(id).unwrap().scroll(
-            vec,
-            &self.data,
-            &self.styled_lines,
-            &self.diagnostics,
-        );
+        self.views
+            .get_mut(id)
+            .unwrap()
+            .scroll(vec, &self.data, &self.styled_lines);
     }
 
     // -------- View cursor manipulation ----------------
@@ -212,7 +210,7 @@ impl Buffer {
             MotionOrObj::Object(Object::Lines(_)) => unreachable!(),
         }
         let view = self.views.get_mut(id).unwrap();
-        view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
+        view.snap_to_cursor(&self.data, &self.styled_lines);
     }
 
     pub(crate) fn move_view_cursor_to_point(
@@ -221,13 +219,7 @@ impl Buffer {
         point: Point2D<u32, PixelSize>,
     ) {
         let view = self.views.get_mut(id).unwrap();
-        view.move_cursor_to_point(
-            point,
-            &self.data,
-            &self.styled_lines,
-            &self.diagnostics,
-            self.tab_width,
-        );
+        view.move_cursor_to_point(point, &self.data, &self.styled_lines, self.tab_width);
     }
 
     pub(crate) fn set_view_cursor_visible(&mut self, id: &BufferViewID, visible: bool) {
@@ -241,7 +233,7 @@ impl Buffer {
         view.cursor.style = style;
         view.cursor
             .sync_line_cidx_gidx_left(&self.data, self.tab_width);
-        view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
+        view.snap_to_cursor(&self.data, &self.styled_lines);
     }
 
     // -------- View edits -----------------
@@ -411,8 +403,8 @@ impl Buffer {
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
-                view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
+                view.reshape(&self.data, &self.styled_lines);
+                view.snap_to_cursor(&self.data, &self.styled_lines);
             }
         }
 
@@ -473,8 +465,8 @@ impl Buffer {
                     .sync_and_update_char_idx_left(&self.data, self.tab_width);
             }
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
-                view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
+                view.reshape(&self.data, &self.styled_lines);
+                view.snap_to_cursor(&self.data, &self.styled_lines);
             }
         }
 
@@ -658,8 +650,8 @@ impl Buffer {
                 }
             }
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
-                view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
+                view.reshape(&self.data, &self.styled_lines);
+                view.snap_to_cursor(&self.data, &self.styled_lines);
             }
         }
     }
@@ -826,8 +818,8 @@ impl Buffer {
                     view.cursor
                         .sync_and_update_char_idx_left(&self.data, self.tab_width);
                     if view.is_active {
-                        view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
-                        view.snap_to_cursor(&self.data, &self.styled_lines, &self.diagnostics);
+                        view.reshape(&self.data, &self.styled_lines);
+                        view.snap_to_cursor(&self.data, &self.styled_lines);
                     }
                 }
 
@@ -926,7 +918,7 @@ impl Buffer {
 
         for view in self.views.values_mut() {
             if view.is_active {
-                view.reshape(&self.data, &self.styled_lines, &self.diagnostics);
+                view.reshape(&self.data, &self.styled_lines);
             }
         }
 
@@ -1145,15 +1137,20 @@ impl Buffer {
     }
 
     // -------- Language server ----------------
-    pub(crate) fn set_diagnostics(&mut self, diagnostics: PublishDiagnosticParams) {
+    pub(crate) fn set_diagnostics(&mut self, diagnostics: &PublishDiagnosticParams) {
         if let Some(version) = diagnostics.version {
             if version != self.version {
                 return;
             }
         }
-        self.diagnostics.set(diagnostics.diagnostics, &self.data);
+        self.diagnostics.set(&diagnostics.diagnostics, &self.data);
         self.diagnostics
             .set_underline(&mut self.styled_lines, &self.theme);
+        for view in self.views.values_mut() {
+            if view.is_active {
+                view.reshape(&self.data, &self.styled_lines);
+            }
+        }
     }
 }
 

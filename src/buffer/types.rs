@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::cmp::Ordering;
+use std::iter::Peekable;
 
 use ropey::Rope;
 
@@ -19,7 +19,7 @@ pub(super) struct Position {
 }
 
 impl Position {
-    fn from(position: LCPosition, data: &Rope) -> Position {
+    fn from(position: &LCPosition, data: &Rope) -> Position {
         assert!(position.line < data.len_lines());
         let (mut u8cidx, mut u16cidx) = (0, 0);
         let line = data.line(position.line);
@@ -44,10 +44,10 @@ pub(super) struct Range {
 }
 
 impl Range {
-    fn from(range: LCRange, data: &Rope) -> Range {
+    fn from(range: &LCRange, data: &Rope) -> Range {
         Range {
-            start: Position::from(range.start, data),
-            end: Position::from(range.end, data),
+            start: Position::from(&range.start, data),
+            end: Position::from(&range.end, data),
         }
     }
 }
@@ -64,15 +64,15 @@ pub(super) struct Diagnostic {
 }
 
 impl Diagnostic {
-    fn from(diagnostic: LCDiagnostic, data: &Rope) -> Diagnostic {
+    fn from(diagnostic: &LCDiagnostic, data: &Rope) -> Diagnostic {
         Diagnostic {
-            range: Range::from(diagnostic.range, data),
-            severity: diagnostic.severity.unwrap(), // Since we filter out diagnostics which do not have severity
-            code: diagnostic.code,
-            source: diagnostic.source,
-            message: diagnostic.message,
-            tags: diagnostic.tags,
-            related_information: diagnostic.relatedInformation,
+            range: Range::from(&diagnostic.range, data),
+            severity: diagnostic.severity.clone().unwrap(), // Since we filter out diagnostics which do not have severity
+            code: diagnostic.code.clone(),
+            source: diagnostic.source.clone(),
+            message: diagnostic.message.clone(),
+            tags: diagnostic.tags.clone(),
+            related_information: diagnostic.relatedInformation.clone(),
         }
     }
 }
@@ -93,17 +93,7 @@ impl Diagnostics {
         self.diagnostics.clear();
     }
 
-    pub(super) fn set(&mut self, mut diagnostics: Vec<LCDiagnostic>, data: &Rope) {
-        println!("diagnostics: {:?}", diagnostics);
-        diagnostics.retain(|x| x.severity.is_some());
-        diagnostics.sort_by(|a, b| {
-            let cmp1 = a.range.start.cmp(&b.range.start);
-            if cmp1 == Ordering::Equal {
-                a.range.end.cmp(&b.range.end)
-            } else {
-                cmp1
-            }
-        });
+    pub(super) fn set(&mut self, diagnostics: &[LCDiagnostic], data: &Rope) {
         self.diagnostics.clear();
         for diagnostic in diagnostics {
             self.diagnostics.push(Diagnostic::from(diagnostic, data));
@@ -125,9 +115,9 @@ impl Diagnostics {
             }
             let under = match next.2.severity {
                 DiagnosticSeverity::Warning | DiagnosticSeverity::Hint => {
-                    theme.textview.underline_warnings
+                    theme.textview.lint_warnings
                 }
-                DiagnosticSeverity::Error => theme.textview.underline_errors,
+                DiagnosticSeverity::Error => theme.textview.lint_errors,
                 _ => None,
             };
             if under.is_some() {
@@ -137,6 +127,49 @@ impl Diagnostics {
                 Some(x) => x,
                 _ => return,
             };
+        }
+    }
+
+    pub(super) fn lines(&self) -> LineIter {
+        LineIter {
+            peekable: LineCharDiagnosticIter::new(&self.diagnostics).peekable(),
+        }
+    }
+}
+
+pub(super) struct LineHasDiagnostics {
+    pub(super) warning: bool,
+    pub(super) error: bool,
+}
+
+pub(super) struct LineIter<'a> {
+    peekable: Peekable<LineCharDiagnosticIter<'a>>,
+}
+
+impl<'a> Iterator for LineIter<'a> {
+    type Item = (usize, LineHasDiagnostics);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((linum, _, _)) = self.peekable.peek() {
+            let linum = *linum;
+            let mut ret = LineHasDiagnostics {
+                warning: false,
+                error: false,
+            };
+            while let Some((next_linum, _, _)) = self.peekable.peek() {
+                if *next_linum != linum {
+                    break;
+                }
+                let (_, _, diag) = self.peekable.next().unwrap();
+                match diag.severity {
+                    DiagnosticSeverity::Error => ret.error = true,
+                    DiagnosticSeverity::Warning | DiagnosticSeverity::Hint => ret.warning = true,
+                    _ => {}
+                }
+            }
+            Some((linum, ret))
+        } else {
+            None
         }
     }
 }

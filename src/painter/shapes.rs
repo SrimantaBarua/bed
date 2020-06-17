@@ -1,14 +1,69 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::Rect;
+use euclid::{Point2D, Rect};
 
 use crate::common::{PixelSize, TextureSize};
 use crate::opengl::Element;
 use crate::style::Color;
 
+pub(super) struct ColorTriangle([f32; 18]);
+
+impl Element for ColorTriangle {
+    fn num_vertices() -> usize {
+        3
+    }
+
+    fn num_elements() -> usize {
+        3
+    }
+
+    fn elements() -> &'static [u32] {
+        &[0, 1, 2]
+    }
+
+    fn num_points_per_vertex() -> usize {
+        6
+    }
+
+    fn vertex_attributes() -> &'static [(i32, usize, usize)] {
+        &[(2, 6, 0), (4, 6, 2)]
+    }
+
+    fn data(&self) -> &[f32] {
+        &self.0
+    }
+}
+
+impl ColorTriangle {
+    #[rustfmt::skip]
+    pub(crate) fn new(
+        points: &[Point2D<f32, PixelSize>; 3],
+        color: Color,
+    ) -> ColorTriangle {
+        let (r, g, b, a) = color.to_opengl_color();
+        ColorTriangle([
+            points[0].x, points[0].y, r, g, b, a,
+            points[1].x, points[1].y, r, g, b, a,
+            points[2].x, points[2].y, r, g, b, a,
+        ])
+    }
+}
+
 pub(crate) struct ColorQuad([f32; 24]);
 
 impl Element for ColorQuad {
+    fn num_vertices() -> usize {
+        4
+    }
+
+    fn num_elements() -> usize {
+        6
+    }
+
+    fn elements() -> &'static [u32] {
+        &[0, 2, 1, 1, 2, 3]
+    }
+
     fn num_points_per_vertex() -> usize {
         6
     }
@@ -44,6 +99,18 @@ pub(crate) struct TexColorQuad {
 }
 
 impl Element for TexColorQuad {
+    fn num_vertices() -> usize {
+        4
+    }
+
+    fn num_elements() -> usize {
+        6
+    }
+
+    fn elements() -> &'static [u32] {
+        &[0, 2, 1, 1, 2, 3]
+    }
+
     fn num_points_per_vertex() -> usize {
         8
     }

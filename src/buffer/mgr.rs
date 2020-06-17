@@ -1,13 +1,14 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::io::Result as IOResult;
 use std::rc::{Rc, Weak};
 
 use fnv::FnvHashMap;
 
 use crate::config::Config;
-use crate::language_client::LanguageClientManager;
+use crate::language_client::{LanguageClientManager, PublishDiagnosticParams};
 use crate::project::Projects;
 use crate::theme::Theme;
 use crate::ts::TsCore;
@@ -26,6 +27,7 @@ pub(crate) struct BufferMgr {
     theme: Rc<Theme>,
     config: Rc<Config>,
     lang_client_manager: LanguageClientManager,
+    path_diagnostics_map: FnvHashMap<String, PublishDiagnosticParams>,
 }
 
 // TODO: Periodically clear out Weak buffers with a strong count of 0
@@ -49,7 +51,30 @@ impl BufferMgr {
             projects,
             config,
             lang_client_manager,
+            path_diagnostics_map: FnvHashMap::default(),
         }
+    }
+
+    pub(crate) fn add_diagnostics(&mut self, mut diagnostics: PublishDiagnosticParams) {
+        let path = diagnostics.uri.path().to_owned();
+        diagnostics.diagnostics.retain(|x| x.severity.is_some());
+        diagnostics.diagnostics.sort_by(|a, b| {
+            let cmp1 = a.range.start.cmp(&b.range.start);
+            if cmp1 == Ordering::Equal {
+                a.range.end.cmp(&b.range.end)
+            } else {
+                cmp1
+            }
+        });
+        self.path_id_map
+            .get(&path)
+            .and_then(|id| self.id_buf_map.get(id))
+            .and_then(|buf| buf.upgrade())
+            .map(|buf| {
+                let buf = &mut *buf.borrow_mut();
+                buf.set_diagnostics(&diagnostics);
+            });
+        self.path_diagnostics_map.insert(path, diagnostics);
     }
 
     pub(crate) fn empty(&mut self) -> Rc<RefCell<Buffer>> {
@@ -70,14 +95,20 @@ impl BufferMgr {
             .and_then(|buf_id| self.id_buf_map.get(buf_id))
             .and_then(|weak_ref| weak_ref.upgrade())
             .map(|buffer| {
-                (&mut *buffer.borrow_mut())
+                let borrowed = &mut *buffer.borrow_mut();
+                borrowed
                     .reload_from_file(
                         path,
                         self.projects.project_for_path(path),
                         &self.ts_core,
                         &mut self.lang_client_manager,
                     )
-                    .map(|_| buffer.clone())
+                    .map(|_| {
+                        if let Some(diagnostics) = self.path_diagnostics_map.get(path) {
+                            borrowed.set_diagnostics(diagnostics);
+                        }
+                        buffer.clone()
+                    })
             })
             .unwrap_or_else(|| {
                 let bid = if let Some(bid) = self.path_id_map.get(path) {
@@ -96,7 +127,10 @@ impl BufferMgr {
                     self.theme.clone(),
                     &mut self.lang_client_manager,
                 )
-                .map(|buffer| {
+                .map(|mut buffer| {
+                    if let Some(diagnostics) = self.path_diagnostics_map.get(path) {
+                        buffer.set_diagnostics(diagnostics);
+                    }
                     let buffer = Rc::new(RefCell::new(buffer));
                     self.path_id_map.insert(path.to_owned(), bid);
                     self.id_path_map.insert(bid, path.to_owned());
@@ -130,8 +164,14 @@ impl BufferMgr {
                         self.path_id_map.remove(p);
                     }
                     self.id_path_map.insert(id, path.to_owned());
-                    self.path_id_map.insert(path, id);
+                    self.path_id_map.insert(path.to_owned(), id);
                     nb
+                })
+                .map(|n| {
+                    if let Some(diagnostics) = self.path_diagnostics_map.get(&path) {
+                        buf.set_diagnostics(diagnostics);
+                    }
+                    n
                 }),
             )
         } else {
@@ -154,15 +194,8 @@ impl BufferMgr {
             self.id_path_map
                 .get(&id)
                 .map(|p| p.to_owned())
-                .map(|p| self.from_file(&p.to_owned()))
+                .map(|p| self.from_file(&p))
         }
-    }
-
-    pub(crate) fn get_buffer_for_path(&self, path: &str) -> Option<Rc<RefCell<Buffer>>> {
-        self.path_id_map
-            .get(path)
-            .and_then(|id| self.id_buf_map.get(id))
-            .and_then(|buf| buf.upgrade())
     }
 
     pub(crate) fn next_view_id(&mut self) -> BufferViewID {

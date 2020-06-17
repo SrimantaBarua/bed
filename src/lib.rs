@@ -148,14 +148,14 @@ impl Bed {
             let mut scroll_amt = (0.0, 0.0);
             let mut redraw = false;
 
+            // Get responses from language servers
+            while let Ok(server_message) = lsp_rx.try_recv() {
+                redraw |= bed.handle_language_server_response(server_message);
+            }
+
             for (_, event) in glfw::flush_messages(&events) {
                 input_actions.clear();
                 redraw = true;
-
-                // Get responses from language servers
-                while let Ok(server_message) = lsp_rx.try_recv() {
-                    bed.handle_language_server_response(server_message);
-                }
 
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
@@ -249,16 +249,15 @@ impl Bed {
         }
     }
 
-    fn handle_language_server_response(&mut self, message: LanguageServerResponse) {
+    fn handle_language_server_response(&mut self, message: LanguageServerResponse) -> bool {
+        let mut redraw = false;
         match message {
             LanguageServerResponse::Diagnostic(diagnostics) => {
-                let path = diagnostics.uri.path();
-                if let Some(buffer) = self.buffer_mgr.get_buffer_for_path(path) {
-                    let buffer = &mut *buffer.borrow_mut();
-                    buffer.set_diagnostics(diagnostics);
-                }
+                self.buffer_mgr.add_diagnostics(diagnostics);
+                redraw = true;
             }
         }
+        redraw
     }
 
     fn check_redraw(&mut self) -> bool {

@@ -6,19 +6,19 @@ use serde::{Deserialize, Serialize};
 
 use super::uri::Uri;
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct Position {
     pub(crate) line: usize,
     pub(crate) character: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Range {
     pub(crate) start: Position,
     pub(crate) end: Position,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Location {
     pub(crate) uri: Uri,
     pub(crate) range: Range,
@@ -43,14 +43,14 @@ pub(crate) struct PublishDiagnosticParams {
     pub(crate) diagnostics: Vec<Diagnostic>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 pub(crate) enum DiagnosticCode {
     Str(String),
     Num(i64),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(try_from = "u8")]
 pub(crate) enum DiagnosticSeverity {
     Error,
@@ -102,7 +102,7 @@ impl Into<u8> for DiagnosticTag {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct DiagnosticRelatedInformation {
     pub(crate) location: Location,
     pub(crate) message: String,

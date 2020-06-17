@@ -9,12 +9,22 @@ use gl::types::GLuint;
 use crate::opengl::ActiveShaderProgram;
 
 pub(crate) trait Element {
-    /// Number of floats per vertex
+    // Number of vertices
+    fn num_vertices() -> usize;
+
+    // Number of elements
+    fn num_elements() -> usize;
+
+    // Elements for one entity at offset 0
+    fn elements() -> &'static [u32];
+
+    // Number of floats per vertex
     fn num_points_per_vertex() -> usize;
 
-    /// Vertex attributes (size, stride, start)
+    // Vertex attributes (size, stride, start)
     fn vertex_attributes() -> &'static [(i32, usize, usize)];
 
+    // Raw data
     fn data(&self) -> &[f32];
 }
 
@@ -38,14 +48,20 @@ where
         let mut vao = 0;
         let mut vbo = 0;
         let mut ebo = 0;
-        let vbo_size = cap * 4 * E::num_points_per_vertex();
-        let ebo_size = cap * 6;
+
+        let num_vertices = E::num_vertices();
+        let num_elements = E::num_elements();
+        let points_per_vertex = E::num_points_per_vertex();
         let attribs = E::vertex_attributes();
-        let mut ebuf = Vec::with_capacity(cap * 6);
+        let elements = E::elements();
+
+        let vbo_size = cap * num_vertices * points_per_vertex;
+        let ebo_size = cap * num_elements;
+        let mut ebuf = Vec::with_capacity(ebo_size);
         for i in 0..cap {
-            let j = i as u32 * 4;
-            let eidx_arr = [j, j + 2, j + 1, j + 1, j + 2, j + 3];
-            ebuf.extend_from_slice(&eidx_arr[..]);
+            for elem in elements {
+                ebuf.push(elem + (i * num_vertices) as u32);
+            }
         }
         unsafe {
             gl::GenVertexArrays(1, &mut vao);
@@ -83,10 +99,10 @@ where
             }
         }
         ElemArr {
-            vao: vao,
-            vbo: vbo,
-            ebo: ebo,
-            cap: cap,
+            vao,
+            vbo,
+            ebo,
+            cap,
             vbuf: Vec::new(),
             phantom: PhantomData,
         }
@@ -98,8 +114,13 @@ where
 
     pub(crate) fn flush(&mut self, _shader: &ActiveShaderProgram) {
         let mut vidx = 0;
-        let vbo_size = self.cap * 4 * E::num_points_per_vertex();
-        let ebo_size = self.cap * 6;
+
+        let num_vertices = E::num_vertices();
+        let num_elements = E::num_elements();
+        let points_per_vertex = E::num_points_per_vertex();
+
+        let vbo_size = self.cap * num_vertices * points_per_vertex;
+        let ebo_size = self.cap * num_elements;
         let vbuf_len = self.vbuf.len();
         self.bind();
         while vbuf_len > vidx + vbo_size {
@@ -120,7 +141,7 @@ where
             vidx += vbo_size;
         }
         if vbuf_len > vidx {
-            let num_elems = ((vbuf_len - vidx) / (4 * E::num_points_per_vertex())) * 6;
+            let num_elems = ((vbuf_len - vidx) / (num_vertices * points_per_vertex)) * num_elements;
             unsafe {
                 gl::BufferSubData(
                     gl::ARRAY_BUFFER,
