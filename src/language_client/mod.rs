@@ -32,7 +32,7 @@ pub(crate) use types::{
 
 use jsonrpc::{Id, Message, MessageContent};
 use language_server_protocol as lsp;
-use types::{InitializeResult, ServerCapabilities};
+use types::*;
 
 pub(crate) struct LanguageClientManager {
     clients: FnvHashMap<(String, Language), LanguageClient>,
@@ -155,8 +155,8 @@ impl LanguageClient {
                 MessageContent::Notification {
                     method: "textDocument/didOpen".to_owned(),
                     params: Some(
-                        serde_json::to_value(types::DidOpenTextDocumentParams {
-                            textDocument: types::TextDocumentItem {
+                        serde_json::to_value(DidOpenTextDocumentParams {
+                            textDocument: TextDocumentItem {
                                 uri,
                                 languageId: language.to_string(),
                                 version,
@@ -187,8 +187,8 @@ impl LanguageClient {
                 MessageContent::Notification {
                     method: "textDocument/didClose".to_owned(),
                     params: Some(
-                        serde_json::to_value(types::DidCloseTextDocumentParams {
-                            textDocument: types::TextDocumentIdentifier { uri },
+                        serde_json::to_value(DidCloseTextDocumentParams {
+                            textDocument: TextDocumentIdentifier { uri },
                         })
                         .unwrap(),
                     ),
@@ -209,8 +209,8 @@ impl LanguageClient {
             .send(WriterMessage::Message(Message::new(
                 MessageContent::Notification {
                     method: "textDocument/didSave".to_owned(),
-                    params: Some(serde_json::to_value(types::DidOpenTextDocumentParams {
-                        textDocument: types::TextDocumentIdentifier { uri },
+                    params: Some(serde_json::to_value(DidOpenTextDocumentParams {
+                        textDocument: TextDocumentIdentifier { uri },
                         text,
                     })),
                 },
@@ -293,14 +293,27 @@ impl LanguageClientInner {
                 id: Id::Num(0),
                 method: "initialize".to_owned(),
                 params: Some(
-                    serde_json::to_value(types::InitializeParams {
+                    serde_json::to_value(InitializeParams {
                         processId: Some(process_id),
-                        clientInfo: Some(types::ClientInfo {
+                        clientInfo: Some(ClientInfo {
                             name: crate_name!().to_owned(),
                             version: Some(crate_version!().to_owned()),
                         }),
                         rootUri: Some(root_uri),
-                        capabilities: types::ClientCapabilities {},
+                        capabilities: ClientCapabilities {
+                            textDocument: Some(TextDocumentClientCapabilities {
+                                publishDiagnostics: Some(PublishDiagnosticsClientCapabilities {
+                                    relatedInformation: Some(false),
+                                    tagSupport: Some(PublishDiagnosticsClientTagSupport {
+                                        valueSet: vec![
+                                            DiagnosticTag::Unnecessary,
+                                            DiagnosticTag::Deprecated,
+                                        ],
+                                    }),
+                                    versionSupport: Some(true),
+                                }),
+                            }),
+                        },
                     })
                     .unwrap(),
                 ),
@@ -317,7 +330,7 @@ impl LanguageClientInner {
             .send(WriterMessage::Message(Message::new(
                 MessageContent::Notification {
                     method: "initialized".to_owned(),
-                    params: Some(serde_json::to_value(types::InitializedParams {}).unwrap()),
+                    params: Some(serde_json::to_value(InitializedParams {}).unwrap()),
                 },
             )))
             .unwrap();
@@ -455,11 +468,7 @@ fn language_client_reader(
                         }
                     }
                 }
-            } else {
-                break;
             }
-        } else {
-            break;
         }
     }
 }

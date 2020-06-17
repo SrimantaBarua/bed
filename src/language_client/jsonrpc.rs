@@ -32,7 +32,7 @@ impl Message {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub(super) enum MessageContent {
     Call {
@@ -101,7 +101,7 @@ impl Serialize for MessageContent {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(super) struct Error {
     code: i64,
     message: String,
@@ -109,7 +109,7 @@ pub(super) struct Error {
     data: Option<Value>,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
 #[serde(untagged)]
 pub(super) enum Id {
     Str(String),

@@ -73,10 +73,11 @@ impl TryFrom<u8> for DiagnosticSeverity {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(try_from = "u8")]
+#[serde(into = "u8")]
 pub(crate) enum DiagnosticTag {
-    Unnecesaary,
+    Unnecessary,
     Deprecated,
 }
 
@@ -85,9 +86,18 @@ impl TryFrom<u8> for DiagnosticTag {
 
     fn try_from(u: u8) -> Result<Self, u8> {
         match u {
-            1 => Ok(DiagnosticTag::Unnecesaary),
+            1 => Ok(DiagnosticTag::Unnecessary),
             2 => Ok(DiagnosticTag::Deprecated),
             _ => Err(u),
+        }
+    }
+}
+
+impl Into<u8> for DiagnosticTag {
+    fn into(self) -> u8 {
+        match self {
+            DiagnosticTag::Unnecessary => 1,
+            DiagnosticTag::Deprecated => 2,
         }
     }
 }
@@ -116,7 +126,30 @@ pub(super) struct ClientInfo {
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct ClientCapabilities {}
+#[allow(non_snake_case)]
+pub(super) struct PublishDiagnosticsClientCapabilities {
+    pub(super) relatedInformation: Option<bool>,
+    pub(super) tagSupport: Option<PublishDiagnosticsClientTagSupport>,
+    pub(super) versionSupport: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct PublishDiagnosticsClientTagSupport {
+    pub(super) valueSet: Vec<DiagnosticTag>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct TextDocumentClientCapabilities {
+    pub(super) publishDiagnostics: Option<PublishDiagnosticsClientCapabilities>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct ClientCapabilities {
+    pub(super) textDocument: Option<TextDocumentClientCapabilities>,
+}
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]

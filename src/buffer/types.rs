@@ -94,6 +94,7 @@ impl Diagnostics {
     }
 
     pub(super) fn set(&mut self, mut diagnostics: Vec<LCDiagnostic>, data: &Rope) {
+        println!("diagnostics: {:?}", diagnostics);
         diagnostics.retain(|x| x.severity.is_some());
         diagnostics.sort_by(|a, b| {
             let cmp1 = a.range.start.cmp(&b.range.start);
@@ -123,7 +124,9 @@ impl Diagnostics {
                 continue;
             }
             let under = match next.2.severity {
-                DiagnosticSeverity::Warning => theme.textview.underline_warnings,
+                DiagnosticSeverity::Warning | DiagnosticSeverity::Hint => {
+                    theme.textview.underline_warnings
+                }
                 DiagnosticSeverity::Error => theme.textview.underline_errors,
                 _ => None,
             };
