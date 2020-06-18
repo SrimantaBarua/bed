@@ -90,7 +90,7 @@ impl CmdPrompt {
 
     pub(crate) fn draw(&self, painter: &mut Painter) {
         let shaper = &mut *self.text_shaper.borrow_mut();
-        let mut painter = painter.widget_ctx(self.rect.cast(), self.theme.prompt.background);
+        let mut painter = painter.widget_ctx(self.rect.cast(), self.theme.prompt.background, false);
         let pos = point2(
             self.config.prompt_padding_horizontal as i32,
             self.config.prompt_padding_vertical as i32 + self.ascender,

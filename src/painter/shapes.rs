@@ -1,10 +1,177 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::{Point2D, Rect};
+use std::fmt;
+
+use euclid::{point2, Angle, Point2D, Rect, Rotation2D, SideOffsets2D, Vector2D};
 
 use crate::common::{PixelSize, TextureSize};
 use crate::opengl::Element;
 use crate::style::Color;
+
+/*
+ * For rounded rects, I'm fixing the radius to 2 pixels. That way, we need 3 triangles per corner
+ * 2 triangles in the center, and 2 triangles per edge. So 22 triangles. We'll be sharing some
+ * verts. So - 2 verts per corner, 2 verts per edge, 4 verts for center. So finally - 20 verts
+ */
+const ROUND_RADIUS: f32 = 2.0;
+const ROUND_NUM_VERTS: usize = 20;
+
+pub(super) struct RoundColorRect([f32; ROUND_NUM_VERTS * 6]);
+
+impl fmt::Debug for RoundColorRect {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("RoundColorRect")
+            .field("i_tl", &(self.0[0], self.0[1]))
+            .field("i_bl", &(self.0[6], self.0[7]))
+            .field("i_tr", &(self.0[12], self.0[13]))
+            .field("i_br", &(self.0[18], self.0[19]))
+            .field("re_t", &(self.0[24], self.0[25]))
+            .field("re_b", &(self.0[30], self.0[31]))
+            .field("le_t", &(self.0[36], self.0[37]))
+            .field("le_b", &(self.0[42], self.0[43]))
+            .field("te_l", &(self.0[48], self.0[49]))
+            .field("te_r", &(self.0[54], self.0[55]))
+            .field("be_l", &(self.0[60], self.0[61]))
+            .field("be_r", &(self.0[66], self.0[67]))
+            .field("tr0", &(self.0[72], self.0[73]))
+            .field("tr1", &(self.0[78], self.0[79]))
+            .field("tl0", &(self.0[84], self.0[85]))
+            .field("tl1", &(self.0[90], self.0[91]))
+            .field("bl0", &(self.0[96], self.0[97]))
+            .field("bl1", &(self.0[102], self.0[103]))
+            .field("br0", &(self.0[108], self.0[109]))
+            .field("br1", &(self.0[114], self.0[115]))
+            .finish()
+    }
+}
+
+impl Element for RoundColorRect {
+    fn num_vertices() -> usize {
+        ROUND_NUM_VERTS
+    }
+
+    fn num_elements() -> usize {
+        48
+    }
+
+    #[rustfmt::skip]
+    fn elements() -> &'static [u32] {
+        &[
+            // horizontal quad
+            6, 4, 7, 7, 4, 5,
+            // vertical quad
+            8, 9, 10, 10, 9, 11,
+            // top-right triangles
+            2, 12, 4, 2, 13, 12, 2, 9, 13,
+            // top-left triangles
+            0, 14, 8, 0, 15, 14, 0, 6, 15,
+            // bottom-left triangles
+            1, 16, 7, 1, 17, 16, 1, 10, 17,
+            // bottom-right triangles
+            3, 18, 11, 3, 19, 18, 3, 5, 19,
+        ]
+    }
+
+    fn num_points_per_vertex() -> usize {
+        6
+    }
+
+    fn vertex_attributes() -> &'static [(i32, usize, usize)] {
+        &[(2, 6, 0), (4, 6, 2)]
+    }
+
+    fn data(&self) -> &[f32] {
+        &self.0
+    }
+}
+
+impl RoundColorRect {
+    #[rustfmt::skip]
+    pub(crate) fn new(
+        bound: Rect<f32, PixelSize>,
+        color: Color,
+    ) -> RoundColorRect {
+        assert!(bound.size.width >= ROUND_RADIUS * 2.0 && bound.size.height >= ROUND_RADIUS * 2.0);
+        let (r, g, b, a) = color.to_opengl_color();
+        let side_offsets = SideOffsets2D::new_all_same(ROUND_RADIUS);
+        let irect = bound.inner_rect(side_offsets);
+        let ibox2d = irect.to_box2d();
+
+        // Inner points
+        let i_tl: Point2D<f32, PixelSize> = point2(ibox2d.min.x, ibox2d.min.y);
+        let i_bl: Point2D<f32, PixelSize> = point2(ibox2d.min.x, ibox2d.max.y);
+        let i_tr: Point2D<f32, PixelSize> = point2(ibox2d.max.x, ibox2d.min.y);
+        let i_br: Point2D<f32, PixelSize> = point2(ibox2d.max.x, ibox2d.max.y);
+
+        // Edge points
+        let re_t: Point2D<f32, PixelSize> = point2(ibox2d.max.x + ROUND_RADIUS, ibox2d.min.y);
+        let re_b: Point2D<f32, PixelSize> = point2(ibox2d.max.x + ROUND_RADIUS, ibox2d.max.y);
+        let le_t: Point2D<f32, PixelSize> = point2(ibox2d.min.x - ROUND_RADIUS, ibox2d.min.y);
+        let le_b: Point2D<f32, PixelSize> = point2(ibox2d.min.x - ROUND_RADIUS, ibox2d.max.y);
+        let te_l: Point2D<f32, PixelSize> = point2(ibox2d.min.x, ibox2d.min.y - ROUND_RADIUS);
+        let te_r: Point2D<f32, PixelSize> = point2(ibox2d.max.x, ibox2d.min.y - ROUND_RADIUS);
+        let be_l: Point2D<f32, PixelSize> = point2(ibox2d.min.x, ibox2d.max.y + ROUND_RADIUS);
+        let be_r: Point2D<f32, PixelSize> = point2(ibox2d.max.x, ibox2d.max.y + ROUND_RADIUS);
+
+        let angle = Angle::frac_pi_3() / 2.0;
+        let rotation = Rotation2D::new(angle);
+        let mut vec = Vector2D::new(ROUND_RADIUS, 0.0);
+        vec = rotation.transform_vector(vec);
+
+        // Corner triangle points
+        // Bottom-right
+        let tr_br0 = i_br + vec;
+        vec = rotation.transform_vector(vec);
+        let tr_br1 = i_br + vec;
+        vec = rotation.transform_vector(vec);
+        vec = rotation.transform_vector(vec);
+
+        // Bottom-left
+        let tr_bl0 = i_bl + vec;
+        vec = rotation.transform_vector(vec);
+        let tr_bl1 = i_bl + vec;
+        vec = rotation.transform_vector(vec);
+        vec = rotation.transform_vector(vec);
+
+        // Top-left
+        let tr_tl0 = i_tl + vec;
+        vec = rotation.transform_vector(vec);
+        let tr_tl1 = i_tl + vec;
+        vec = rotation.transform_vector(vec);
+        vec = rotation.transform_vector(vec);
+
+        // Top-right
+        let tr_tr0 = i_tr + vec;
+        vec = rotation.transform_vector(vec);
+        let tr_tr1 = i_tr + vec;
+
+        RoundColorRect([
+            // Inner
+            i_tl.x, i_tl.y, r, g, b, a,
+            i_bl.x, i_bl.y, r, g, b, a,
+            i_tr.x, i_tr.y, r, g, b, a,
+            i_br.x, i_br.y, r, g, b, a,
+            // Edge
+            re_t.x, re_t.y, r, g, b, a,
+            re_b.x, re_b.y, r, g, b, a,
+            le_t.x, le_t.y, r, g, b, a,
+            le_b.x, le_b.y, r, g, b, a,
+            te_l.x, te_l.y, r, g, b, a,
+            te_r.x, te_r.y, r, g, b, a,
+            be_l.x, be_l.y, r, g, b, a,
+            be_r.x, be_r.y, r, g, b, a,
+            // Corners
+            tr_tr0.x, tr_tr0.y, r, g, b, a,
+            tr_tr1.x, tr_tr1.y, r, g, b, a,
+            tr_tl0.x, tr_tl0.y, r, g, b, a,
+            tr_tl1.x, tr_tl1.y, r, g, b, a,
+            tr_bl0.x, tr_bl0.y, r, g, b, a,
+            tr_bl1.x, tr_bl1.y, r, g, b, a,
+            tr_br0.x, tr_br0.y, r, g, b, a,
+            tr_br1.x, tr_br1.y, r, g, b, a,
+        ])
+    }
+}
 
 pub(super) struct ColorTriangle([f32; 18]);
 

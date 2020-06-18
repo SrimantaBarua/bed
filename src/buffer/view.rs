@@ -372,7 +372,8 @@ impl BufferView {
             let mut opt_diag_line = diag_lines.next();
 
             let shaper = &mut *self.text_shaper.borrow_mut();
-            let mut painter = painter.widget_ctx(gutter_rect.cast(), self.theme.gutter.background);
+            let mut painter =
+                painter.widget_ctx(gutter_rect.cast(), self.theme.gutter.background, false);
             let basex = self.config.gutter_padding as i32;
             let mut pos = point2(basex, -(self.yoff as i32));
 
@@ -428,7 +429,8 @@ impl BufferView {
         // Draw textview
         {
             let shaper = &mut *self.text_shaper.borrow_mut();
-            let mut painter = painter.widget_ctx(text_rect.cast(), self.theme.textview.background);
+            let mut painter =
+                painter.widget_ctx(text_rect.cast(), self.theme.textview.background, false);
 
             let mut ccolor = self.theme.textview.cursor;
             if self.cursor.style == CursorStyle::Block {
@@ -446,13 +448,6 @@ impl BufferView {
             let mut prev_depth = self.prev_depth;
             for (line, depth) in &self.shaped_lines {
                 let cursor = if linum == self.cursor.line_num {
-                    painter.color_quad(
-                        Rect::new(
-                            point2(0, pos.y),
-                            size2(self.rect.size.width, self.height).cast(),
-                        ),
-                        self.theme.textview.cursor_line,
-                    );
                     cursor
                 } else {
                     None
@@ -471,13 +466,14 @@ impl BufferView {
                                         break 'outer;
                                     }
                                     let (y, height) = if i < prev_depth {
-                                        (pos.y - line_pad, self.height as i32 - line_pad)
+                                        (pos.y - line_pad, self.height as i32)
                                     } else {
                                         (pos.y + line_pad, self.height as i32 - 2 * line_pad)
                                     };
                                     painter.color_quad(
                                         Rect::new(point2(x, y), size2(INDENT_GUIDE_WIDTH, height)),
                                         self.theme.textview.indent_guide,
+                                        false,
                                     );
                                 }
                             }

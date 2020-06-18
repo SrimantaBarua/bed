@@ -20,7 +20,7 @@ mod glyphrender;
 mod shapes;
 
 use glyphrender::GlyphRenderer;
-use shapes::{ColorQuad, ColorTriangle, TexColorQuad};
+use shapes::{ColorQuad, ColorTriangle, RoundColorRect, TexColorQuad};
 
 // Struct which handles drawing UI elements
 pub(crate) struct Painter {
@@ -29,6 +29,7 @@ pub(crate) struct Painter {
     // Vertex buffers
     ct_arr: ElemArr<ColorTriangle>,
     cq_arr: ElemArr<ColorQuad>,
+    rcq_arr: ElemArr<RoundColorRect>,
     tcq_arr: ElemArr<TexColorQuad>,
     // Shaders
     cq_shader: ShaderProgram,
@@ -44,6 +45,7 @@ impl Painter {
         let projection = Mat4::projection(winsz);
         let ct_arr = ElemArr::new(8);
         let cq_arr = ElemArr::new(8);
+        let rcq_arr = ElemArr::new(8);
         let tcq_arr = ElemArr::new(128);
         let glyph_render = GlyphRenderer::new(dpi);
         // Compile shader(s)
@@ -59,6 +61,7 @@ impl Painter {
             glyph_render,
             ct_arr,
             cq_arr,
+            rcq_arr,
             tcq_arr,
             cq_shader,
             tcq_shader,
@@ -86,13 +89,18 @@ impl Painter {
         gl_clear();
     }
 
-    pub(crate) fn widget_ctx(&mut self, rect: Rect<i32, PixelSize>, bgcol: Color) -> WidgetPainter {
+    pub(crate) fn widget_ctx(
+        &mut self,
+        rect: Rect<i32, PixelSize>,
+        bgcol: Color,
+        rounded: bool,
+    ) -> WidgetPainter {
         let mut ret = WidgetPainter {
             painter: self,
             rect,
             background_color: bgcol,
         };
-        ret.draw_bg_stencil();
+        ret.draw_bg_stencil(rounded);
         ret
     }
 
@@ -100,6 +108,7 @@ impl Painter {
         {
             let ash = self.cq_shader.use_program();
             self.cq_arr.flush(&ash);
+            self.rcq_arr.flush(&ash);
             self.ct_arr.flush(&ash);
         }
         {
@@ -116,11 +125,16 @@ pub(crate) struct WidgetPainter<'a> {
 }
 
 impl<'a> WidgetPainter<'a> {
-    pub(crate) fn color_quad(&mut self, rect: Rect<i32, PixelSize>, color: Color) {
+    pub(crate) fn color_quad(&mut self, rect: Rect<i32, PixelSize>, color: Color, rounded: bool) {
         let tvec = self.rect.origin.to_vector();
-        self.painter
-            .cq_arr
-            .push(ColorQuad::new(rect.translate(tvec).cast(), color));
+        if rounded {
+            let rcr = RoundColorRect::new(rect.translate(tvec).cast(), color);
+            self.painter.rcq_arr.push(rcr);
+        } else {
+            self.painter
+                .cq_arr
+                .push(ColorQuad::new(rect.translate(tvec).cast(), color));
+        }
     }
 
     pub(crate) fn color_triangle(&mut self, points: &[Point2D<i32, PixelSize>; 3], color: Color) {
@@ -222,7 +236,11 @@ impl<'a> WidgetPainter<'a> {
                         line.metrics.ascender - line.metrics.descender,
                     ),
                 };
-                self.color_quad(Rect::new(point2(pos.x, cy), size2(cwidth, cheight)), ccolor);
+                self.color_quad(
+                    Rect::new(point2(pos.x, cy), size2(cwidth, cheight)),
+                    ccolor,
+                    false,
+                );
             }
         }
     }
@@ -285,7 +303,11 @@ impl<'a> WidgetPainter<'a> {
                                 metrics.ascender - metrics.descender,
                             ),
                         };
-                        self.color_quad(Rect::new(point2(cx, cy), size2(cwidth, cheight)), ccolor);
+                        self.color_quad(
+                            Rect::new(point2(cx, cy), size2(cwidth, cheight)),
+                            ccolor,
+                            false,
+                        );
                     }
                 }
                 if let Some(under) = opt_under {
@@ -295,6 +317,7 @@ impl<'a> WidgetPainter<'a> {
                             size2(width, metrics.underline_thickness),
                         ),
                         under,
+                        false,
                     );
                 }
                 gidx += cluster.num_graphemes;
@@ -303,13 +326,17 @@ impl<'a> WidgetPainter<'a> {
         (pos, gidx)
     }
 
-    fn draw_bg_stencil(&mut self) {
+    fn draw_bg_stencil(&mut self, rounded: bool) {
         // Activate stencil writing
         gl_set_stencil_test(true);
         gl_set_stencil_writing();
         // Draw background and write to stencil
-        {
-            let ash = self.painter.cq_shader.use_program();
+        let ash = self.painter.cq_shader.use_program();
+        if rounded {
+            let rcr = RoundColorRect::new(self.rect.cast(), self.background_color);
+            self.painter.rcq_arr.push(rcr);
+            self.painter.rcq_arr.flush(&ash);
+        } else {
             self.painter
                 .cq_arr
                 .push(ColorQuad::new(self.rect.cast(), self.background_color));

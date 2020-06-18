@@ -78,7 +78,7 @@ impl CompletionPopup {
         }
         let height_below = constrain_rect.size.height - (origin.y as i32 - text_descender) as u32;
         let height_above = origin.y - text_ascender as u32;
-        let max_height = max(height_above, height_below);
+        let max_height = max(height_above, height_below) - 2 * config.completion_padding_vertical;
         let shaped_len = min(max_height / height, options.len() as u32);
         if shaped_len == 0 {
             return None;
@@ -177,7 +177,8 @@ impl CompletionPopup {
 
     pub(crate) fn draw(&self, painter: &mut Painter) {
         let shaper = &mut *self.text_shaper.borrow_mut();
-        let mut painter = painter.widget_ctx(self.rect.cast(), self.theme.completion.background);
+        let mut painter =
+            painter.widget_ctx(self.rect.cast(), self.theme.completion.background, true);
         let basex = self.config.completion_padding_horizontal as i32;
         let mut pos = point2(basex, self.config.completion_padding_vertical as i32);
 
@@ -191,17 +192,12 @@ impl CompletionPopup {
                             size2(self.rect.size.width, self.height).cast(),
                         ),
                         self.theme.completion.active_background,
+                        false,
                     );
                 }
             }
             pos.y += self.ascender + self.config.completion_line_padding as i32;
-            painter.draw_shaped_text(
-                shaper,
-                pos,
-                line,
-                None,
-                self.rect.size.width - (basex as u32) * 2,
-            );
+            painter.draw_shaped_text(shaper, pos, line, None, self.rect.size.width - basex as u32);
             pos.y -= self.descender - self.config.completion_line_padding as i32;
             pos.x = basex;
         }

@@ -38,7 +38,7 @@ impl TextTree {
     }
 
     pub(crate) fn draw(&self, painter: &mut Painter) {
-        let _ = painter.widget_ctx(self.rect.cast(), self.theme.textview.border_color);
+        let _ = painter.widget_ctx(self.rect.cast(), self.theme.textview.border_color, false);
         self.root.draw(painter);
     }
 

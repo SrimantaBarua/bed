@@ -1,11 +1,11 @@
 {
-    "theme" : "ayu-light",
+    "theme" : "ayu-mirage",
 
     "editor.font_family" : "Roboto Mono",
-    "editor.font_size" : 7.5,
+    "editor.font_size" : 8,
     "editor.tab_width" : 8,
     "editor.indent_tabs" : true,
-    "editor.line_padding" : 1,
+    "editor.line_padding" : 2,
 
     "gutter.padding" : 12,
     "gutter.font_scale" : 0.9,
@@ -14,7 +14,7 @@
     "prompt.padding_horizontal" : 4,
 
     "completion.padding_vertical" : 2,
-    "completion.padding_horizontal" : 4,
+    "completion.padding_horizontal" : 7,
     "completion.line_padding" : 1,
     "completion.annotation" : {
         "path.file" : "",
@@ -45,7 +45,7 @@
             "editor.tab_width" : 4,
             "editor.indent_tabs" : false,
             "completion.language_server" : {
-                "executable" : "rls"
+                "executable" : "rust-analyzer"
             }
         }
     }
