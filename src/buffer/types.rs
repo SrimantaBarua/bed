@@ -12,6 +12,13 @@ use crate::theme::Theme;
 
 use super::styled::StyledText;
 
+pub(super) fn internal_to_lsp_position(data: &Rope, cidx: usize) -> LCPosition {
+    let line = data.char_to_line(cidx);
+    let slice = data.slice(data.line_to_char(line)..cidx);
+    let character = slice.chars().fold(0, |acc, c| acc + c.len_utf16());
+    LCPosition { line, character }
+}
+
 #[derive(Debug)]
 pub(super) struct Position {
     pub(super) line: usize,

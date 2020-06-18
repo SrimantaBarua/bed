@@ -6,13 +6,13 @@ use serde::{Deserialize, Serialize};
 
 use super::uri::Uri;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub(crate) struct Position {
     pub(crate) line: usize,
     pub(crate) character: usize,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Range {
     pub(crate) start: Position,
     pub(crate) end: Position,
@@ -142,7 +142,17 @@ pub(super) struct PublishDiagnosticsClientTagSupport {
 #[derive(Debug, Serialize)]
 #[allow(non_snake_case)]
 pub(super) struct TextDocumentClientCapabilities {
+    pub(super) synchronization: Option<TextDocumentSyncClientCapabilities>,
     pub(super) publishDiagnostics: Option<PublishDiagnosticsClientCapabilities>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct TextDocumentSyncClientCapabilities {
+    pub(super) dynamicRegistration: Option<bool>,
+    pub(super) willSave: Option<bool>,
+    pub(super) willSaveWaitUntil: Option<bool>,
+    pub(super) didSave: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -180,6 +190,13 @@ impl ServerCapabilities {
         }
     }
 
+    pub(super) fn send_change(&self) -> TextDocumentSyncKind {
+        match &self.textDocumentSync {
+            ServerTextDocumentSync::Kind(k) => *k,
+            ServerTextDocumentSync::Options(o) => o.change,
+        }
+    }
+
     pub(super) fn save_send_text(&self) -> bool {
         match &self.textDocumentSync {
             ServerTextDocumentSync::Kind(_) => false,
@@ -192,7 +209,7 @@ impl ServerCapabilities {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(try_from = "u8")]
 pub(super) enum TextDocumentSyncKind {
     None,
@@ -296,6 +313,20 @@ pub(super) struct DidCloseTextDocumentParams {
 
 #[derive(Debug, Serialize)]
 #[allow(non_snake_case)]
+pub(super) struct DidChangeTextDocumentParams {
+    pub(super) textDocument: VersionedTextDocumentIdentifier,
+    pub(super) contentChanges: Vec<TextDocumentContentChangeEvent>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub(super) enum TextDocumentContentChangeEvent {
+    Ranged { range: Range, text: String },
+    Full { text: String },
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
 pub(super) struct TextDocumentItem {
     pub(super) uri: Uri,
     pub(super) languageId: String,
@@ -306,4 +337,10 @@ pub(super) struct TextDocumentItem {
 #[derive(Debug, Serialize)]
 pub(super) struct TextDocumentIdentifier {
     pub(super) uri: Uri,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct VersionedTextDocumentIdentifier {
+    pub(super) uri: Uri,
+    pub(super) version: Option<usize>,
 }

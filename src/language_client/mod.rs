@@ -197,6 +197,72 @@ impl LanguageClient {
             .unwrap();
     }
 
+    pub(crate) fn send_full_document_on_change(&self) -> bool {
+        let inner = &mut *self.inner.borrow_mut();
+        let sync_state = inner.sync_state.lock().unwrap();
+        match sync_state
+            .server_capabilities
+            .as_ref()
+            .unwrap()
+            .send_change()
+        {
+            TextDocumentSyncKind::None => panic!("no text to be sent on save?"),
+            TextDocumentSyncKind::Incremental => false,
+            TextDocumentSyncKind::Full => true,
+        }
+    }
+
+    pub(crate) fn text_document_change_full(&mut self, path: &str, version: usize, text: String) {
+        let inner = &mut *self.inner.borrow_mut();
+        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
+        let version = Some(version);
+        inner
+            .wmsg_tx
+            .send(WriterMessage::Message(Message::new(
+                MessageContent::Notification {
+                    method: "textDocument/didChange".to_owned(),
+                    params: Some(
+                        serde_json::to_value(DidChangeTextDocumentParams {
+                            textDocument: VersionedTextDocumentIdentifier { uri, version },
+                            contentChanges: vec![TextDocumentContentChangeEvent::Full { text }],
+                        })
+                        .unwrap(),
+                    ),
+                },
+            )))
+            .unwrap();
+    }
+
+    pub(crate) fn text_document_change(
+        &mut self,
+        path: &str,
+        version: usize,
+        range: Range,
+        text: String,
+    ) {
+        let inner = &mut *self.inner.borrow_mut();
+        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
+        let version = Some(version);
+        inner
+            .wmsg_tx
+            .send(WriterMessage::Message(Message::new(
+                MessageContent::Notification {
+                    method: "textDocument/didChange".to_owned(),
+                    params: Some(
+                        serde_json::to_value(DidChangeTextDocumentParams {
+                            textDocument: VersionedTextDocumentIdentifier { uri, version },
+                            contentChanges: vec![TextDocumentContentChangeEvent::Ranged {
+                                range,
+                                text,
+                            }],
+                        })
+                        .unwrap(),
+                    ),
+                },
+            )))
+            .unwrap();
+    }
+
     pub(crate) fn text_document_save(&mut self, path: &str, text: &Rope) {
         let inner = &mut *self.inner.borrow_mut();
         let text = {
@@ -315,6 +381,12 @@ impl LanguageClientInner {
                         rootUri: Some(root_uri),
                         capabilities: ClientCapabilities {
                             textDocument: Some(TextDocumentClientCapabilities {
+                                synchronization: Some(TextDocumentSyncClientCapabilities {
+                                    dynamicRegistration: Some(false),
+                                    willSave: Some(false),
+                                    willSaveWaitUntil: Some(false),
+                                    didSave: Some(true),
+                                }),
                                 publishDiagnostics: Some(PublishDiagnosticsClientCapabilities {
                                     relatedInformation: Some(false),
                                     tagSupport: Some(PublishDiagnosticsClientTagSupport {
@@ -383,6 +455,12 @@ fn language_client_reader(
                 break;
             }
             if let Ok(raw_message) = serde_json::from_slice::<MessageContent>(&content) {
+                /*
+                debug!(
+                    "RECEIVED: {}",
+                    serde_json::to_string_pretty(&raw_message).unwrap()
+                );
+                */
                 match raw_message {
                     MessageContent::Call { id, method, params } => {
                         debug!(
@@ -501,6 +579,9 @@ fn language_client_writer(mut writer: Box<ChildStdin>, wmsg_rx: Receiver<WriterM
                 break;
             }
             WriterMessage::Message(message) => {
+                /*
+                 * debug!("MESSAGE: {}", message);
+                 */
                 if write!(&mut writer, "{}", message).is_err() {
                     break;
                 }

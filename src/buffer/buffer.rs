@@ -16,7 +16,9 @@ use crate::common::{rope_trim_newlines, PixelSize};
 use crate::config::Config;
 use crate::input::{ComplAction, Motion, MotionOrObj, Object};
 use crate::language::Language;
-use crate::language_client::{LanguageClient, LanguageClientManager, PublishDiagnosticParams};
+use crate::language_client::{
+    LanguageClient, LanguageClientManager, PublishDiagnosticParams, Range as LCRange,
+};
 use crate::painter::Painter;
 use crate::project::Project;
 use crate::style::{Color, TextStyle};
@@ -25,7 +27,7 @@ use crate::ts::TsCore;
 
 use super::completion::CompletionSource;
 use super::styled::StyledText;
-use super::types::Diagnostics;
+use super::types::{internal_to_lsp_position, Diagnostics};
 use super::view::{BufferView, BufferViewCreateParams};
 use super::{BufferID, BufferViewID, CursorStyle};
 
@@ -242,18 +244,10 @@ impl Buffer {
         if c == '\t' {
             if let Some((i, s)) = view.get_completion() {
                 assert!(i <= view.cursor.char_idx);
-                let slice_start = if i < view.cursor.char_idx {
-                    let start_bidx = self.data.char_to_byte(i);
-                    let end_bidx = self.data.char_to_byte(view.cursor.char_idx);
-                    let len = end_bidx - start_bidx;
-                    assert!(len <= s.len());
+                if i < view.cursor.char_idx {
                     self.data.remove(i..view.cursor.char_idx);
-                    self.data.insert(i, &s[..len]);
-                    len
-                } else {
-                    0
-                };
-                return self.view_insert_str(id, &s[slice_start..]);
+                }
+                return self.view_insert_str(id, &s);
             }
         }
         view.stop_completion();
@@ -358,6 +352,29 @@ impl Buffer {
             }
         }
 
+        self.version += 1;
+        if let Some(lc) = &mut self.language_client {
+            let pos = internal_to_lsp_position(&self.data, cidx);
+            let range = LCRange {
+                start: pos.clone(),
+                end: pos,
+            };
+            if lc.send_full_document_on_change() {
+                lc.text_document_change_full(
+                    self.path.as_ref().unwrap(),
+                    self.version,
+                    self.data.to_string(),
+                );
+            } else {
+                lc.text_document_change(
+                    self.path.as_ref().unwrap(),
+                    self.version,
+                    range,
+                    self.data.slice(cidx..end_cidx).to_string(),
+                );
+            }
+        }
+
         let completion = if is_completion_trigger {
             CompletionSource::Path.complete(&self.data, end_cidx, &self.config, &self.theme)
         } else {
@@ -425,6 +442,29 @@ impl Buffer {
         self.data.insert(cidx, s);
         let end_cidx = cidx + s.chars().count();
         let end_linum = self.data.char_to_line(end_cidx);
+
+        self.version += 1;
+        if let Some(lc) = &mut self.language_client {
+            let pos = internal_to_lsp_position(&self.data, cidx);
+            let range = LCRange {
+                start: pos.clone(),
+                end: pos,
+            };
+            if lc.send_full_document_on_change() {
+                lc.text_document_change_full(
+                    self.path.as_ref().unwrap(),
+                    self.version,
+                    self.data.to_string(),
+                );
+            } else {
+                lc.text_document_change(
+                    self.path.as_ref().unwrap(),
+                    self.version,
+                    range,
+                    self.data.slice(cidx..end_cidx).to_string(),
+                );
+            }
+        }
 
         let fgcol = self.theme.textview.foreground;
         self.styled_lines[linum] = default_hl_for_line(
@@ -609,8 +649,29 @@ impl Buffer {
         };
 
         let old_rope = self.data.clone();
-
         self.data.remove(start_cidx..end_cidx);
+
+        self.version += 1;
+        if let Some(lc) = &mut self.language_client {
+            let start = internal_to_lsp_position(&old_rope, start_cidx);
+            let end = internal_to_lsp_position(&old_rope, end_cidx);
+            let range = LCRange { start, end };
+            if lc.send_full_document_on_change() {
+                lc.text_document_change_full(
+                    self.path.as_ref().unwrap(),
+                    self.version,
+                    self.data.to_string(),
+                );
+            } else {
+                lc.text_document_change(
+                    self.path.as_ref().unwrap(),
+                    self.version,
+                    range,
+                    "".to_owned(),
+                );
+            }
+        }
+
         self.styled_lines[linum] = default_hl_for_line(
             self.data.line(linum),
             self.theme.textview.foreground,
