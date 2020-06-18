@@ -23,6 +23,7 @@ impl Window {
         // Initialize GLFW
         glfw.window_hint(WindowHint::Visible(false));
         glfw.window_hint(WindowHint::ContextVersion(3, 3));
+        glfw.window_hint(WindowHint::Samples(Some(4)));
         glfw.window_hint(WindowHint::OpenGlProfile(OpenGlProfileHint::Core));
         // Create GLFW window, and calculate DPI
         let (mut window, events, dpi) = glfw.with_primary_monitor(|glfw, m| {

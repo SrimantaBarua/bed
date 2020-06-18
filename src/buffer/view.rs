@@ -385,7 +385,7 @@ impl BufferView {
                                 let basey = pos.y;
                                 let points = [
                                     point2(0, basey + diag_pad),
-                                    point2(0, basey + diag_pad * diag_size),
+                                    point2(0, basey + diag_pad + diag_size),
                                     point2(diag_size, basey + diag_pad + diag_size / 2),
                                 ];
                                 painter.color_triangle(&points, color);

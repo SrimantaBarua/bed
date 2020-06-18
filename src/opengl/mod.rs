@@ -21,6 +21,7 @@ pub(crate) fn gl_init(window: &mut Window) {
     gl::load_with(|s| window.get_proc_address(s));
     unsafe {
         gl::Enable(gl::BLEND);
+        gl::Enable(gl::MULTISAMPLE);
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::ActiveTexture(gl::TEXTURE0);
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
