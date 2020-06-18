@@ -198,25 +198,38 @@ impl LanguageClient {
     }
 
     pub(crate) fn text_document_save(&mut self, path: &str, text: &Rope) {
-        /*
-        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
         let inner = &mut *self.inner.borrow_mut();
         let text = {
-            let sync = inner.sync_state.lock().unwrap();
+            let sync_state = inner.sync_state.lock().unwrap();
+            if let Some(cap) = &sync_state.server_capabilities {
+                if !cap.send_save() {
+                    return;
+                }
+                if cap.save_send_text() {
+                    Some(text.to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         };
+        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
         inner
             .wmsg_tx
             .send(WriterMessage::Message(Message::new(
                 MessageContent::Notification {
                     method: "textDocument/didSave".to_owned(),
-                    params: Some(serde_json::to_value(DidOpenTextDocumentParams {
-                        textDocument: TextDocumentIdentifier { uri },
-                        text,
-                    })),
+                    params: Some(
+                        serde_json::to_value(DidSaveTextDocumentParams {
+                            textDocument: TextDocumentIdentifier { uri },
+                            text,
+                        })
+                        .unwrap(),
+                    ),
                 },
             )))
             .unwrap();
-        */
     }
 }
 

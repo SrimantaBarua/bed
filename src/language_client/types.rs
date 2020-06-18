@@ -172,6 +172,24 @@ impl ServerCapabilities {
             ServerTextDocumentSync::Options(o) => o.openClose,
         }
     }
+
+    pub(super) fn send_save(&self) -> bool {
+        match &self.textDocumentSync {
+            ServerTextDocumentSync::Kind(_) => true,
+            ServerTextDocumentSync::Options(o) => o.save.is_some(),
+        }
+    }
+
+    pub(super) fn save_send_text(&self) -> bool {
+        match &self.textDocumentSync {
+            ServerTextDocumentSync::Kind(_) => false,
+            ServerTextDocumentSync::Options(o) => match &o.save {
+                None => false,
+                Some(TextDocumentSaveOptions::Options(o)) => o.includeText,
+                Some(TextDocumentSaveOptions::Bool(b)) => *b,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,8 +230,7 @@ pub(super) struct TextDocumentSyncOptions {
     pub(super) willSave: bool,
     #[serde(default)]
     pub(super) willSaveWaitUntil: bool,
-    #[serde(default)]
-    pub(super) save: TextDocumentSaveOptions,
+    pub(super) save: Option<TextDocumentSaveOptions>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -266,17 +283,24 @@ pub(super) struct DidOpenTextDocumentParams {
 
 #[derive(Debug, Serialize)]
 #[allow(non_snake_case)]
-pub(super) struct TextDocumentItem {
-    pub(super) uri: Uri,
-    pub(super) languageId: String,
-    pub(super) version: usize,
-    pub(super) text: String,
+pub(super) struct DidSaveTextDocumentParams {
+    pub(super) textDocument: TextDocumentIdentifier,
+    pub(super) text: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 #[allow(non_snake_case)]
 pub(super) struct DidCloseTextDocumentParams {
     pub(super) textDocument: TextDocumentIdentifier,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct TextDocumentItem {
+    pub(super) uri: Uri,
+    pub(super) languageId: String,
+    pub(super) version: usize,
+    pub(super) text: String,
 }
 
 #[derive(Debug, Serialize)]

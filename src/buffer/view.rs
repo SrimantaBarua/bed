@@ -368,6 +368,14 @@ impl BufferView {
             let diag_pad = (self.height / 12) as i32;
             let diag_height = (self.height / 2) as i32;
 
+            let get_points = |basey: i32| {
+                [
+                    point2(0, basey + diag_pad),
+                    point2(0, basey + diag_pad + diag_size),
+                    point2(diag_size, basey + diag_pad + diag_size / 2),
+                ]
+            };
+
             let mut diag_lines = diagnostics.lines();
             let mut opt_diag_line = diag_lines.next();
 
@@ -383,23 +391,13 @@ impl BufferView {
                     if linum == *diag_linum {
                         if diag_opts.warning {
                             if let Some(color) = self.theme.textview.lint_warnings {
-                                let basey = pos.y;
-                                let points = [
-                                    point2(0, basey + diag_pad),
-                                    point2(0, basey + diag_pad + diag_size),
-                                    point2(diag_size, basey + diag_pad + diag_size / 2),
-                                ];
+                                let points = get_points(pos.y);
                                 painter.color_triangle(&points, color);
                             }
                         }
                         if diag_opts.error {
                             if let Some(color) = self.theme.textview.lint_errors {
-                                let basey = pos.y + diag_size;
-                                let points = [
-                                    point2(0, basey + diag_height + diag_pad),
-                                    point2(0, basey + diag_height + diag_pad + diag_size),
-                                    point2(diag_size, diag_height + diag_pad + diag_size / 2),
-                                ];
+                                let points = get_points(pos.y + diag_height);
                                 painter.color_triangle(&points, color);
                             }
                         }
