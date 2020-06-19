@@ -51,6 +51,7 @@ impl Window {
         window.set_refresh_polling(true);
         window.set_framebuffer_size_polling(true);
         window.set_mouse_button_polling(true);
+        window.set_cursor_pos_polling(true);
         // Initialize OpenGL
         gl_init(&mut window);
         // Return wrapper

@@ -181,7 +181,6 @@ impl CompletionPopup {
             painter.widget_ctx(self.rect.cast(), self.theme.completion.background, true);
         let basex = self.config.completion_padding_horizontal as i32;
         let mut pos = point2(basex, self.config.completion_padding_vertical as i32);
-
         for linum in self.start..(min(self.start + self.visible_len(), self.shaped.len())) {
             let line = &self.shaped[linum];
             if let Some(idx) = self.selected {

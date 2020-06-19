@@ -9,9 +9,9 @@ use euclid::{point2, size2, Point2D, Rect, Size2D, Vector2D};
 use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize, DPI};
-use crate::completion_popup::CompletionOption;
-use crate::completion_popup::CompletionPopup;
+use crate::completion_popup::{CompletionOption, CompletionPopup};
 use crate::config::Config;
+use crate::hover_popup::HoverPopup;
 use crate::input::ComplAction;
 use crate::painter::Painter;
 use crate::style::TextStyle;
@@ -19,7 +19,7 @@ use crate::text::{RopeOrStr, ShapedText, TextAlignment, TextShaper};
 use crate::theme::Theme;
 use crate::{CURSOR_BLOCK_WIDTH, CURSOR_LINE_WIDTH};
 
-use super::cursor::{Cursor, CursorStyle};
+use super::cursor::{cidx_gidx_from_gidx, Cursor, CursorStyle};
 use super::styled::StyledText;
 use super::types::Diagnostics;
 
@@ -57,6 +57,8 @@ pub(super) struct BufferView {
     gutter_width: u32,
     // Completion popup
     completion: Option<(usize, CompletionPopup)>,
+    // Hover popup
+    hover: Option<HoverPopup>,
     // Misc.
     config: Rc<Config>,
     theme: Rc<Theme>,
@@ -98,6 +100,7 @@ impl BufferView {
             xoff: 0,
             gutter_width: 0,
             completion: None,
+            hover: None,
             config,
             theme,
         };
@@ -125,22 +128,26 @@ impl BufferView {
     }
 
     pub(crate) fn start_completion(&mut self, list: Vec<CompletionOption>, start_cidx: usize) {
-        if let Some(origin) = self.cursor_baseline_to_relative_point() {
-            let mut rect = self.rect;
-            rect.origin.x += self.gutter_width;
-            rect.size.width -= self.gutter_width;
-            self.completion = CompletionPopup::new(
-                origin,
-                rect,
-                list,
-                self.theme.clone(),
-                self.config.clone(),
-                self.text_shaper.clone(),
-                self.dpi,
-                self.ascender + self.config.textview_line_padding as i32,
-                self.descender - self.config.textview_line_padding as i32,
-            )
-            .map(|c| (start_cidx, c));
+        if self.cursor.visible {
+            if let Some(origin) =
+                self.loc_to_relative_point(self.cursor.line_num, self.cursor.line_gidx)
+            {
+                let mut rect = self.rect;
+                rect.origin.x += self.gutter_width;
+                rect.size.width -= self.gutter_width;
+                self.completion = CompletionPopup::new(
+                    origin,
+                    rect,
+                    list,
+                    self.theme.clone(),
+                    self.config.clone(),
+                    self.text_shaper.clone(),
+                    self.dpi,
+                    self.ascender + self.config.textview_line_padding as i32,
+                    self.descender - self.config.textview_line_padding as i32,
+                )
+                .map(|c| (start_cidx, c));
+            }
         }
         self.needs_redraw = true;
     }
@@ -216,6 +223,81 @@ impl BufferView {
             0
         };
         self.needs_redraw = true;
+    }
+
+    pub(super) fn set_hover(
+        &mut self,
+        opt_pos: Option<Point2D<u32, PixelSize>>,
+        data: &Rope,
+        tab_width: usize,
+        diagnostics: &Diagnostics,
+    ) {
+        self.hover = None;
+        if let Some(mut point) = opt_pos {
+            if !self.rect.contains(point) {
+                return;
+            }
+            point.y -= self.rect.origin.y;
+            point.x -= self.rect.origin.x;
+            point.y += self.yoff;
+            point.x += self.xoff;
+            if point.x <= self.gutter_width {
+                self.hover = None;
+                return;
+            }
+            point.x -= self.gutter_width;
+            let linum = (point.y / self.height) as usize;
+            if linum >= self.shaped_lines.len() {
+                return;
+            }
+            let line = &self.shaped_lines[linum].0;
+            let (mut gidx, mut x) = (0, 0);
+            'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
+                for clus in clusters {
+                    let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
+                    if x + width < point.x as i32 {
+                        x += width;
+                        gidx += clus.num_graphemes;
+                        continue;
+                    }
+                    let rem_width = point.x as i32 - x;
+                    gidx += ((rem_width * clus.num_graphemes as i32) / width) as usize;
+                    break 'outer;
+                }
+            }
+            let linum = self.start_line + linum;
+            let trimmed_line = rope_trim_newlines(data.line(linum));
+            let past_end = self.cursor.past_end();
+            let (cidx, _) = cidx_gidx_from_gidx(&trimmed_line, gidx, tab_width, past_end);
+            for (diag_line, range, diag) in diagnostics.lines_chars() {
+                if diag_line > linum {
+                    break;
+                }
+                if diag_line == linum {
+                    if range.contains(&cidx) {
+                        if let Some(origin) = self.loc_to_relative_point(linum, gidx) {
+                            let mut rect = self.rect;
+                            rect.origin.x += self.gutter_width;
+                            rect.size.width -= self.gutter_width;
+                            self.hover = HoverPopup::new(
+                                origin,
+                                rect,
+                                &diag.severity,
+                                diag.code.as_ref(),
+                                diag.source.as_ref().map(|s| s.as_ref()),
+                                &diag.message,
+                                self.theme.clone(),
+                                self.config.clone(),
+                                self.text_shaper.clone(),
+                                self.dpi,
+                                self.ascender + self.config.textview_line_padding as i32,
+                                self.descender - self.config.textview_line_padding as i32,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub(super) fn move_cursor_to_point(
@@ -490,6 +572,11 @@ impl BufferView {
         if let Some((_, completion)) = &self.completion {
             completion.draw(painter)
         }
+
+        // Draw hover popup
+        if let Some(hover) = &self.hover {
+            hover.draw(painter)
+        }
     }
 
     fn fill_or_truncate_view(&mut self, data: &Rope, styled_lines: &[StyledText]) {
@@ -750,30 +837,31 @@ impl BufferView {
         self.gutter_width = self.config.gutter_padding * 2 + width;
     }
 
-    fn cursor_baseline_to_relative_point(&self) -> Option<Point2D<u32, PixelSize>> {
-        if !self.cursor.visible
-            || self.cursor.line_num < self.start_line
-            || self.cursor.line_num >= self.start_line + self.shaped_lines.len()
-        {
+    fn loc_to_relative_point(
+        &self,
+        line_num: usize,
+        line_gidx: usize,
+    ) -> Option<Point2D<u32, PixelSize>> {
+        if line_num < self.start_line || line_num >= self.start_line + self.shaped_lines.len() {
             return None;
         }
-        let y = (self.cursor.line_num - self.start_line) as u32 * self.height
+        let y = (line_num - self.start_line) as u32 * self.height
             + self.config.textview_line_padding
             + self.ascender as u32;
         if y < self.yoff {
             return None;
         }
-        let (line, _) = &self.shaped_lines[self.cursor.line_num - self.start_line];
+        let (line, _) = &self.shaped_lines[line_num - self.start_line];
         let (mut gidx, mut x) = (0, 0);
         'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
             for clus in clusters {
                 let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
-                if gidx + clus.num_graphemes < self.cursor.line_gidx {
+                if gidx + clus.num_graphemes < line_gidx {
                     x += width;
                     gidx += clus.num_graphemes;
                     continue;
                 }
-                let rem_graphemes = self.cursor.line_gidx - gidx;
+                let rem_graphemes = line_gidx - gidx;
                 x += ((rem_graphemes * width as usize) / clus.num_graphemes) as i32;
                 break 'outer;
             }

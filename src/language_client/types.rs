@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::convert::TryFrom;
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +49,15 @@ pub(crate) struct PublishDiagnosticParams {
 pub(crate) enum DiagnosticCode {
     Str(String),
     Num(i64),
+}
+
+impl fmt::Display for DiagnosticCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DiagnosticCode::Str(s) => f.write_str(s),
+            DiagnosticCode::Num(n) => write!(f, "{}", n),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

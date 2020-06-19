@@ -15,12 +15,17 @@
 
     "completion.padding_vertical" : 2,
     "completion.padding_horizontal" : 7,
+    "completion.font_scale" : 0.9,
     "completion.line_padding" : 1,
     "completion.annotation" : {
         "path.file" : "",
         "path.directory" : ""
     },
     "completion.language_server.root_markers" : [ ".git" ],
+
+    "hover.padding_vertical" : 4,
+    "hover.padding_horizontal" : 4,
+    "hover.font_scale" : 0.9,
 
     "language" : {
         "c" : {
@@ -38,7 +43,10 @@
 
         "python" : {
             "editor.tab_width" : 4,
-            "editor.indent_tabs" : false
+            "editor.indent_tabs" : false,
+            "completion.language_server" : {
+                "executable" : "pyls"
+            }
         },
 
         "rust" : {

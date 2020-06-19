@@ -134,6 +134,13 @@ impl TextView {
             buffer.draw_view(&self.id, painter);
         }
     }
+
+    fn set_hover(&self, opt_pos: Option<Point2D<u32, PixelSize>>) {
+        {
+            let buffer = &mut *self.buffer.borrow_mut();
+            buffer.set_view_hover(&self.id, opt_pos);
+        }
+    }
 }
 
 impl Drop for TextView {
@@ -300,5 +307,9 @@ impl TextPane {
 
     pub(super) fn draw(&self, painter: &mut Painter) {
         self.views[self.active].draw(painter);
+    }
+
+    pub(super) fn set_hover(&mut self, optpos: Option<Point2D<u32, PixelSize>>) {
+        self.views[self.active].set_hover(optpos);
     }
 }

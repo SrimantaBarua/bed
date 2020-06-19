@@ -104,7 +104,7 @@ impl Cursor {
         }
     }
 
-    fn past_end(&self) -> bool {
+    pub(super) fn past_end(&self) -> bool {
         self.style == CursorStyle::Line
     }
 }
@@ -144,7 +144,7 @@ fn cidx_gidx_from_cidx(slice: &RopeSlice, cidx: usize, tab_width: usize) -> (usi
     (ccount, gidx)
 }
 
-fn cidx_gidx_from_gidx(
+pub(super) fn cidx_gidx_from_gidx(
     slice: &RopeSlice,
     gidx: usize,
     tab_width: usize,

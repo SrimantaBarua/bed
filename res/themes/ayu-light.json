@@ -27,6 +27,11 @@
             "path.file" : "#F2AE49",
             "path.directory" : "#55B4D4"
         },
+        "hover" : {
+            "background" : "#FFFFFF",
+            "foreground" : "#6C7680"
+        },
+
 
         "syntax" : {
             "comment" : {

@@ -80,6 +80,10 @@ impl TextTree {
         self.root.set_active_and_get_from_pos(pos)
     }
 
+    pub(crate) fn set_hover(&mut self, optpoint: Option<Point2D<u32, PixelSize>>) {
+        self.root.set_hover(optpoint);
+    }
+
     pub(crate) fn map<F>(&mut self, f: F) -> bool
     where
         F: FnMut(&mut TextPane) -> bool + Clone,
@@ -144,6 +148,29 @@ impl Node {
                 ret |= c.map(f.clone());
             }
             ret
+        }
+    }
+
+    fn set_hover(&mut self, optpoint: Option<Point2D<u32, PixelSize>>) {
+        if self.is_leaf() {
+            self.opt_view.as_mut().unwrap().set_hover(optpoint);
+        } else {
+            match optpoint {
+                Some(pos) => {
+                    for i in 0..self.children.len() {
+                        if self.children[i].rect.contains(pos) {
+                            self.children[i].set_hover(Some(pos));
+                        } else {
+                            self.children[i].set_hover(None);
+                        }
+                    }
+                }
+                None => {
+                    for i in 0..self.children.len() {
+                        self.children[i].set_hover(None);
+                    }
+                }
+            }
         }
     }
 

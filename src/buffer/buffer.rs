@@ -122,6 +122,19 @@ impl Buffer {
             .scroll(vec, &self.data, &self.styled_lines);
     }
 
+    pub(crate) fn set_view_hover(
+        &mut self,
+        id: &BufferViewID,
+        opt_pos: Option<Point2D<u32, PixelSize>>,
+    ) {
+        self.views.get_mut(id).unwrap().set_hover(
+            opt_pos,
+            &self.data,
+            self.tab_width,
+            &self.diagnostics,
+        );
+    }
+
     // -------- View cursor manipulation ----------------
     pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mo: MotionOrObj) {
         let view = self.views.get_mut(id).unwrap();

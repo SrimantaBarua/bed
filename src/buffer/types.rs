@@ -26,7 +26,7 @@ pub(super) struct Position {
 }
 
 impl Position {
-    fn from(position: &LCPosition, data: &Rope) -> Position {
+    fn from(position: &LCPosition, data: &Rope) -> Option<Position> {
         assert!(position.line < data.len_lines());
         let (mut u8cidx, mut u16cidx) = (0, 0);
         let line = data.line(position.line);
@@ -36,10 +36,13 @@ impl Position {
             u16cidx += ch.len_utf16();
             u8cidx += 1;
         }
-        assert!(u16cidx == position.character);
-        Position {
-            line: position.line,
-            character: u8cidx,
+        if u16cidx != position.character {
+            None
+        } else {
+            Some(Position {
+                line: position.line,
+                character: u8cidx,
+            })
         }
     }
 }
@@ -51,11 +54,11 @@ pub(super) struct Range {
 }
 
 impl Range {
-    fn from(range: &LCRange, data: &Rope) -> Range {
-        Range {
-            start: Position::from(&range.start, data),
-            end: Position::from(&range.end, data),
-        }
+    fn from(range: &LCRange, data: &Rope) -> Option<Range> {
+        Some(Range {
+            start: Position::from(&range.start, data)?,
+            end: Position::from(&range.end, data)?,
+        })
     }
 }
 
@@ -71,16 +74,16 @@ pub(super) struct Diagnostic {
 }
 
 impl Diagnostic {
-    fn from(diagnostic: &LCDiagnostic, data: &Rope) -> Diagnostic {
-        Diagnostic {
-            range: Range::from(&diagnostic.range, data),
+    fn from(diagnostic: &LCDiagnostic, data: &Rope) -> Option<Diagnostic> {
+        Some(Diagnostic {
+            range: Range::from(&diagnostic.range, data)?,
             severity: diagnostic.severity.clone().unwrap(), // Since we filter out diagnostics which do not have severity
             code: diagnostic.code.clone(),
             source: diagnostic.source.clone(),
             message: diagnostic.message.clone(),
             tags: diagnostic.tags.clone(),
             related_information: diagnostic.relatedInformation.clone(),
-        }
+        })
     }
 }
 
@@ -103,7 +106,9 @@ impl Diagnostics {
     pub(super) fn set(&mut self, diagnostics: &[LCDiagnostic], data: &Rope) {
         self.diagnostics.clear();
         for diagnostic in diagnostics {
-            self.diagnostics.push(Diagnostic::from(diagnostic, data));
+            if let Some(diagnostic) = Diagnostic::from(diagnostic, data) {
+                self.diagnostics.push(diagnostic);
+            }
         }
     }
 
@@ -135,6 +140,10 @@ impl Diagnostics {
                 _ => return,
             };
         }
+    }
+
+    pub(super) fn lines_chars(&self) -> LineCharDiagnosticIter {
+        LineCharDiagnosticIter::new(&self.diagnostics)
     }
 
     pub(super) fn lines(&self) -> LineIter {
@@ -181,7 +190,7 @@ impl<'a> Iterator for LineIter<'a> {
     }
 }
 
-struct LineCharDiagnosticIter<'a> {
+pub(super) struct LineCharDiagnosticIter<'a> {
     linum: usize,
     diagnostics: &'a [Diagnostic],
 }

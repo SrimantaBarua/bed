@@ -22,6 +22,7 @@ mod common;
 mod completion_popup;
 mod config;
 mod font;
+mod hover_popup;
 mod input;
 mod language;
 mod language_client;
@@ -143,6 +144,7 @@ impl Bed {
         let blink_duration = time::Duration::from_millis(500);
 
         bed.draw();
+        let mut mouse_pressed = false;
 
         while !bed.window.should_close() {
             let mut scroll_amt = (0.0, 0.0);
@@ -159,6 +161,7 @@ impl Bed {
 
                 match event {
                     WindowEvent::FramebufferSize(w, h) => {
+                        bed.textview_tree.set_hover(None);
                         let viewable_rect = bed.window.viewable_rect();
                         bed.painter.resize(size2(w, h).cast(), viewable_rect);
                         let textview_rect = bed.cmd_prompt.resize(viewable_rect);
@@ -166,20 +169,34 @@ impl Bed {
                     }
                     WindowEvent::Key(k, _, Action::Press, md)
                     | WindowEvent::Key(k, _, Action::Repeat, md) => {
+                        bed.textview_tree.set_hover(None);
                         bed.input_state.handle_key(k, md, &mut input_actions);
                         bed.process_input_actions(&input_actions);
                     }
                     WindowEvent::Char(c) => {
+                        bed.textview_tree.set_hover(None);
                         bed.input_state.handle_char(c, &mut input_actions);
                         bed.process_input_actions(&input_actions);
                     }
                     WindowEvent::MouseButton(MouseButtonLeft, Action::Press, _) => {
+                        bed.textview_tree.set_hover(None);
+                        mouse_pressed = true;
                         bed.input_state.set_normal_mode();
                         bed.textview_tree.active_mut().stop_completion();
                         bed.move_cursor_to_mouse();
                         bed.set_cursor_style(CursorStyle::Block);
                     }
+                    WindowEvent::MouseButton(MouseButtonLeft, Action::Release, _) => {
+                        mouse_pressed = false;
+                        bed.textview_tree.set_hover(None);
+                    }
+                    WindowEvent::CursorPos(_, _) => {
+                        if !mouse_pressed {
+                            bed.textview_tree.set_hover(Some(bed.window.cursor_pos()));
+                        }
+                    }
                     WindowEvent::Scroll(xsc, ysc) => {
+                        bed.textview_tree.set_hover(None);
                         scroll_amt.0 += xsc;
                         scroll_amt.1 += ysc;
                     }

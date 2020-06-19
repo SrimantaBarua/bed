@@ -25,6 +25,8 @@ static DEFAULT_PROMPT_PADDING_HORIZONTAL: u32 = 4;
 static DEFAULT_PROMPT_PADDING_VERTICAL: u32 = 2;
 static DEFAULT_COMPLETION_PADDING_HORIZONTAL: u32 = 4;
 static DEFAULT_COMPLETION_PADDING_VERTICAL: u32 = 2;
+static DEFAULT_HOVER_PADDING_HORIZONTAL: u32 = 4;
+static DEFAULT_HOVER_PADDING_VERTICAL: u32 = 2;
 
 pub(crate) struct ConfigLanguage {
     pub(crate) tab_width: usize,
@@ -98,6 +100,12 @@ pub(crate) struct Config {
     pub(crate) completion_line_padding: u32,
     pub(crate) completion_annotation: ConfigCompletionAnnotation,
     pub(crate) completion_langserver_root_markers: Vec<String>,
+    // Hover
+    pub(crate) hover_face: FaceKey,
+    pub(crate) hover_font_size: TextSize,
+    pub(crate) hover_padding_vertical: u32,
+    pub(crate) hover_padding_horizontal: u32,
+    pub(crate) hover_line_padding: u32,
 }
 
 impl Config {
@@ -170,6 +178,17 @@ struct ConfigInner {
         default
     )]
     completion_langserver_root_markers: Vec<String>,
+    // Hover
+    #[serde(rename(deserialize = "hover.font_family"))]
+    hover_font_family: Option<String>,
+    #[serde(rename(deserialize = "hover.font_scale"))]
+    hover_font_scale: Option<f32>,
+    #[serde(rename(deserialize = "hover.padding_vertical"))]
+    hover_padding_vertical: Option<u32>,
+    #[serde(rename(deserialize = "hover.padding_horizontal"))]
+    hover_padding_horizontal: Option<u32>,
+    #[serde(rename(deserialize = "hover.line_padding"), default)]
+    hover_line_padding: u32,
     // Language-specific
     language: FnvHashMap<Language, ConfigLanguageInner>,
 }
@@ -225,6 +244,18 @@ impl ConfigInner {
         let completion_padding_vertical = self
             .completion_padding_vertical
             .unwrap_or(DEFAULT_COMPLETION_PADDING_VERTICAL);
+        // Hover
+        let hover_face = self
+            .hover_font_family
+            .and_then(|s| font_core.find(&s))
+            .unwrap_or(textview_face);
+        let hover_font_size = textview_font_size.scale(self.hover_font_scale.unwrap_or(1.0));
+        let hover_padding_horizontal = self
+            .hover_padding_horizontal
+            .unwrap_or(DEFAULT_HOVER_PADDING_HORIZONTAL);
+        let hover_padding_vertical = self
+            .hover_padding_vertical
+            .unwrap_or(DEFAULT_HOVER_PADDING_HORIZONTAL);
         // Language config
         let mut language = FnvHashMap::default();
         for (k, v) in self.language {
@@ -253,6 +284,11 @@ impl ConfigInner {
             completion_line_padding: self.completion_line_padding,
             completion_annotation: self.completion_annotation,
             completion_langserver_root_markers: self.completion_langserver_root_markers,
+            hover_face,
+            hover_font_size,
+            hover_padding_vertical,
+            hover_padding_horizontal,
+            hover_line_padding: self.hover_line_padding,
         }
     }
 }

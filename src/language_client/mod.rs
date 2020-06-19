@@ -455,12 +455,12 @@ fn language_client_reader(
                 break;
             }
             if let Ok(raw_message) = serde_json::from_slice::<MessageContent>(&content) {
-                /*
+                // /*
                 debug!(
                     "RECEIVED: {}",
                     serde_json::to_string_pretty(&raw_message).unwrap()
                 );
-                */
+                // */
                 match raw_message {
                     MessageContent::Call { id, method, params } => {
                         debug!(
@@ -579,9 +579,9 @@ fn language_client_writer(mut writer: Box<ChildStdin>, wmsg_rx: Receiver<WriterM
                 break;
             }
             WriterMessage::Message(message) => {
-                /*
-                 * debug!("MESSAGE: {}", message);
-                 */
+                // /*
+                debug!("MESSAGE: {}", message);
+                // */
                 if write!(&mut writer, "{}", message).is_err() {
                     break;
                 }
