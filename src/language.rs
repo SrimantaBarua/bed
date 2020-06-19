@@ -2,9 +2,9 @@
 
 use std::fmt;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Language {
     C,

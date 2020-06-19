@@ -109,9 +109,9 @@ pub(super) struct Error {
     data: Option<Value>,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
 #[serde(untagged)]
-pub(super) enum Id {
+pub(crate) enum Id {
     Str(String),
     Num(i64),
 }

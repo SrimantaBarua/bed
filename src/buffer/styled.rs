@@ -55,10 +55,7 @@ where
         Ok(i) => i + 1,
         Err(i) => i,
     };
-    if i >= vec.len() {
-        // This is an error
-        return;
-    }
+    assert!(i < vec.len());
     while i + 1 < vec.len() && vec[i + 1].0 <= range.end {
         vec.remove(i + 1);
     }

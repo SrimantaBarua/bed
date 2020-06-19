@@ -13,6 +13,7 @@ use crate::completion_popup::{CompletionOption, CompletionPopup};
 use crate::config::Config;
 use crate::hover_popup::HoverPopup;
 use crate::input::ComplAction;
+use crate::language_client::HoverContents;
 use crate::painter::Painter;
 use crate::style::TextStyle;
 use crate::text::{RopeOrStr, ShapedText, TextAlignment, TextShaper};
@@ -225,17 +226,24 @@ impl BufferView {
         self.needs_redraw = true;
     }
 
+    pub(super) fn update_hover(&mut self, hover_contents: HoverContents) {
+        if let Some(hover) = self.hover.as_mut() {
+            hover.update_contents(hover_contents);
+            self.needs_redraw = true;
+        }
+    }
+
     pub(super) fn set_hover(
         &mut self,
         opt_pos: Option<Point2D<u32, PixelSize>>,
         data: &Rope,
         tab_width: usize,
         diagnostics: &Diagnostics,
-    ) {
+    ) -> Option<(usize, usize)> {
         self.hover = None;
-        if let Some(mut point) = opt_pos {
+        opt_pos.and_then(|mut point| {
             if !self.rect.contains(point) {
-                return;
+                return None;
             }
             point.y -= self.rect.origin.y;
             point.x -= self.rect.origin.x;
@@ -243,15 +251,15 @@ impl BufferView {
             point.x += self.xoff;
             if point.x <= self.gutter_width {
                 self.hover = None;
-                return;
+                return None;
             }
             point.x -= self.gutter_width;
             let linum = (point.y / self.height) as usize;
             if linum >= self.shaped_lines.len() {
-                return;
+                return None;
             }
             let line = &self.shaped_lines[linum].0;
-            let (mut gidx, mut x) = (0, 0);
+            let (mut gidx, mut x, mut found) = (0, 0, false);
             'outer: for (clusters, _, _, _, _, _, _) in line.styled_iter() {
                 for clus in clusters {
                     let width = clus.glyph_infos.iter().fold(0, |a, x| a + x.advance.width);
@@ -262,24 +270,28 @@ impl BufferView {
                     }
                     let rem_width = point.x as i32 - x;
                     gidx += ((rem_width * clus.num_graphemes as i32) / width) as usize;
+                    found = true;
                     break 'outer;
                 }
+            }
+            if !found {
+                return None;
             }
             let linum = self.start_line + linum;
             let trimmed_line = rope_trim_newlines(data.line(linum));
             let past_end = self.cursor.past_end();
             let (cidx, _) = cidx_gidx_from_gidx(&trimmed_line, gidx, tab_width, past_end);
-            for (diag_line, range, diag) in diagnostics.lines_chars() {
-                if diag_line > linum {
-                    break;
-                }
-                if diag_line == linum {
-                    if range.contains(&cidx) {
-                        if let Some(origin) = self.loc_to_relative_point(linum, gidx) {
-                            let mut rect = self.rect;
-                            rect.origin.x += self.gutter_width;
-                            rect.size.width -= self.gutter_width;
-                            self.hover = HoverPopup::new(
+            if let Some(origin) = self.loc_to_relative_point(linum, gidx) {
+                let mut rect = self.rect;
+                rect.origin.x += self.gutter_width;
+                rect.size.width -= self.gutter_width;
+                for (diag_line, range, diag) in diagnostics.lines_chars() {
+                    if diag_line > linum {
+                        break;
+                    }
+                    if diag_line == linum {
+                        if range.contains(&cidx) {
+                            self.hover = HoverPopup::with_diagnostics(
                                 origin,
                                 rect,
                                 &diag.severity,
@@ -292,12 +304,28 @@ impl BufferView {
                                 self.dpi,
                                 self.ascender + self.config.textview_line_padding as i32,
                                 self.descender - self.config.textview_line_padding as i32,
-                            )
+                            );
                         }
                     }
                 }
+                if self.hover.is_none() {
+                    self.hover = Some(HoverPopup::empty(
+                        origin,
+                        rect,
+                        self.theme.clone(),
+                        self.config.clone(),
+                        self.text_shaper.clone(),
+                        self.dpi,
+                        self.ascender + self.config.textview_line_padding as i32,
+                        self.descender - self.config.textview_line_padding as i32,
+                    ));
+                }
+                self.needs_redraw = true;
+                Some((linum, cidx))
+            } else {
+                None
             }
-        }
+        })
     }
 
     pub(super) fn move_cursor_to_point(

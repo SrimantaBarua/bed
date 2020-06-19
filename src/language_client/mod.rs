@@ -20,18 +20,17 @@ use crate::language::Language;
 
 mod api;
 mod jsonrpc;
-mod language_server_protocol;
 mod types;
 mod uri;
 
 pub(crate) use api::LanguageServerResponse;
+pub(crate) use jsonrpc::Id;
 pub(crate) use types::{
     Diagnostic, DiagnosticCode, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag,
-    Position, PublishDiagnosticParams, Range,
+    Hover, HoverContents, MarkedString, MarkupKind, Position, PublishDiagnosticParams, Range,
 };
 
-use jsonrpc::{Id, Message, MessageContent};
-use language_server_protocol as lsp;
+use jsonrpc::{Message, MessageContent};
 use types::*;
 
 pub(crate) struct LanguageClientManager {
@@ -109,6 +108,7 @@ enum WriterMessage {
 
 struct LanguageClientSyncState {
     id_method_map: FnvHashMap<Id, String>,
+    id_path_map: FnvHashMap<Id, String>,
     server_capabilities: Option<ServerCapabilities>,
 }
 
@@ -132,13 +132,7 @@ impl LanguageClient {
         })
     }
 
-    pub(crate) fn text_document_open(
-        &mut self,
-        path: &str,
-        language: Language,
-        version: usize,
-        text: &Rope,
-    ) {
+    pub(crate) fn open(&mut self, path: &str, language: Language, version: usize, text: &Rope) {
         let inner = &mut *self.inner.borrow_mut();
         {
             let sync_state = inner.sync_state.lock().unwrap();
@@ -158,7 +152,7 @@ impl LanguageClient {
                         serde_json::to_value(DidOpenTextDocumentParams {
                             textDocument: TextDocumentItem {
                                 uri,
-                                languageId: language.to_string(),
+                                languageId: language,
                                 version,
                                 text: text.to_string(),
                             },
@@ -170,7 +164,7 @@ impl LanguageClient {
             .unwrap();
     }
 
-    pub(crate) fn text_document_close(&mut self, path: &str) {
+    pub(crate) fn close(&mut self, path: &str) {
         let inner = &mut *self.inner.borrow_mut();
         {
             let sync_state = inner.sync_state.lock().unwrap();
@@ -212,7 +206,7 @@ impl LanguageClient {
         }
     }
 
-    pub(crate) fn text_document_change_full(&mut self, path: &str, version: usize, text: String) {
+    pub(crate) fn change_full(&mut self, path: &str, version: usize, text: String) {
         let inner = &mut *self.inner.borrow_mut();
         let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
         let version = Some(version);
@@ -233,13 +227,7 @@ impl LanguageClient {
             .unwrap();
     }
 
-    pub(crate) fn text_document_change(
-        &mut self,
-        path: &str,
-        version: usize,
-        range: Range,
-        text: String,
-    ) {
+    pub(crate) fn change(&mut self, path: &str, version: usize, range: Range, text: String) {
         let inner = &mut *self.inner.borrow_mut();
         let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
         let version = Some(version);
@@ -263,7 +251,7 @@ impl LanguageClient {
             .unwrap();
     }
 
-    pub(crate) fn text_document_save(&mut self, path: &str, text: &Rope) {
+    pub(crate) fn save(&mut self, path: &str, text: &Rope) {
         let inner = &mut *self.inner.borrow_mut();
         let text = {
             let sync_state = inner.sync_state.lock().unwrap();
@@ -296,6 +284,42 @@ impl LanguageClient {
                 },
             )))
             .unwrap();
+    }
+
+    pub(crate) fn hover(&mut self, path: &str, position: Position) -> Option<Id> {
+        let inner = &mut *self.inner.borrow_mut();
+        {
+            let mut sync_state = inner.sync_state.lock().unwrap();
+            if let Some(cap) = &sync_state.server_capabilities {
+                if !cap.hover_provider() {
+                    return None;
+                }
+            }
+            sync_state
+                .id_method_map
+                .insert(Id::Num(inner.next_id), "textDocument/hover".to_owned());
+            sync_state
+                .id_path_map
+                .insert(Id::Num(inner.next_id), path.to_owned());
+        };
+        let id = Id::Num(inner.next_id);
+        inner.next_id += 1;
+        let uri = uri::Uri::from_path(path).expect("failed to parse path URI");
+        inner
+            .wmsg_tx
+            .send(WriterMessage::Message(Message::new(MessageContent::Call {
+                id: id.clone(),
+                method: "textDocument/hover".to_owned(),
+                params: Some(
+                    serde_json::to_value(HoverParams {
+                        textDocument: TextDocumentIdentifier { uri },
+                        position,
+                    })
+                    .unwrap(),
+                ),
+            })))
+            .unwrap();
+        Some(id)
     }
 }
 
@@ -341,6 +365,7 @@ impl LanguageClientInner {
 
         let mut sync_state = LanguageClientSyncState {
             id_method_map: FnvHashMap::default(),
+            id_path_map: FnvHashMap::default(),
             server_capabilities: None,
         };
         sync_state
@@ -386,6 +411,13 @@ impl LanguageClientInner {
                                     willSave: Some(false),
                                     willSaveWaitUntil: Some(false),
                                     didSave: Some(true),
+                                }),
+                                hover: Some(HoverClientCapabilities {
+                                    dynamicRegistration: Some(false),
+                                    contentFormat: Some(vec![
+                                        MarkupKind::PlainText,
+                                        MarkupKind::Markdown,
+                                    ]),
                                 }),
                                 publishDiagnostics: Some(PublishDiagnosticsClientCapabilities {
                                     relatedInformation: Some(false),
@@ -475,7 +507,13 @@ fn language_client_reader(
                     }
                     MessageContent::Notification { method, params } => match method.as_ref() {
                         "textDocument/publishDiagnostics" => {
-                            lsp::handle_publish_diagnostics_notification(&api_tx, params)
+                            params
+                                .and_then(|params| serde_json::from_value(params).ok())
+                                .map(|params| {
+                                    api_tx
+                                        .send(LanguageServerResponse::Diagnostic(params))
+                                        .unwrap()
+                                });
                         }
                         _ => {
                             debug!(
@@ -507,6 +545,26 @@ fn language_client_reader(
                                     let mut initialized = lock.lock().unwrap();
                                     *initialized = true;
                                     cvar.notify_one();
+                                }
+                                "textDocument/hover" => {
+                                    let path = locked_state
+                                        .id_path_map
+                                        .remove(&id)
+                                        .expect("textDocument/hover without path");
+                                    if let Ok(hover) = serde_json::from_value::<Hover>(result) {
+                                        match id {
+                                            Id::Num(n) => {
+                                                api_tx
+                                                    .send(LanguageServerResponse::Hover(
+                                                        Id::Num(n),
+                                                        path,
+                                                        hover,
+                                                    ))
+                                                    .unwrap();
+                                            }
+                                            Id::Str(_) => unreachable!(),
+                                        }
+                                    }
                                 }
                                 _ => {
                                     debug!(

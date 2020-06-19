@@ -5,6 +5,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::language::Language;
+
 use super::uri::Uri;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
@@ -152,17 +154,34 @@ pub(super) struct PublishDiagnosticsClientTagSupport {
 #[derive(Debug, Serialize)]
 #[allow(non_snake_case)]
 pub(super) struct TextDocumentClientCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) synchronization: Option<TextDocumentSyncClientCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) hover: Option<HoverClientCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) publishDiagnostics: Option<PublishDiagnosticsClientCapabilities>,
 }
 
 #[derive(Debug, Serialize)]
 #[allow(non_snake_case)]
 pub(super) struct TextDocumentSyncClientCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) dynamicRegistration: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) willSave: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) willSaveWaitUntil: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) didSave: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(super) struct HoverClientCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) dynamicRegistration: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) contentFormat: Option<Vec<MarkupKind>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -183,6 +202,8 @@ pub(super) struct InitializeResult {
 pub(super) struct ServerCapabilities {
     #[serde(default)]
     pub(super) textDocumentSync: ServerTextDocumentSync,
+    #[serde(default)]
+    pub(super) hoverProvider: ServerHoverProvider,
 }
 
 impl ServerCapabilities {
@@ -216,6 +237,30 @@ impl ServerCapabilities {
                 Some(TextDocumentSaveOptions::Bool(b)) => *b,
             },
         }
+    }
+
+    pub(super) fn hover_provider(&self) -> bool {
+        match self.hoverProvider {
+            ServerHoverProvider::Bool(b) => b,
+            _ => true,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+#[allow(non_snake_case)]
+pub(super) enum ServerHoverProvider {
+    Bool(bool),
+    Options {
+        #[serde(default)]
+        workDoneProgress: bool,
+    },
+}
+
+impl Default for ServerHoverProvider {
+    fn default() -> ServerHoverProvider {
+        ServerHoverProvider::Bool(false)
     }
 }
 
@@ -339,13 +384,13 @@ pub(super) enum TextDocumentContentChangeEvent {
 #[allow(non_snake_case)]
 pub(super) struct TextDocumentItem {
     pub(super) uri: Uri,
-    pub(super) languageId: String,
+    pub(super) languageId: Language,
     pub(super) version: usize,
     pub(super) text: String,
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct TextDocumentIdentifier {
+pub(crate) struct TextDocumentIdentifier {
     pub(super) uri: Uri,
 }
 
@@ -353,4 +398,45 @@ pub(super) struct TextDocumentIdentifier {
 pub(super) struct VersionedTextDocumentIdentifier {
     pub(super) uri: Uri,
     pub(super) version: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(non_snake_case)]
+pub(crate) struct HoverParams {
+    pub(crate) textDocument: TextDocumentIdentifier,
+    pub(crate) position: Position,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct Hover {
+    pub(crate) contents: HoverContents,
+    pub(crate) range: Option<Range>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum HoverContents {
+    Str(MarkedString),
+    Strings(Vec<MarkedString>),
+    Content(MarkupContent),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum MarkedString {
+    Str(String),
+    Code { language: Language, value: String },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum MarkupKind {
+    PlainText,
+    Markdown,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct MarkupContent {
+    pub(crate) kind: MarkupKind,
+    pub(crate) value: String,
 }

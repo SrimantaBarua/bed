@@ -5,18 +5,39 @@ use std::iter::Peekable;
 use ropey::Rope;
 
 use crate::language_client::{
-    Diagnostic as LCDiagnostic, DiagnosticCode, DiagnosticRelatedInformation, DiagnosticSeverity,
-    DiagnosticTag, Position as LCPosition, Range as LCRange,
+    Diagnostic as LspDiagnostic, DiagnosticCode, DiagnosticRelatedInformation, DiagnosticSeverity,
+    DiagnosticTag, Hover as LspHover, HoverContents, Position as LspPosition, Range as LspRange,
 };
 use crate::theme::Theme;
 
 use super::styled::StyledText;
 
-pub(super) fn internal_to_lsp_position(data: &Rope, cidx: usize) -> LCPosition {
+pub(super) fn internal_to_lsp_position(data: &Rope, line: usize, line_cidx: usize) -> LspPosition {
+    let slice = data.line(line).slice(..line_cidx);
+    let character = slice.chars().fold(0, |acc, c| acc + c.len_utf16());
+    LspPosition { line, character }
+}
+
+pub(super) fn internal_cidx_to_lsp_position(data: &Rope, cidx: usize) -> LspPosition {
     let line = data.char_to_line(cidx);
     let slice = data.slice(data.line_to_char(line)..cidx);
     let character = slice.chars().fold(0, |acc, c| acc + c.len_utf16());
-    LCPosition { line, character }
+    LspPosition { line, character }
+}
+
+#[derive(Debug)]
+pub(super) struct Hover {
+    pub(super) range: Option<Range>,
+    pub(super) contents: HoverContents,
+}
+
+impl Hover {
+    pub(super) fn from(hover: LspHover, data: &Rope) -> Hover {
+        Hover {
+            range: hover.range.and_then(|range| Range::from(&range, data)),
+            contents: hover.contents,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -26,7 +47,7 @@ pub(super) struct Position {
 }
 
 impl Position {
-    fn from(position: &LCPosition, data: &Rope) -> Option<Position> {
+    fn from(position: &LspPosition, data: &Rope) -> Option<Position> {
         assert!(position.line < data.len_lines());
         let (mut u8cidx, mut u16cidx) = (0, 0);
         let line = data.line(position.line);
@@ -54,7 +75,7 @@ pub(super) struct Range {
 }
 
 impl Range {
-    fn from(range: &LCRange, data: &Rope) -> Option<Range> {
+    fn from(range: &LspRange, data: &Rope) -> Option<Range> {
         Some(Range {
             start: Position::from(&range.start, data)?,
             end: Position::from(&range.end, data)?,
@@ -74,7 +95,7 @@ pub(super) struct Diagnostic {
 }
 
 impl Diagnostic {
-    fn from(diagnostic: &LCDiagnostic, data: &Rope) -> Option<Diagnostic> {
+    fn from(diagnostic: &LspDiagnostic, data: &Rope) -> Option<Diagnostic> {
         Some(Diagnostic {
             range: Range::from(&diagnostic.range, data)?,
             severity: diagnostic.severity.clone().unwrap(), // Since we filter out diagnostics which do not have severity
@@ -103,7 +124,7 @@ impl Diagnostics {
         self.diagnostics.clear();
     }
 
-    pub(super) fn set(&mut self, diagnostics: &[LCDiagnostic], data: &Rope) {
+    pub(super) fn set(&mut self, diagnostics: &[LspDiagnostic], data: &Rope) {
         self.diagnostics.clear();
         for diagnostic in diagnostics {
             if let Some(diagnostic) = Diagnostic::from(diagnostic, data) {
@@ -133,6 +154,12 @@ impl Diagnostics {
                 _ => None,
             };
             if under.is_some() {
+                if next.1.end > len_chars {
+                    next.1.end = len_chars;
+                }
+                if next.1.start >= len_chars {
+                    return;
+                }
                 styled_lines[i].set_under(next.1.clone(), under);
             }
             next = match line_char_iter.next() {

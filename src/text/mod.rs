@@ -298,6 +298,10 @@ pub(crate) struct ShapedTextMetrics {
 }
 
 impl ShapedTextMetrics {
+    pub(crate) fn height(&self) -> i32 {
+        self.ascender - self.descender
+    }
+
     fn default() -> ShapedTextMetrics {
         ShapedTextMetrics {
             ascender: 0,

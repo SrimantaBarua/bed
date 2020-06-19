@@ -183,6 +183,13 @@ impl BufferMgr {
         }
     }
 
+    pub(crate) fn buffer_for_path(&self, path: &str) -> Option<Rc<RefCell<Buffer>>> {
+        self.path_id_map
+            .get(path)
+            .and_then(|id| self.id_buf_map.get(id))
+            .and_then(|weak| weak.upgrade())
+    }
+
     pub(crate) fn load_buffer(
         &mut self,
         id: BufferID,

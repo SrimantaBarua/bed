@@ -17,7 +17,8 @@ use crate::config::Config;
 use crate::input::{ComplAction, Motion, MotionOrObj, Object};
 use crate::language::Language;
 use crate::language_client::{
-    LanguageClient, LanguageClientManager, PublishDiagnosticParams, Range as LCRange,
+    Hover as LspHover, Id as LspId, LanguageClient, LanguageClientManager, PublishDiagnosticParams,
+    Range as LspRange,
 };
 use crate::painter::Painter;
 use crate::project::Project;
@@ -27,7 +28,7 @@ use crate::ts::TsCore;
 
 use super::completion::CompletionSource;
 use super::styled::StyledText;
-use super::types::{internal_to_lsp_position, Diagnostics};
+use super::types::{internal_cidx_to_lsp_position, internal_to_lsp_position, Diagnostics, Hover};
 use super::view::{BufferView, BufferViewCreateParams};
 use super::{BufferID, BufferViewID, CursorStyle};
 
@@ -61,10 +62,12 @@ pub(crate) struct Buffer {
     config: Rc<Config>,
     language_client: Option<LanguageClient>,
     diagnostics: Diagnostics,
+    last_hover: Option<(LspId, BufferViewID)>,
 }
 
 impl Buffer {
     // -------- View management ----------------
+
     pub(crate) fn new_view(&mut self, id: &BufferViewID, params: BufferViewCreateParams) {
         self.views.insert(
             id.clone(),
@@ -124,18 +127,32 @@ impl Buffer {
 
     pub(crate) fn set_view_hover(
         &mut self,
-        id: &BufferViewID,
+        viewid: &BufferViewID,
         opt_pos: Option<Point2D<u32, PixelSize>>,
     ) {
-        self.views.get_mut(id).unwrap().set_hover(
+        if let Some((linum, line_cidx)) = self.views.get_mut(viewid).unwrap().set_hover(
             opt_pos,
             &self.data,
             self.tab_width,
             &self.diagnostics,
-        );
+        ) {
+            self.last_hover = None;
+            if linum < self.data.len_lines() {
+                let trimmed = rope_trim_newlines(self.data.line(linum));
+                if line_cidx < trimmed.len_chars() {
+                    if let Some(lc) = &mut self.language_client {
+                        let position = internal_to_lsp_position(&self.data, linum, line_cidx);
+                        self.last_hover = lc
+                            .hover(self.path.as_ref().unwrap(), position)
+                            .map(|lspid| (lspid, viewid.clone()))
+                    }
+                }
+            }
+        }
     }
 
     // -------- View cursor manipulation ----------------
+
     pub(crate) fn move_view_cursor(&mut self, id: &BufferViewID, mo: MotionOrObj) {
         let view = self.views.get_mut(id).unwrap();
         view.stop_completion();
@@ -252,13 +269,15 @@ impl Buffer {
     }
 
     // -------- View edits -----------------
+
     pub(crate) fn view_insert_char(&mut self, id: &BufferViewID, c: char) {
         let view = self.views.get_mut(id).unwrap();
         if c == '\t' {
             if let Some((i, s)) = view.get_completion() {
-                assert!(i <= view.cursor.char_idx);
-                if i < view.cursor.char_idx {
-                    self.data.remove(i..view.cursor.char_idx);
+                let cidx = view.cursor.char_idx;
+                assert!(i <= cidx);
+                if i < cidx {
+                    self.view_delete(id, MotionOrObj::Motion(Motion::Left(cidx - i)));
                 }
                 return self.view_insert_str(id, &s);
             }
@@ -366,20 +385,21 @@ impl Buffer {
         }
 
         self.version += 1;
+        self.last_hover = None;
         if let Some(lc) = &mut self.language_client {
-            let pos = internal_to_lsp_position(&self.data, cidx);
-            let range = LCRange {
+            let pos = internal_cidx_to_lsp_position(&self.data, cidx);
+            let range = LspRange {
                 start: pos.clone(),
                 end: pos,
             };
             if lc.send_full_document_on_change() {
-                lc.text_document_change_full(
+                lc.change_full(
                     self.path.as_ref().unwrap(),
                     self.version,
                     self.data.to_string(),
                 );
             } else {
-                lc.text_document_change(
+                lc.change(
                     self.path.as_ref().unwrap(),
                     self.version,
                     range,
@@ -457,20 +477,21 @@ impl Buffer {
         let end_linum = self.data.char_to_line(end_cidx);
 
         self.version += 1;
+        self.last_hover = None;
         if let Some(lc) = &mut self.language_client {
-            let pos = internal_to_lsp_position(&self.data, cidx);
-            let range = LCRange {
+            let pos = internal_cidx_to_lsp_position(&self.data, cidx);
+            let range = LspRange {
                 start: pos.clone(),
                 end: pos,
             };
             if lc.send_full_document_on_change() {
-                lc.text_document_change_full(
+                lc.change_full(
                     self.path.as_ref().unwrap(),
                     self.version,
                     self.data.to_string(),
                 );
             } else {
-                lc.text_document_change(
+                lc.change(
                     self.path.as_ref().unwrap(),
                     self.version,
                     range,
@@ -665,18 +686,19 @@ impl Buffer {
         self.data.remove(start_cidx..end_cidx);
 
         self.version += 1;
+        self.last_hover = None;
         if let Some(lc) = &mut self.language_client {
-            let start = internal_to_lsp_position(&old_rope, start_cidx);
-            let end = internal_to_lsp_position(&old_rope, end_cidx);
-            let range = LCRange { start, end };
+            let start = internal_cidx_to_lsp_position(&old_rope, start_cidx);
+            let end = internal_cidx_to_lsp_position(&old_rope, end_cidx);
+            let range = LspRange { start, end };
             if lc.send_full_document_on_change() {
-                lc.text_document_change_full(
+                lc.change_full(
                     self.path.as_ref().unwrap(),
                     self.version,
                     self.data.to_string(),
                 );
             } else {
-                lc.text_document_change(
+                lc.change(
                     self.path.as_ref().unwrap(),
                     self.version,
                     range,
@@ -735,6 +757,7 @@ impl Buffer {
     }
 
     // -------- Create buffer ----------------
+
     pub(super) fn empty(buffer_id: BufferID, config: Rc<Config>, theme: Rc<Theme>) -> Buffer {
         let styled = StyledText::new(0, 0, TextStyle::default(), theme.textview.foreground, None);
         let tab_width = config.tab_width;
@@ -757,6 +780,7 @@ impl Buffer {
             language_client: None,
             diagnostics: Diagnostics::empty(),
             version: 0,
+            last_hover: None,
         }
     }
 
@@ -803,7 +827,7 @@ impl Buffer {
             .and_then(|language| lang_client_manager.get_client(language, path, &config))
             .and_then(|lc| match lc {
                 Ok(mut lc) => {
-                    lc.text_document_open(path, language.unwrap(), 0, &rope);
+                    lc.open(path, language.unwrap(), 0, &rope);
                     Some(lc)
                 }
                 Err(e) => {
@@ -829,6 +853,7 @@ impl Buffer {
             language_client,
             diagnostics: Diagnostics::empty(),
             version: 0,
+            last_hover: None,
         };
         ret.recreate_parse_tree();
         Ok(ret)
@@ -841,9 +866,10 @@ impl Buffer {
         ts_core: &TsCore,
         lang_client_manager: &mut LanguageClientManager,
     ) -> IOResult<()> {
+        self.last_hover = None;
         if let Some(path) = self.path.as_ref() {
             if let Some(lc) = &mut self.language_client {
-                lc.text_document_close(path);
+                lc.close(path);
             }
         }
         File::open(path)
@@ -903,12 +929,7 @@ impl Buffer {
                     })
                     .and_then(|lc| match lc {
                         Ok(mut lc) => {
-                            lc.text_document_open(
-                                path,
-                                self.language.unwrap(),
-                                self.version,
-                                &self.data,
-                            );
+                            lc.open(path, self.language.unwrap(), self.version, &self.data);
                             Some(lc)
                         }
                         Err(e) => {
@@ -928,6 +949,7 @@ impl Buffer {
         ts_core: &TsCore,
         lang_client_manager: &mut LanguageClientManager,
     ) -> IOResult<usize> {
+        self.last_hover = None;
         self.project = project;
         let len = self.data.len_bytes();
 
@@ -943,12 +965,12 @@ impl Buffer {
         if let Some(old_path) = self.path.as_ref() {
             if old_path == path {
                 if let Some(lc) = &mut self.language_client {
-                    lc.text_document_save(old_path, &self.data);
+                    lc.save(old_path, &self.data);
                 }
                 return Ok(len);
             }
             if let Some(lc) = &mut self.language_client {
-                lc.text_document_close(old_path);
+                lc.close(old_path);
             }
         }
 
@@ -1002,8 +1024,8 @@ impl Buffer {
             .and_then(|language| lang_client_manager.get_client(language, path, &self.config))
             .and_then(|lc| match lc {
                 Ok(mut lc) => {
-                    lc.text_document_open(path, self.language.unwrap(), self.version, &self.data);
-                    lc.text_document_save(path, &self.data);
+                    lc.open(path, self.language.unwrap(), self.version, &self.data);
+                    lc.save(path, &self.data);
                     Some(lc)
                 }
                 Err(e) => {
@@ -1022,6 +1044,7 @@ impl Buffer {
     }
 
     // -------- Parsing stuff ----------------
+
     fn recreate_parse_tree(&mut self) {
         let rope = self.data.clone();
         if let Some(parser) = &mut self.parser {
@@ -1211,6 +1234,7 @@ impl Buffer {
     }
 
     // -------- Language server ----------------
+
     pub(crate) fn set_diagnostics(&mut self, diagnostics: &PublishDiagnosticParams) {
         if let Some(version) = diagnostics.version {
             if version != self.version {
@@ -1223,6 +1247,18 @@ impl Buffer {
         for view in self.views.values_mut() {
             if view.is_active {
                 view.reshape(&self.data, &self.styled_lines);
+            }
+        }
+    }
+
+    pub(crate) fn update_hover(&mut self, id: LspId, lsphover: LspHover) {
+        if let Some((lspid, viewid)) = self.last_hover.take() {
+            if lspid != id {
+                return;
+            }
+            if let Some(view) = self.views.get_mut(&viewid) {
+                let hover = Hover::from(lsphover, &self.data);
+                view.update_hover(hover.contents);
             }
         }
     }
