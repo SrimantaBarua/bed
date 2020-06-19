@@ -196,7 +196,15 @@ impl CompletionPopup {
                 }
             }
             pos.y += self.ascender + self.config.completion_line_padding as i32;
-            painter.draw_shaped_text(shaper, pos, line, None, self.rect.size.width - basex as u32);
+            painter.draw_shaped_text(
+                shaper,
+                pos,
+                line,
+                None,
+                self.rect.size.width - basex as u32,
+                self.height,
+                false,
+            );
             pos.y -= self.descender - self.config.completion_line_padding as i32;
             pos.x = basex;
         }

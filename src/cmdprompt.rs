@@ -110,6 +110,8 @@ impl CmdPrompt {
             &self.shaped,
             cursor,
             self.rect.size.width - self.config.prompt_padding_horizontal,
+            (self.ascender - self.descender) as u32,
+            false,
         );
     }
 

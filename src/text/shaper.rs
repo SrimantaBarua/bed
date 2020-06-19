@@ -3,6 +3,7 @@
 use std::cmp::{max, min};
 
 use euclid::Size2D;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::common::DPI;
 use crate::font::{harfbuzz, FaceKey, FontCore, RasterFace};
@@ -224,7 +225,7 @@ impl<'a> Iterator for InputRangesIter<'a> {
         let color = self.colors[0].1;
         let under = self.unders[0].1;
         let align = self.alignments[0].1;
-        let minidx = min(
+        let mut minidx = min(
             self.faces[0].0,
             min(
                 self.styles[0].0,
@@ -237,7 +238,18 @@ impl<'a> Iterator for InputRangesIter<'a> {
                 ),
             ),
         );
-        let ret_slice = self.slice.slice(self.cidx..minidx);
+        let mut ret_slice = self.slice.slice(self.cidx..minidx);
+        // Break words. TODO: Optimize, this will suck for long lines
+        let len_chars = ret_slice
+            .to_string()
+            .split_word_bounds()
+            .next()
+            .unwrap()
+            .chars()
+            .count();
+        minidx = self.cidx + len_chars;
+        ret_slice = ret_slice.slice(0..len_chars);
+        // Update iterator
         self.cidx = minidx;
         if self.faces[0].0 == minidx {
             self.faces = &self.faces[1..];

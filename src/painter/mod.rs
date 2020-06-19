@@ -177,6 +177,8 @@ impl<'a> WidgetPainter<'a> {
         line: &ShapedText,
         cursor: Option<(usize, Color, CursorStyle)>,
         width: u32,
+        line_height: u32,
+        fold: bool,
     ) {
         let collected = line.styled_iter().collect::<Vec<_>>();
         let mut i = 0;
@@ -187,16 +189,23 @@ impl<'a> WidgetPainter<'a> {
         }
         let (mut pos, mut gidx) = self.draw_shaped_text_inner(
             shaper,
+            pos.x,
             pos,
             &collected[..i],
             line.metrics,
             0,
             cursor,
             width,
+            line_height as i32,
+            fold,
         );
 
         // Draw right-aligned text
         if pos.x <= width as i32 && i < collected.len() {
+            // TODO: How do we support right-aligned and fold?
+            if fold {
+                unimplemented!();
+            }
             let space_remaining = width as i32 - pos.x;
             let mut rem_width = 0;
             for (clusters, _, _, _, _, _, _) in &collected[i..] {
@@ -209,12 +218,15 @@ impl<'a> WidgetPainter<'a> {
             }
             let (pos_here, gidx_here) = self.draw_shaped_text_inner(
                 shaper,
+                pos.x,
                 pos,
                 &collected[i..],
                 line.metrics,
                 gidx,
                 cursor,
                 width,
+                line_height as i32,
+                fold,
             );
             pos = pos_here;
             gidx = gidx_here;
@@ -248,6 +260,7 @@ impl<'a> WidgetPainter<'a> {
     fn draw_shaped_text_inner<'b>(
         &mut self,
         shaper: &mut TextShaper,
+        basex: i32,
         mut pos: Point2D<i32, PixelSize>,
         line: &'b [(
             ShapedClusterIter<'b>,
@@ -262,11 +275,20 @@ impl<'a> WidgetPainter<'a> {
         mut gidx: usize,
         cursor: Option<(usize, Color, CursorStyle)>,
         width: u32,
+        line_height: i32,
+        fold: bool,
     ) -> (Point2D<i32, PixelSize>, usize) {
         for (clusters, face, style, size, color, opt_under, _) in line {
             let (clusters, face, style, size, color, opt_under) =
                 (*clusters, *face, *style, *size, *color, *opt_under);
             for cluster in clusters {
+                if fold {
+                    let cluster_width = cluster.width() as i32;
+                    if pos.x + cluster_width > width as i32 {
+                        pos.x = basex;
+                        pos.y += line_height;
+                    }
+                }
                 if pos.x >= width as i32 {
                     break;
                 }

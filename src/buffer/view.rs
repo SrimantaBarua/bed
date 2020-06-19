@@ -499,6 +499,8 @@ impl BufferView {
                     line,
                     None,
                     gutter_rect.size.width - self.config.gutter_padding,
+                    self.height,
+                    false,
                 );
                 pos.y -= self.descender - line_pad;
                 pos.x = basex;
@@ -561,7 +563,15 @@ impl BufferView {
                     }
                 }
                 pos.y += self.ascender + line_pad;
-                painter.draw_shaped_text(shaper, pos, line, cursor, text_rect.size.width);
+                painter.draw_shaped_text(
+                    shaper,
+                    pos,
+                    line,
+                    cursor,
+                    text_rect.size.width,
+                    self.height,
+                    false,
+                );
                 pos.y -= self.descender - line_pad;
                 linum += 1;
                 prev_depth = *depth;

@@ -268,6 +268,16 @@ pub(crate) struct ShapedCluster<'a> {
     pub(crate) glyph_infos: &'a [GlyphInfo],
 }
 
+impl<'a> ShapedCluster<'a> {
+    pub(crate) fn width(&self) -> i32 {
+        let mut width = 0;
+        for g in self.glyph_infos {
+            width += g.advance.width;
+        }
+        width
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct ShapedTextMetrics {
     pub(crate) ascender: i32,
