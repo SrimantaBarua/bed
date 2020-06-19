@@ -182,6 +182,7 @@ impl TextShaper {
         ShapedText {
             metrics,
             glyphs,
+            word_boundaries: vec![1],
             cursor_positions: vec![0],
             faces: vec![(1, face)],
             styles: vec![(1, style)],

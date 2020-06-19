@@ -81,16 +81,14 @@ impl HoverPopup {
                     width = bound_width;
                     let mut line_width = 0;
                     for (clusters, _, _, _, _, _, _) in shaped.styled_iter() {
-                        for clus in clusters {
-                            let clus_width = clus.width() as u32;
-                            if line_width > 0 && clus_width + line_width > bound_width {
-                                line_width = 0;
-                                total_height += height;
-                                num_lines += 1;
-                            } else {
-                                line_width += clus_width;
-                                width = max(width, line_width);
-                            }
+                        let chunk_width = clusters.width() as u32;
+                        if line_width > 0 && chunk_width + line_width > bound_width {
+                            line_width = 0;
+                            total_height += height;
+                            num_lines += 1;
+                        } else {
+                            line_width += chunk_width;
+                            width = max(width, line_width);
                         }
                     }
                 }

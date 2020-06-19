@@ -17,6 +17,7 @@ pub(crate) use shaper::TextShaper;
 pub(crate) struct ShapedText {
     pub(crate) metrics: ShapedTextMetrics,
     glyphs: Vec<GlyphInfo>,
+    word_boundaries: Vec<usize>,
     cursor_positions: Vec<usize>,
     faces: Vec<(usize, FaceKey)>,
     styles: Vec<(usize, TextStyle)>,
@@ -30,6 +31,7 @@ impl ShapedText {
     pub(crate) fn styled_iter(&self) -> ShapedStyledTextIter {
         ShapedStyledTextIter {
             glyphs: &self.glyphs,
+            word_boundaries: &self.word_boundaries,
             cursor_positions: &self.cursor_positions,
             faces: &self.faces,
             styles: &self.styles,
@@ -53,6 +55,7 @@ impl ShapedText {
         ShapedText {
             metrics: ShapedTextMetrics::default(),
             glyphs: Vec::new(),
+            word_boundaries: Vec::new(),
             cursor_positions: Vec::new(),
             faces: Vec::new(),
             styles: Vec::new(),
@@ -77,6 +80,7 @@ impl ShapedText {
             self.glyphs.push(gi);
         }
         let glyph_len = self.glyphs.len();
+        self.word_boundaries.push(glyph_len);
         let face_len = self.faces.len();
         let style_len = self.styles.len();
         let size_len = self.sizes.len();
@@ -130,6 +134,7 @@ impl ShapedText {
 
 pub(crate) struct ShapedStyledTextIter<'a> {
     glyphs: &'a [GlyphInfo],
+    word_boundaries: &'a [usize],
     cursor_positions: &'a [usize],
     faces: &'a [(usize, FaceKey)],
     styles: &'a [(usize, TextStyle)],
@@ -162,20 +167,26 @@ impl<'a> Iterator for ShapedStyledTextIter<'a> {
         let under = self.unders[0].1;
         let align = self.alignments[0].1;
         let minidx = min(
-            self.faces[0].0,
+            self.word_boundaries[0],
             min(
-                self.styles[0].0,
+                self.faces[0].0,
                 min(
-                    self.sizes[0].0,
+                    self.styles[0].0,
                     min(
-                        self.colors[0].0,
-                        min(self.unders[0].0, self.alignments[0].0),
+                        self.sizes[0].0,
+                        min(
+                            self.colors[0].0,
+                            min(self.unders[0].0, self.alignments[0].0),
+                        ),
                     ),
                 ),
             ),
         );
         let glyphs = &self.glyphs[self.idx..minidx];
         self.idx = minidx;
+        if self.word_boundaries[0] == minidx {
+            self.word_boundaries = &self.word_boundaries[1..];
+        }
         if self.faces[0].0 == minidx {
             self.faces = &self.faces[1..];
         }
@@ -224,6 +235,16 @@ pub(crate) struct ShapedClusterIter<'a> {
     gii: usize,
 }
 
+impl<'a> ShapedClusterIter<'a> {
+    pub(crate) fn width(&self) -> i32 {
+        let mut width = 0;
+        for g in self.glyph_infos {
+            width += g.advance.width;
+        }
+        width
+    }
+}
+
 impl<'a> Iterator for ShapedClusterIter<'a> {
     type Item = ShapedCluster<'a>;
 
@@ -266,16 +287,6 @@ impl<'a> Iterator for ShapedClusterIter<'a> {
 pub(crate) struct ShapedCluster<'a> {
     pub(crate) num_graphemes: usize,
     pub(crate) glyph_infos: &'a [GlyphInfo],
-}
-
-impl<'a> ShapedCluster<'a> {
-    pub(crate) fn width(&self) -> i32 {
-        let mut width = 0;
-        for g in self.glyph_infos {
-            width += g.advance.width;
-        }
-        width
-    }
 }
 
 #[derive(Clone, Copy)]

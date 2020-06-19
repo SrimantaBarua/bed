@@ -281,14 +281,14 @@ impl<'a> WidgetPainter<'a> {
         for (clusters, face, style, size, color, opt_under, _) in line {
             let (clusters, face, style, size, color, opt_under) =
                 (*clusters, *face, *style, *size, *color, *opt_under);
-            for cluster in clusters {
-                if fold {
-                    let cluster_width = cluster.width() as i32;
-                    if pos.x + cluster_width > width as i32 {
-                        pos.x = basex;
-                        pos.y += line_height;
-                    }
+            if fold {
+                let chunk_width = clusters.width() as i32;
+                if pos.x + chunk_width > width as i32 {
+                    pos.x = basex;
+                    pos.y += line_height;
                 }
+            }
+            for cluster in clusters {
                 if pos.x >= width as i32 {
                     break;
                 }
