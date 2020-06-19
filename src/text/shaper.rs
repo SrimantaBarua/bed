@@ -254,21 +254,27 @@ impl<'a> Iterator for InputRangesIter<'a> {
         self.cidx = minidx;
         if self.faces[0].0 == minidx {
             self.faces = &self.faces[1..];
+            assert!(self.faces.len() == 0 || self.faces[0].0 > minidx);
         }
         if self.styles[0].0 == minidx {
             self.styles = &self.styles[1..];
+            assert!(self.styles.len() == 0 || self.styles[0].0 > minidx);
         }
         if self.sizes[0].0 == minidx {
             self.sizes = &self.sizes[1..];
+            assert!(self.sizes.len() == 0 || self.sizes[0].0 > minidx);
         }
         if self.colors[0].0 == minidx {
             self.colors = &self.colors[1..];
+            assert!(self.colors.len() == 0 || self.colors[0].0 > minidx);
         }
         if self.unders[0].0 == minidx {
             self.unders = &self.unders[1..];
+            assert!(self.unders.len() == 0 || self.unders[0].0 > minidx);
         }
         if self.alignments[0].0 == minidx {
             self.alignments = &self.alignments[1..];
+            assert!(self.alignments.len() == 0 || self.alignments[0].0 > minidx);
         }
         Some((ret_slice, face, style, size, color, under, align))
     }
