@@ -38,4 +38,8 @@ impl Window {
     pub(crate) fn resize(&mut self, physical_size: PhysicalSize<u32>) {
         self.context.resize(physical_size);
     }
+
+    pub(crate) fn scale_factor(&self) -> f64 {
+        self.context.window().scale_factor()
+    }
 }

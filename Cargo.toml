@@ -5,7 +5,19 @@ authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
 description = "Barua's EDitor"
 edition = "2018"
 
+
 [dependencies]
 euclid = "0.20.13"
+fnv = "1.0.7"
+freetype = "0.4.1"
 gl = "0.14.0"
 glutin = "0.24.1"
+harfbuzz-sys = "0.3.4"
+
+[target.'cfg(unix)'.dependencies]
+servo-fontconfig = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+com-wrapper = "0.1.0"
+directwrite = "0.3.0-alpha4"
+winapi = "0.3.8"
