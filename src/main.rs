@@ -36,7 +36,7 @@ impl Bed {
 fn main() {
     let (mut bed, event_loop) = Bed::new();
 
-    let font = bed.font_core.find("monospace");
+    let mut font = bed.font_core.find("monospace").unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         println!("event: {:?}", event);

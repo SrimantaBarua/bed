@@ -4,10 +4,6 @@ use std::ffi::CStr;
 use std::slice;
 
 use euclid::{size2, Size2D};
-
-use crate::common::PixelSize;
-use crate::style::TextSize;
-
 use harfbuzz_sys::{
     hb_blob_create_from_file, hb_blob_destroy, hb_blob_t, hb_buffer_add_utf8,
     hb_buffer_clear_contents, hb_buffer_create, hb_buffer_destroy, hb_buffer_get_glyph_infos,
@@ -15,6 +11,11 @@ use harfbuzz_sys::{
     hb_face_destroy, hb_font_create, hb_font_destroy, hb_font_set_scale, hb_font_t,
     hb_glyph_info_t, hb_glyph_position_t, hb_shape,
 };
+
+use crate::common::PixelSize;
+use crate::style::TextSize;
+
+use super::f26_6;
 
 pub(super) fn shape<'a>(font: &HbFont, buf: &'a mut HbBuffer) -> GlyphInfoIter<'a> {
     unsafe {
@@ -27,8 +28,8 @@ pub(super) fn shape<'a>(font: &HbFont, buf: &'a mut HbBuffer) -> GlyphInfoIter<'
 pub(super) struct GlyphInfo {
     pub(super) gid: u32,
     pub(super) cluster: u32,
-    pub(super) advance: Size2D<i32, PixelSize>,
-    pub(super) offset: Size2D<i32, PixelSize>,
+    pub(super) advance: Size2D<f26_6, PixelSize>,
+    pub(super) offset: Size2D<f26_6, PixelSize>,
 }
 
 pub(super) struct GlyphInfoIter<'a> {
@@ -48,12 +49,12 @@ impl<'a> Iterator for GlyphInfoIter<'a> {
             gid: self.info[self.i].codepoint,
             cluster: self.info[self.i].cluster,
             advance: size2(
-                (self.pos[self.i].x_advance as f32 / 64.0).round() as i32,
-                (self.pos[self.i].y_advance as f32 / 64.0).round() as i32,
+                f26_6::from_raw(self.pos[self.i].x_advance),
+                f26_6::from_raw(self.pos[self.i].y_advance),
             ),
             offset: size2(
-                (self.pos[self.i].x_offset as f32 / 64.0).round() as i32,
-                (self.pos[self.i].y_offset as f32 / 64.0).round() as i32,
+                f26_6::from_raw(self.pos[self.i].x_offset),
+                f26_6::from_raw(self.pos[self.i].y_offset),
             ),
         };
         self.i += 1;
