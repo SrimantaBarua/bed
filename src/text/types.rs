@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::fmt;
+use std::ops::AddAssign;
 
 // Freetype font sizes
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -39,5 +40,11 @@ impl fmt::Debug for f26_6 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let num: f32 = (*self).into();
         write!(f, "{}", num)
+    }
+}
+
+impl AddAssign for f26_6 {
+    fn add_assign(&mut self, other: f26_6) {
+        self.0 += other.0
     }
 }

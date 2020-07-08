@@ -37,6 +37,9 @@ fn main() {
     let (mut bed, event_loop) = Bed::new();
 
     let mut font = bed.font_core.find("monospace").unwrap();
+    let text = "Hello";
+    let metrics = font.span_metrics(text, style::TextSize(11), style::TextStyle::default());
+    println!("str: {} | metrics: {:?}", text, metrics);
 
     event_loop.run(move |event, _, control_flow| {
         println!("event: {:?}", event);

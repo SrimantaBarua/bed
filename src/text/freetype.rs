@@ -40,33 +40,33 @@ impl RasterCore {
         }
     }
 
-    pub(super) fn new_face(&self, path: &CStr, idx: u32) -> Option<RasterFace> {
+    pub(super) fn new_face(&self, path: &CStr, idx: u32) -> Option<RasterFont> {
         let mut face = MaybeUninit::uninit();
         let ret = unsafe { FT_New_Face(self.ft_lib, path.as_ptr(), idx as _, face.as_mut_ptr()) };
         if ret != 0 {
             None
         } else {
-            Some(RasterFace {
+            Some(RasterFont {
                 face: unsafe { face.assume_init() },
             })
         }
     }
 }
 
-pub(super) struct RasterFace {
+pub(super) struct RasterFont {
     face: FT_Face,
 }
 
 // FreeType is thread-safe
-unsafe impl Send for RasterFace {}
+unsafe impl Send for RasterFont {}
 
-impl std::ops::Drop for RasterFace {
+impl std::ops::Drop for RasterFont {
     fn drop(&mut self) {
         unsafe { FT_Done_Face(self.face) };
     }
 }
 
-impl RasterFace {
+impl RasterFont {
     pub(super) fn raster(
         &mut self,
         origin: Point2D<f26_6, PixelSize>,
@@ -106,11 +106,7 @@ impl RasterFace {
         }
     }
 
-    pub(super) fn get_glyph_metrics(
-        &mut self,
-        gid: u32,
-        size: TextSize,
-    ) -> Option<ScaledGlyphMetrics> {
+    pub(super) fn get_glyph_metrics(&mut self, gid: u32, size: TextSize) -> Option<GlyphMetrics> {
         self.set_pixel_size(size);
         unsafe {
             let mut vector = FT_Vector { x: 0, y: 0 };
@@ -127,7 +123,7 @@ impl RasterFace {
             let rows = bitmap.rows;
             let width = bitmap.width;
             let advance = slot.advance;
-            Some(ScaledGlyphMetrics {
+            Some(GlyphMetrics {
                 size: size2(width, rows),
                 bearing: size2(bitmap_left, bitmap_top),
                 advance: size2(
@@ -138,7 +134,7 @@ impl RasterFace {
         }
     }
 
-    pub(super) fn get_metrics(&mut self, size: TextSize) -> ScaledFaceMetrics {
+    pub(super) fn get_metrics(&mut self, size: TextSize) -> FontMetrics {
         self.set_pixel_size(size);
         let (face, metrics) = unsafe {
             let face = &*self.face;
@@ -147,12 +143,10 @@ impl RasterFace {
         };
         let scale = self.units_to_pixels_scale(size);
         let (under_pos, under_thick) = (face.underline_position, face.underline_thickness);
-        let (asc, desc, adv) = (metrics.ascender, metrics.descender, metrics.max_advance);
-        let under_pos = under_pos + (under_thick) / 2;
-        ScaledFaceMetrics {
+        let (asc, desc) = (metrics.ascender, metrics.descender);
+        FontMetrics {
             ascender: f26_6::from_raw(asc as i32),
             descender: f26_6::from_raw(desc as i32),
-            advance_width: f26_6::from_raw(adv as i32),
             underline_pos: f26_6::from(under_pos as f32 * scale),
             underline_thickness: f26_6::from(under_thick as f32 * scale),
         }
@@ -186,17 +180,25 @@ pub(super) struct RasterizedGlyph<'a> {
     pub(super) buffer: &'a [u8],
 }
 
-pub(super) struct ScaledFaceMetrics {
+pub(super) struct FontMetrics {
     pub(super) ascender: f26_6,
     pub(super) descender: f26_6,
-    pub(super) advance_width: f26_6,
     pub(super) underline_pos: f26_6,
     pub(super) underline_thickness: f26_6,
 }
 
 #[derive(Debug)]
-pub(crate) struct ScaledGlyphMetrics {
-    pub(super) size: Size2D<u32, PixelSize>,
-    pub(super) bearing: Size2D<i32, PixelSize>,
-    pub(super) advance: Size2D<f26_6, PixelSize>,
+pub(crate) struct GlyphMetrics {
+    pub(crate) size: Size2D<u32, PixelSize>,
+    pub(crate) bearing: Size2D<i32, PixelSize>,
+    pub(crate) advance: Size2D<f26_6, PixelSize>,
+}
+
+#[derive(Debug)]
+pub(crate) struct SpanMetrics {
+    pub(crate) ascender: f26_6,
+    pub(crate) descender: f26_6,
+    pub(crate) underline_pos: f26_6,
+    pub(crate) underline_thickness: f26_6,
+    pub(crate) width: f26_6,
 }

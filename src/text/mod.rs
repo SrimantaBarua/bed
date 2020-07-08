@@ -18,8 +18,8 @@ mod freetype;
 mod harfbuzz;
 mod types;
 
-use self::font_source::{Charset, FontSource, Pattern};
-use self::freetype::{RasterCore, RasterFace, ScaledGlyphMetrics};
+use self::font_source::{FontSource, Pattern};
+use self::freetype::{GlyphMetrics, RasterCore, RasterFont, SpanMetrics};
 use self::harfbuzz::{HbBuffer, HbFont};
 
 pub(crate) use types::f26_6;
@@ -88,7 +88,7 @@ pub(crate) struct FontCollection {
 }
 
 impl FontCollection {
-    pub(crate) fn space_metrics(&mut self, size: TextSize, style: TextStyle) -> ScaledGlyphMetrics {
+    pub(crate) fn space_metrics(&mut self, size: TextSize, style: TextStyle) -> GlyphMetrics {
         let core = &mut *self.core.borrow_mut();
         let family = &mut *self.families[0].borrow_mut();
         let font = family.get(style, &mut core.font_source, &mut core.raster_core);
@@ -97,6 +97,38 @@ impl FontCollection {
         font.raster
             .get_glyph_metrics(gid, size)
             .expect("Failed to get glyph metrics for space")
+    }
+
+    pub(crate) fn span_metrics(
+        &mut self,
+        text: &str,
+        size: TextSize,
+        style: TextStyle,
+    ) -> SpanMetrics {
+        let core = &mut *self.core.borrow_mut();
+        let family = &mut *self.families[0].borrow_mut();
+        let font = family.get(style, &mut core.font_source, &mut core.raster_core);
+        let buffer = &mut core.hb_buffer;
+        buffer.clear_contents();
+        buffer.add_utf8(text);
+        buffer.guess_segment_properties();
+        font.shaper.set_scale(size);
+        let font_metrics = font.raster.get_metrics(size);
+        let mut width = f26_6::from(0.0);
+        for gi in harfbuzz::shape(&mut font.shaper, buffer) {
+            let glyph_metrics = font
+                .raster
+                .get_glyph_metrics(gi.gid, size)
+                .expect("Failed to get metrics for glyph");
+            width += glyph_metrics.advance.width;
+        }
+        SpanMetrics {
+            ascender: font_metrics.ascender,
+            descender: font_metrics.descender,
+            underline_pos: font_metrics.underline_pos,
+            underline_thickness: font_metrics.underline_thickness,
+            width,
+        }
     }
 
     fn new(family: Rc<RefCell<FontFamily>>, core: Rc<RefCell<FontCoreInner>>) -> FontCollection {
@@ -146,7 +178,7 @@ impl FontFamily {
 }
 
 struct Font {
-    raster: RasterFace,
+    raster: RasterFont,
     shaper: HbFont,
 }
 
