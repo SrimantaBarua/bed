@@ -4,6 +4,7 @@ use euclid::{point2, size2, Rect};
 use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
+mod buffer;
 mod common;
 mod opengl;
 mod shapes;
@@ -15,6 +16,7 @@ use style::Color;
 
 struct Bed {
     font_core: text::FontCore,
+    buffer_mgr: buffer::BufferMgr,
     window: window::Window,
     scale_factor: f64,
 }
@@ -29,6 +31,7 @@ impl Bed {
         (
             Bed {
                 font_core,
+                buffer_mgr: buffer::BufferMgr::new(),
                 window,
                 scale_factor,
             },
@@ -41,6 +44,7 @@ fn main() {
     let (mut bed, event_loop) = Bed::new();
 
     let mut font = bed.font_core.find("monospace").unwrap();
+    let buffer = bed.buffer_mgr.read_file("src/main.rs").unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         println!("event: {:?}", event);
