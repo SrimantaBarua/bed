@@ -95,13 +95,15 @@ impl RasterFont {
             let buffer = slice::from_raw_parts(ptr, rows as usize * width as usize);
             let advance = slot.advance;
             Some(RasterizedGlyph {
-                size: size2(width, rows),
-                bearing: size2(bitmap_left, bitmap_top),
-                advance: size2(
-                    f26_6::from_raw(advance.x as _),
-                    f26_6::from_raw(advance.y as _),
-                ),
                 buffer,
+                metrics: GlyphMetrics {
+                    size: size2(width, rows),
+                    bearing: size2(bitmap_left, bitmap_top),
+                    advance: size2(
+                        f26_6::from_raw(advance.x as _),
+                        f26_6::from_raw(advance.y as _),
+                    ),
+                },
             })
         }
     }
@@ -174,10 +176,8 @@ impl RasterFont {
 }
 
 pub(super) struct RasterizedGlyph<'a> {
-    pub(super) size: Size2D<u32, PixelSize>,
-    pub(super) bearing: Size2D<i32, PixelSize>,
-    pub(super) advance: Size2D<f26_6, PixelSize>,
     pub(super) buffer: &'a [u8],
+    pub(super) metrics: GlyphMetrics,
 }
 
 pub(super) struct FontMetrics {
@@ -187,18 +187,9 @@ pub(super) struct FontMetrics {
     pub(super) underline_thickness: f26_6,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct GlyphMetrics {
     pub(crate) size: Size2D<u32, PixelSize>,
     pub(crate) bearing: Size2D<i32, PixelSize>,
     pub(crate) advance: Size2D<f26_6, PixelSize>,
-}
-
-#[derive(Debug)]
-pub(crate) struct SpanMetrics {
-    pub(crate) ascender: f26_6,
-    pub(crate) descender: f26_6,
-    pub(crate) underline_pos: f26_6,
-    pub(crate) underline_thickness: f26_6,
-    pub(crate) width: f26_6,
 }

@@ -42,4 +42,8 @@ impl Window {
     pub(crate) fn scale_factor(&self) -> f64 {
         self.context.window().scale_factor()
     }
+
+    pub(crate) fn request_redraw(&mut self) {
+        self.context.window().request_redraw()
+    }
 }

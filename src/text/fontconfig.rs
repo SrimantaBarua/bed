@@ -63,34 +63,31 @@ pub(super) struct Pattern {
 }
 
 impl Pattern {
-    pub(super) fn new() -> Option<Pattern> {
+    pub(super) fn new() -> Pattern {
         let ptr = unsafe { FcPatternCreate() };
-        if ptr.is_null() {
-            None
-        } else {
-            Some(Pattern { raw: ptr })
-        }
+        assert!(!ptr.is_null(), "Failed to create fontconfig pattern");
+        Pattern { raw: ptr }
     }
 
-    pub(super) fn set_family(&mut self, name: &str) -> bool {
+    pub(super) fn set_family(&mut self, name: &str) {
         let c_name = CString::new(name).unwrap();
         let s = b"family\0".as_ptr() as *const _;
-        unsafe { FcPatternAddString(self.raw, s, c_name.as_ptr() as *const _) != 0 }
+        unsafe { FcPatternAddString(self.raw, s, c_name.as_ptr() as *const _) };
     }
 
-    pub(super) fn set_weight(&mut self, weight: TextWeight) -> bool {
+    pub(super) fn set_weight(&mut self, weight: TextWeight) {
         let s = b"weight\0".as_ptr() as *const _;
-        unsafe { FcPatternAddInteger(self.raw, s, weight_to_fc(weight)) != 0 }
+        unsafe { FcPatternAddInteger(self.raw, s, weight_to_fc(weight)) };
     }
 
-    pub(super) fn set_slant(&mut self, slant: TextSlant) -> bool {
+    pub(super) fn set_slant(&mut self, slant: TextSlant) {
         let s = b"slant\0".as_ptr() as *const _;
-        unsafe { FcPatternAddInteger(self.raw, s, slant_to_fc(slant)) != 0 }
+        unsafe { FcPatternAddInteger(self.raw, s, slant_to_fc(slant)) };
     }
 
-    pub(super) fn add_charset(&mut self, charset: Charset) -> bool {
+    pub(super) fn add_charset(&mut self, charset: Charset) {
         let s = b"charset\0";
-        unsafe { FcPatternAddCharSet(self.raw, s.as_ptr() as *const i8, charset.raw) != 0 }
+        unsafe { FcPatternAddCharSet(self.raw, s.as_ptr() as *const i8, charset.raw) };
     }
 
     fn get_string(&self, obj: &[u8]) -> Option<CString> {
@@ -131,17 +128,14 @@ pub(super) struct Charset {
 }
 
 impl Charset {
-    pub(super) fn new() -> Option<Charset> {
+    pub(super) fn new() -> Charset {
         let ptr = unsafe { FcCharSetCreate() };
-        if ptr.is_null() {
-            None
-        } else {
-            Some(Charset { raw: ptr })
-        }
+        assert!(!ptr.is_null(), "Failed to create fontconfig charset");
+        Charset { raw: ptr }
     }
 
-    pub(super) fn add_char(&mut self, c: char) -> bool {
-        unsafe { FcCharSetAddChar(self.raw, c as u32) != 0 }
+    pub(super) fn add_char(&mut self, c: char) {
+        unsafe { FcCharSetAddChar(self.raw, c as u32) };
     }
 }
 
