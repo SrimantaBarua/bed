@@ -18,7 +18,6 @@ pub(crate) use vert_array::{ElemArr, Element};
 pub(crate) fn gl_init() {
     unsafe {
         gl::Enable(gl::BLEND);
-        gl::Enable(gl::MULTISAMPLE);
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::ActiveTexture(gl::TEXTURE0);
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);

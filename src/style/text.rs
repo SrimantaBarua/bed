@@ -79,7 +79,7 @@ impl TextSize {
         self.0 as f32
     }
 
-    pub(crate) fn scale(self, scale: f32) -> TextSize {
-        TextSize((self.0 as f32 * scale).round() as u16)
+    pub(crate) fn scale(self, scale: f64) -> TextSize {
+        TextSize((self.0 as f64 * scale).round() as u16)
     }
 }

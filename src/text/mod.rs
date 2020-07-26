@@ -23,7 +23,7 @@ mod freetype;
 mod harfbuzz;
 mod types;
 
-use self::font_source::{FontSource, Pattern};
+use self::font_source::{Charset, FontSource, Pattern};
 use self::freetype::{GlyphMetrics, RasterCore, RasterFont};
 use self::harfbuzz::{GlyphInfo, HbBuffer, HbFont};
 
@@ -192,9 +192,47 @@ impl FontCollection {
     }
 
     pub(crate) fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
+        assert!(text.len() > 0);
         let ret_core = self.core.clone();
         let core = &mut *self.core.borrow_mut();
-        let family = &mut *self.families[0].borrow_mut();
+        let first_char = text.chars().next().unwrap();
+        let families = &mut self.families;
+        let family_idx = families
+            .iter()
+            .position(|family| {
+                let family = &*family.borrow();
+                let font = family.get(TextStyle::default()).unwrap();
+                let font = &*font.borrow();
+                font.raster.has_glyph_for_char(first_char)
+            })
+            .or_else(|| {
+                let mut charset = Charset::new();
+                charset.add_char(first_char);
+                let mut pattern = Pattern::new();
+                pattern.set_slant(style.slant);
+                pattern.set_weight(style.weight);
+                pattern.add_charset(charset);
+                core.font_source
+                    .find_match(&mut pattern)
+                    .and_then(|(family, path, idx)| {
+                        if let Some(font) =
+                            Font::new(&mut core.raster_core, &path, idx, core.next_font_num)
+                        {
+                            let font = Rc::new(RefCell::new(font));
+                            let family =
+                                Rc::new(RefCell::new(FontFamily::new(family, font.clone())));
+                            core.path_font_map.insert((path, idx), family.clone());
+                            core.id_font_map.insert(core.next_font_num, font);
+                            core.next_font_num += 1;
+                            families.push(family);
+                            Some(families.len() - 1)
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .unwrap_or(0);
+        let family = &mut *self.families[family_idx].borrow_mut();
         let font = family.get(style).unwrap_or_else(|| {
             let mut pattern = Pattern::new();
             pattern.set_family(&family.family);

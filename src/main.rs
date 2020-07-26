@@ -74,8 +74,9 @@ fn main() {
                 opengl::gl_clear_color(style::Color::new(0xff, 0xff, 0xff, 0xff));
                 opengl::gl_clear();
 
-                let text = "Hello";
-                let shaped = font.shape(text, style::TextSize(64), style::TextStyle::default());
+                //let text = "ड़ा नाम था।";
+                let text = "Hello:";
+                let shaped = font.shape(text, style::TextSize(12).scale(bed.scale_factor), style::TextStyle::default());
                 shaped.draw(point2(60.0, 60.0), Color::new(0, 0, 0, 0xff));
                 font.flush_glyphs();
 
