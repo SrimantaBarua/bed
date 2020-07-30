@@ -23,11 +23,11 @@ impl f26_6 {
         self.0
     }
 
-    pub(super) fn to_f32(self) -> f32 {
+    pub(crate) fn to_f32(self) -> f32 {
         (self.0 as f32) / 64.0
     }
 
-    pub(super) fn floor(self) -> f26_6 {
+    pub(crate) fn floor(self) -> f26_6 {
         f26_6(self.0 & !63)
     }
 }
@@ -45,23 +45,23 @@ impl fmt::Debug for f26_6 {
 }
 
 impl AddAssign for f26_6 {
-    fn add_assign(&mut self, other: f26_6) {
-        self.0 += other.0
+    fn add_assign(&mut self, rhs: f26_6) {
+        self.0 += rhs.0
     }
 }
 
 impl Add for f26_6 {
     type Output = Self;
 
-    fn add(self, b: f26_6) -> Self {
-        f26_6(self.0 + b.0)
+    fn add(self, rhs: f26_6) -> Self {
+        f26_6(self.0 + rhs.0)
     }
 }
 
 impl Sub for f26_6 {
     type Output = Self;
 
-    fn sub(self, b: f26_6) -> Self {
-        f26_6(self.0 - b.0)
+    fn sub(self, rhs: f26_6) -> Self {
+        f26_6(self.0 - rhs.0)
     }
 }

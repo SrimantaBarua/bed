@@ -1,41 +1,45 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::cell::RefCell;
 use std::io::Result as IOResult;
-use std::rc::Rc;
 
 use fnv::FnvHashMap;
 
-use super::buffer::Buffer;
+use super::{BufferBedHandle, BufferHandle, BufferViewId};
 
 pub(crate) struct BufferMgr {
-    path_buffer_map: FnvHashMap<String, Rc<RefCell<Buffer>>>,
+    bed_handle: BufferBedHandle,
+    next_view_id: usize,
+    path_buffer_map: FnvHashMap<String, BufferHandle>,
 }
 
 impl BufferMgr {
-    pub(crate) fn new() -> BufferMgr {
+    pub(crate) fn new(bed_handle: BufferBedHandle) -> BufferMgr {
         BufferMgr {
+            bed_handle,
+            next_view_id: 0,
             path_buffer_map: FnvHashMap::default(),
         }
     }
 
-    pub(crate) fn empty_buffer(&mut self) -> Rc<RefCell<Buffer>> {
-        Rc::new(RefCell::new(Buffer::empty()))
+    pub(crate) fn empty_buffer(&mut self) -> BufferHandle {
+        BufferHandle::create_empty(self.bed_handle.clone())
     }
 
-    pub(crate) fn read_file(&mut self, path: &str) -> IOResult<Rc<RefCell<Buffer>>> {
-        if let Some(ref_buffer) = self.path_buffer_map.get(path) {
-            let ref_buffer = ref_buffer.clone();
-            {
-                let buffer = &mut *ref_buffer.borrow_mut();
-                buffer.reload_from_file(path)?;
-            }
-            Ok(ref_buffer)
+    pub(crate) fn read_file(&mut self, path: &str) -> IOResult<BufferHandle> {
+        if let Some(buf_handle) = self.path_buffer_map.get(path) {
+            let mut buf_handle = buf_handle.clone();
+            buf_handle.reload_from_file(path)?;
+            Ok(buf_handle)
         } else {
-            let buffer = Buffer::from_file(path)?;
-            let buffer = Rc::new(RefCell::new(buffer));
+            let buffer = BufferHandle::create_from_file(path, self.bed_handle.clone())?;
             self.path_buffer_map.insert(path.to_owned(), buffer.clone());
             Ok(buffer)
         }
+    }
+
+    pub(crate) fn next_view_id(&mut self) -> BufferViewId {
+        let ret = BufferViewId(self.next_view_id);
+        self.next_view_id += 1;
+        ret
     }
 }

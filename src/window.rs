@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::Size2D;
+use euclid::{size2, Size2D};
 use glutin::dpi::PhysicalSize;
 use glutin::event_loop::EventLoop;
 use glutin::{Api, GlProfile, GlRequest, PossiblyCurrent, WindowedContext};
@@ -45,5 +45,10 @@ impl Window {
 
     pub(crate) fn request_redraw(&mut self) {
         self.context.window().request_redraw()
+    }
+
+    pub(crate) fn size(&self) -> Size2D<f32, PixelSize> {
+        let size = self.context.window().inner_size();
+        size2(size.width, size.height).cast()
     }
 }

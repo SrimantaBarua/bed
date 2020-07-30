@@ -10,9 +10,9 @@ pub(crate) struct Mat4([f32; 16]);
 impl Mat4 {
     // Orthogonal projection matrix
     #[rustfmt::skip]
-    pub(crate) fn projection(size: Size2D<u32, PixelSize>) -> Mat4 {
-        assert!(size.width != 0 && size.height != 0);
-        let (x, y) = (size.width as f32, size.height as f32);
+    pub(crate) fn projection(size: Size2D<f32, PixelSize>) -> Mat4 {
+        assert!(size.width != 0.0 && size.height != 0.0);
+        let (x, y) = size.to_tuple();
         Mat4(
             [
                 2.0 / x, 0.0     , 0.0, 0.0,
@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn projection() {
-        let mat = Mat4::projection(size2(8, 8));
+        let mat = Mat4::projection(size2(8.0, 8.0));
         assert_eq!(
             mat.0,
             [0.25, 0.0, 0.0, 0.0, 0.0, -0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 1.0]

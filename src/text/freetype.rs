@@ -85,6 +85,8 @@ impl RasterFont {
             }
         }
         unsafe {
+            let metrics = (&*(&*self.face).size).metrics;
+            let (asc, desc) = (metrics.ascender, metrics.descender);
             let slot = &*(&*self.face).glyph;
             let bitmap = slot.bitmap;
             let bitmap_left = slot.bitmap_left;
@@ -97,6 +99,8 @@ impl RasterFont {
             Some(RasterizedGlyph {
                 buffer,
                 metrics: GlyphMetrics {
+                    ascender: f26_6::from_raw(asc as i32),
+                    descender: f26_6::from_raw(desc as i32),
                     size: size2(width, rows),
                     bearing: size2(bitmap_left, bitmap_top),
                     advance: size2(
@@ -118,6 +122,8 @@ impl RasterFont {
             }
         }
         unsafe {
+            let metrics = (&*(&*self.face).size).metrics;
+            let (asc, desc) = (metrics.ascender, metrics.descender);
             let slot = &*(&*self.face).glyph;
             let bitmap = slot.bitmap;
             let bitmap_left = slot.bitmap_left;
@@ -126,6 +132,8 @@ impl RasterFont {
             let width = bitmap.width;
             let advance = slot.advance;
             Some(GlyphMetrics {
+                ascender: f26_6::from_raw(asc as i32),
+                descender: f26_6::from_raw(desc as i32),
                 size: size2(width, rows),
                 bearing: size2(bitmap_left, bitmap_top),
                 advance: size2(
@@ -189,6 +197,8 @@ pub(super) struct FontMetrics {
 
 #[derive(Clone, Debug)]
 pub(crate) struct GlyphMetrics {
+    pub(crate) ascender: f26_6,
+    pub(crate) descender: f26_6,
     pub(crate) size: Size2D<u32, PixelSize>,
     pub(crate) bearing: Size2D<i32, PixelSize>,
     pub(crate) advance: Size2D<f26_6, PixelSize>,
