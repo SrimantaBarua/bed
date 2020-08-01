@@ -440,7 +440,7 @@ pub(crate) fn split_text<S, R>(
     let mut x = 0;
     for c in line.chars() {
         match c {
-            '\r' | '\n' => break,
+            '\n' | '\r' | '\x0b' | '\x0c' | '\u{85}' | '\u{2028}' | '\u{2029}' => break,
             ' ' => {
                 if !last_is_space && buf.len() > 0 {
                     run_cb(&buf);

@@ -19,11 +19,12 @@ mod window;
 use common::PixelSize;
 
 struct Bed {
-    font_core: text::FontCore,
-    text_font: text::FontCollectionHandle,
-    text_size: style::TextSize,
+    buffer_state: buffer::BufferBedHandle,
+    buffer_mgr: buffer::BufferMgr,
+    text_tree: textview::TextTree,
     window: window::Window,
     scale_factor: f64,
+    font_core: text::FontCore,
 }
 
 impl Bed {
@@ -36,15 +37,26 @@ impl Bed {
 
         let text_font = font_core.find("monospace").expect("Failed to find font");
         let text_size = style::TextSize(14);
+        let buffer_state = buffer::BufferBedHandle::new(text_font, text_size);
+        let mut buffer_mgr = buffer::BufferMgr::new(buffer_state.clone());
+
+        let first_buffer = buffer_mgr.read_file("src/main.rs").unwrap();
+        let first_view_id = buffer_mgr.next_view_id();
+        let text_tree = textview::TextTree::new(
+            Rect::new(point2(0.0, 0.0), window.size()),
+            1.0,
+            first_buffer,
+            first_view_id,
+        );
 
         (
             Bed {
-                font_core,
+                buffer_state,
+                buffer_mgr,
+                text_tree,
                 window,
                 scale_factor,
-                // Config
-                text_font,
-                text_size,
+                font_core,
             },
             event_loop,
         )
@@ -61,7 +73,12 @@ impl BedHandle {
     fn resize_window(&mut self, physical_size: glutin::dpi::PhysicalSize<u32>) {
         let inner = &mut *self.0.borrow_mut();
         inner.window.resize(physical_size);
-        inner.font_core.set_window_size(inner.window.size());
+        let window_size = inner.window.size();
+        opengl::gl_viewport(Rect::new(point2(0, 0), window_size.cast()));
+        inner.font_core.set_window_size(window_size);
+        inner
+            .text_tree
+            .set_rect(Rect::new(point2(0.0, 0.0), window_size));
         inner.window.request_redraw();
     }
 
@@ -72,13 +89,19 @@ impl BedHandle {
 
     fn set_scale_factor(&mut self, scale_factor: f64) {
         let inner = &mut *self.0.borrow_mut();
-        inner.text_size = inner.text_size.scale(scale_factor / inner.scale_factor);
+        let text_size = inner.buffer_state.text_size();
+        inner
+            .buffer_state
+            .set_text_size(text_size.scale(scale_factor / inner.scale_factor));
         inner.scale_factor = scale_factor;
         inner.window.request_redraw();
     }
 
-    fn swap_buffers(&mut self) {
+    fn draw(&mut self) {
         let inner = &mut *self.0.borrow_mut();
+        opengl::gl_clear_color(style::Color::new(0xff, 0xff, 0xff, 0xff));
+        opengl::gl_clear();
+        inner.text_tree.draw();
         inner.window.swap_buffers();
     }
 }
@@ -86,16 +109,6 @@ impl BedHandle {
 fn main() {
     let (bed, event_loop) = Bed::new();
     let mut bed = BedHandle::new(bed);
-    let mut buffer_mgr = buffer::BufferMgr::new(buffer::BufferBedHandle::new(&bed));
-
-    let buffer = buffer_mgr.read_file("src/main.rs").unwrap();
-    let view_id = buffer_mgr.next_view_id();
-    let mut text_tree = textview::TextTree::new(
-        Rect::new(point2(0.0, 0.0), bed.window_size()),
-        1.0,
-        buffer,
-        view_id,
-    );
 
     event_loop.run(move |event, _, control_flow| {
         println!("event: {:?}", event);
@@ -103,27 +116,22 @@ fn main() {
         match event {
             Event::LoopDestroyed => return,
             Event::WindowEvent { event, .. } => match event {
-                WindowEvent::Resized(physical_size) => {
-                    bed.resize_window(physical_size);
-                    let window_size = bed.window_size();
-                    opengl::gl_viewport(Rect::new(point2(0, 0), window_size.cast()));
-                    text_tree.set_rect(Rect::new(point2(0.0, 0.0), bed.window_size()));
-                }
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
+                WindowEvent::Resized(physical_size) => bed.resize_window(physical_size),
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                 WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                    bed.set_scale_factor(scale_factor);
+                    // FIXME: Maybe track window size change?
+                    bed.set_scale_factor(scale_factor)
                 }
+                WindowEvent::ModifiersChanged(m) => {}
+                WindowEvent::MouseWheel { delta, .. } => {}
+                WindowEvent::CursorMoved { position, .. } => {}
+                WindowEvent::MouseInput { state, button, .. } => {}
+                WindowEvent::ReceivedCharacter(c) => {}
+                WindowEvent::KeyboardInput { input, .. } if input.virtual_keycode.is_some() => {}
                 _ => {}
             },
             Event::MainEventsCleared => {}
-            Event::RedrawRequested(_) => {
-                opengl::gl_clear_color(style::Color::new(0xff, 0xff, 0xff, 0xff));
-                opengl::gl_clear();
-                text_tree.draw();
-                bed.swap_buffers();
-            }
+            Event::RedrawRequested(_) => bed.draw(),
             _ => {}
         }
     });
