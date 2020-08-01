@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::time;
 
 use euclid::{point2, size2, Rect, Size2D};
-use glutin::event::{Event, WindowEvent};
+use glutin::event::{Event, StartCause, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
 mod buffer;
@@ -128,18 +128,31 @@ fn main() {
     let mut bed = BedHandle::new(bed);
     let mut input_state = input::InputState::new(bed.clone());
 
-    let mut last_instant = time::Instant::now();
-    let mut delta = time::Duration::from_secs(0);
     let target_delta = time::Duration::from_nanos(1_000_000_000 / 60);
+    let mut is_fps_boundary = true;
 
     event_loop.run(move |event, _, control_flow| {
         //println!("event: {:?}", event);
         match event {
-            Event::NewEvents(_) => {
-                delta = last_instant.elapsed();
-                last_instant = last_instant + delta;
-                *control_flow = ControlFlow::WaitUntil(last_instant + target_delta);
-            }
+            Event::NewEvents(cause) => match cause {
+                StartCause::ResumeTimeReached { .. } => {
+                    let now = time::Instant::now();
+                    *control_flow = ControlFlow::WaitUntil(now + target_delta);
+                    is_fps_boundary = true;
+                }
+                StartCause::WaitCancelled {
+                    requested_resume, ..
+                } => {
+                    let req_res = requested_resume.expect("I dont' remember asking you to wait");
+                    *control_flow = ControlFlow::WaitUntil(req_res);
+                    is_fps_boundary = false;
+                }
+                StartCause::Init => {
+                    *control_flow = ControlFlow::WaitUntil(time::Instant::now() + target_delta);
+                    is_fps_boundary = true;
+                }
+                _ => unreachable!(),
+            },
             Event::LoopDestroyed => return,
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(physical_size) => bed.resize_window(physical_size),
@@ -157,8 +170,10 @@ fn main() {
                 _ => {}
             },
             Event::MainEventsCleared => {
-                input_state.flush_events();
-                bed.check_redraw_required();
+                if is_fps_boundary {
+                    input_state.flush_events();
+                    bed.check_redraw_required();
+                }
             }
             Event::RedrawRequested(_) => bed.draw(),
             _ => {}
