@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::Result as IOResult;
 use std::rc::Rc;
 
-use euclid::Rect;
+use euclid::{Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
 
@@ -26,6 +26,7 @@ impl PartialEq for BufferHandle {
 impl Eq for BufferHandle {}
 
 impl BufferHandle {
+    // -------- View manipulation --------
     pub(crate) fn new_view(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         inner.new_view(view_id, rect)
@@ -41,6 +42,12 @@ impl BufferHandle {
         inner.draw_view(view_id)
     }
 
+    pub(crate) fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<f32, PixelSize>) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.scroll_view(view_id, scroll)
+    }
+
+    // -------- Buffer creation --------
     pub(super) fn create_empty(bed_handle: BufferBedHandle) -> BufferHandle {
         BufferHandle(Rc::new(RefCell::new(Buffer::empty(bed_handle))))
     }
@@ -79,6 +86,11 @@ impl Buffer {
     fn draw_view(&mut self, view_id: &BufferViewId) {
         let view = self.views.get_mut(view_id).unwrap();
         view.draw(&self.rope);
+    }
+
+    fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<f32, PixelSize>) {
+        let view = self.views.get_mut(view_id).unwrap();
+        view.scroll(scroll, &self.rope);
     }
 
     // -------- Creation / reading from file --------

@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::Rect;
+use euclid::{Rect, Vector2D};
 
 use crate::buffer::{BufferHandle, BufferViewId};
 use crate::common::PixelSize;
@@ -16,6 +16,11 @@ pub(crate) struct TextView {
 }
 
 impl TextView {
+    pub(crate) fn scroll(&mut self, scroll: Vector2D<f32, PixelSize>) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.scroll_view(&view.view_id, scroll);
+    }
+
     pub(super) fn new(
         rect: Rect<f32, PixelSize>,
         mut buf_handle: BufferHandle,

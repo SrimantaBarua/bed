@@ -30,6 +30,7 @@ pub(crate) struct BufferBedHandle(Rc<RefCell<BufferBedState>>);
 impl BufferBedHandle {
     pub(crate) fn new(text_font: FontCollectionHandle, text_size: TextSize) -> BufferBedHandle {
         BufferBedHandle(Rc::new(RefCell::new(BufferBedState {
+            needs_redraw: false,
             text_font,
             text_size,
         })))
@@ -54,9 +55,22 @@ impl BufferBedHandle {
         let inner = &*self.0.borrow();
         inner.text_size
     }
+
+    pub(crate) fn collect_redraw_state(&mut self) -> bool {
+        let inner = &mut *self.0.borrow_mut();
+        let ret = inner.needs_redraw;
+        inner.needs_redraw = false;
+        ret
+    }
+
+    fn request_redraw(&mut self) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.needs_redraw = true;
+    }
 }
 
 struct BufferBedState {
+    needs_redraw: bool,
     text_font: FontCollectionHandle,
     text_size: TextSize,
 }

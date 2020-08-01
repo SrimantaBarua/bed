@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time;
 
 use euclid::{point2, size2, Rect, Size2D};
 use glutin::event::{Event, WindowEvent};
@@ -9,6 +10,7 @@ use glutin::event_loop::ControlFlow;
 
 mod buffer;
 mod common;
+mod input;
 mod opengl;
 mod shapes;
 mod style;
@@ -63,6 +65,7 @@ impl Bed {
     }
 }
 
+#[derive(Clone)]
 struct BedHandle(Rc<RefCell<Bed>>);
 
 impl BedHandle {
@@ -87,6 +90,11 @@ impl BedHandle {
         inner.window.size()
     }
 
+    fn scale_factor(&mut self) -> f64 {
+        let inner = &*self.0.borrow();
+        inner.scale_factor
+    }
+
     fn set_scale_factor(&mut self, scale_factor: f64) {
         let inner = &mut *self.0.borrow_mut();
         let text_size = inner.buffer_state.text_size();
@@ -95,6 +103,15 @@ impl BedHandle {
             .set_text_size(text_size.scale(scale_factor / inner.scale_factor));
         inner.scale_factor = scale_factor;
         inner.window.request_redraw();
+    }
+
+    fn check_redraw_required(&mut self) {
+        let mut required = false;
+        let inner = &mut *self.0.borrow_mut();
+        required |= inner.buffer_state.collect_redraw_state();
+        if required {
+            inner.window.request_redraw();
+        }
     }
 
     fn draw(&mut self) {
@@ -109,11 +126,20 @@ impl BedHandle {
 fn main() {
     let (bed, event_loop) = Bed::new();
     let mut bed = BedHandle::new(bed);
+    let mut input_state = input::InputState::new(bed.clone());
+
+    let mut last_instant = time::Instant::now();
+    let mut delta = time::Duration::from_secs(0);
+    let target_delta = time::Duration::from_nanos(1_000_000_000 / 60);
 
     event_loop.run(move |event, _, control_flow| {
-        println!("event: {:?}", event);
-        *control_flow = ControlFlow::Wait;
+        //println!("event: {:?}", event);
         match event {
+            Event::NewEvents(_) => {
+                delta = last_instant.elapsed();
+                last_instant = last_instant + delta;
+                *control_flow = ControlFlow::WaitUntil(last_instant + target_delta);
+            }
             Event::LoopDestroyed => return,
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(physical_size) => bed.resize_window(physical_size),
@@ -122,15 +148,18 @@ fn main() {
                     // FIXME: Maybe track window size change?
                     bed.set_scale_factor(scale_factor)
                 }
-                WindowEvent::ModifiersChanged(m) => {}
-                WindowEvent::MouseWheel { delta, .. } => {}
+                WindowEvent::ModifiersChanged(m) => input_state.update_modifiers(m),
+                WindowEvent::MouseWheel { delta, .. } => input_state.add_scroll_delta(delta),
                 WindowEvent::CursorMoved { position, .. } => {}
                 WindowEvent::MouseInput { state, button, .. } => {}
                 WindowEvent::ReceivedCharacter(c) => {}
                 WindowEvent::KeyboardInput { input, .. } if input.virtual_keycode.is_some() => {}
                 _ => {}
             },
-            Event::MainEventsCleared => {}
+            Event::MainEventsCleared => {
+                input_state.flush_events();
+                bed.check_redraw_required();
+            }
             Event::RedrawRequested(_) => bed.draw(),
             _ => {}
         }

@@ -32,6 +32,10 @@ impl TextTree {
     pub(crate) fn draw(&mut self) {
         self.root.draw();
     }
+
+    pub(crate) fn active_mut(&mut self) -> &mut TextView {
+        self.root.active_mut()
+    }
 }
 
 struct Node {
@@ -51,5 +55,9 @@ impl Node {
 
     fn draw(&mut self) {
         self.view.draw()
+    }
+
+    fn active_mut(&mut self) -> &mut TextView {
+        &mut self.view
     }
 }
