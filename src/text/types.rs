@@ -10,25 +10,25 @@ pub(crate) struct f26_6(i32);
 
 impl From<f32> for f26_6 {
     fn from(f: f32) -> f26_6 {
-        f26_6((f * 64.0).round() as i32)
+        f26_6((f * 8.0).round() as i32)
     }
 }
 
 impl f26_6 {
     pub(super) fn from_raw(raw: i32) -> f26_6 {
-        f26_6(raw)
+        f26_6(raw >> 3)
     }
 
     pub(super) fn to_raw(self) -> i32 {
-        self.0
+        self.0 << 3
     }
 
     pub(crate) fn to_f32(self) -> f32 {
-        (self.0 as f32) / 64.0
+        (self.0 as f32) / 8.0
     }
 
     pub(crate) fn floor(self) -> f26_6 {
-        f26_6(self.0 & !63)
+        f26_6(self.0 & !7)
     }
 }
 
