@@ -12,6 +12,7 @@ mod buffer;
 mod common;
 mod input;
 mod opengl;
+mod painter;
 mod shapes;
 mod style;
 mod text;
@@ -24,8 +25,9 @@ struct Bed {
     buffer_state: buffer::BufferBedHandle,
     buffer_mgr: buffer::BufferMgr,
     text_tree: textview::TextTree,
-    window: window::Window,
+    painter: painter::Painter,
     scale_factor: f64,
+    window: window::Window,
     font_core: text::FontCore,
 }
 
@@ -36,6 +38,7 @@ impl Bed {
         opengl::gl_init();
         let scale_factor = window.scale_factor();
         let mut font_core = text::FontCore::new(window_size.cast());
+        let painter = painter::Painter::new(window_size.cast());
 
         let text_font = font_core.find("monospace").expect("Failed to find font");
         let text_size = style::TextSize(14);
@@ -53,6 +56,7 @@ impl Bed {
 
         (
             Bed {
+                painter,
                 buffer_state,
                 buffer_mgr,
                 text_tree,
@@ -78,6 +82,7 @@ impl BedHandle {
         inner.window.resize(physical_size);
         let window_size = inner.window.size();
         opengl::gl_viewport(Rect::new(point2(0, 0), window_size.cast()));
+        inner.painter.resize(window_size);
         inner.font_core.set_window_size(window_size);
         inner
             .text_tree
@@ -116,9 +121,8 @@ impl BedHandle {
 
     fn draw(&mut self) {
         let inner = &mut *self.0.borrow_mut();
-        opengl::gl_clear_color(style::Color::new(0xff, 0xff, 0xff, 0xff));
-        opengl::gl_clear();
-        inner.text_tree.draw();
+        inner.painter.clear();
+        inner.text_tree.draw(&mut inner.painter);
         inner.window.swap_buffers();
     }
 }

@@ -352,7 +352,7 @@ pub(crate) struct ShapedSpan {
     pub(crate) underline_pos: f26_6,
     pub(crate) underline_thickness: f26_6,
     pub(crate) width: f26_6,
-    glyph_infos: Vec<GlyphInfo>,
+    pub(crate) glyph_infos: Vec<GlyphInfo>,
     size: TextSize,
     font_key: u16,
     core: Rc<RefCell<FontCoreInner>>,
@@ -397,6 +397,17 @@ impl ShapedSpan {
                             };
                             core.rastered_glyph_map
                                 .insert(key.clone(), Some(allocation));
+
+                            /*
+                            // Print allocation info
+                            let mut total_size = 4096.0 * 4096.0;
+                            let mut free_size = 0;
+                            core.atlas_allocator.for_each_free_rectangle(|rect| {
+                                free_size += rect.area();
+                            });
+                            eprintln!("Free space in atlas: {}%", free_size as f64 * 100.0 / total_size);
+                            */
+
                             break;
                         }
                         /* TODO: Clear LRU glyph info */

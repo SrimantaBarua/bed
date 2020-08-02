@@ -4,6 +4,7 @@ use euclid::{Rect, Vector2D};
 
 use crate::buffer::{BufferHandle, BufferViewId};
 use crate::common::PixelSize;
+use crate::painter::Painter;
 
 struct ViewInner {
     buf_handle: BufferHandle,
@@ -39,8 +40,8 @@ impl TextView {
         view.buf_handle.set_view_rect(&view.view_id, rect);
     }
 
-    pub(super) fn draw(&mut self) {
+    pub(super) fn draw(&mut self, painter: &mut Painter) {
         let view = &mut self.views[self.active];
-        view.buf_handle.draw_view(&view.view_id);
+        view.buf_handle.draw_view(&view.view_id, painter);
     }
 }

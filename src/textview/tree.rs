@@ -4,6 +4,7 @@ use euclid::Rect;
 
 use crate::buffer::{BufferHandle, BufferViewId};
 use crate::common::PixelSize;
+use crate::painter::Painter;
 
 use super::view::TextView;
 
@@ -29,8 +30,8 @@ impl TextTree {
         self.root.set_rect(rect)
     }
 
-    pub(crate) fn draw(&mut self) {
-        self.root.draw();
+    pub(crate) fn draw(&mut self, painter: &mut Painter) {
+        self.root.draw(painter);
     }
 
     pub(crate) fn active_mut(&mut self) -> &mut TextView {
@@ -53,8 +54,8 @@ impl Node {
         self.view.set_rect(rect)
     }
 
-    fn draw(&mut self) {
-        self.view.draw()
+    fn draw(&mut self, painter: &mut Painter) {
+        self.view.draw(painter)
     }
 
     fn active_mut(&mut self) -> &mut TextView {

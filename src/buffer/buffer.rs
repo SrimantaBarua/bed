@@ -10,6 +10,7 @@ use fnv::FnvHashMap;
 use ropey::Rope;
 
 use crate::common::PixelSize;
+use crate::painter::Painter;
 
 use super::view::View;
 use super::{BufferBedHandle, BufferViewId};
@@ -37,9 +38,9 @@ impl BufferHandle {
         inner.set_view_rect(view_id, rect)
     }
 
-    pub(crate) fn draw_view(&mut self, view_id: &BufferViewId) {
+    pub(crate) fn draw_view(&mut self, view_id: &BufferViewId, painter: &mut Painter) {
         let inner = &mut *self.0.borrow_mut();
-        inner.draw_view(view_id)
+        inner.draw_view(view_id, painter)
     }
 
     pub(crate) fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<f32, PixelSize>) {
@@ -83,9 +84,9 @@ impl Buffer {
         view.set_rect(rect);
     }
 
-    fn draw_view(&mut self, view_id: &BufferViewId) {
+    fn draw_view(&mut self, view_id: &BufferViewId, painter: &mut Painter) {
         let view = self.views.get_mut(view_id).unwrap();
-        view.draw(&self.rope);
+        view.draw(&self.rope, painter);
     }
 
     fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<f32, PixelSize>) {

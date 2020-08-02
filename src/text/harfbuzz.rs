@@ -25,11 +25,11 @@ pub(super) fn shape<'a>(font: &HbFont, buf: &'a mut HbBuffer) -> GlyphInfoIter<'
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct GlyphInfo {
-    pub(super) gid: u32,
-    pub(super) cluster: u32,
-    pub(super) advance: Size2D<f26_6, PixelSize>,
-    pub(super) offset: Size2D<f26_6, PixelSize>,
+pub(crate) struct GlyphInfo {
+    pub(crate) gid: u32,
+    pub(crate) cluster: u32,
+    pub(crate) advance: Size2D<f26_6, PixelSize>,
+    pub(crate) offset: Size2D<f26_6, PixelSize>,
 }
 
 pub(super) struct GlyphInfoIter<'a> {
