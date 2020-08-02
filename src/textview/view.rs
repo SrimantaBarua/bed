@@ -2,7 +2,7 @@
 
 use euclid::{Rect, Vector2D};
 
-use crate::buffer::{BufferHandle, BufferViewId};
+use crate::buffer::{BufferHandle, BufferViewId, CursorStyle};
 use crate::common::PixelSize;
 use crate::painter::Painter;
 
@@ -40,6 +40,26 @@ impl TextView {
     pub(crate) fn move_cursor_right(&mut self, n: usize) {
         let view = &mut self.views[self.active];
         view.buf_handle.move_view_cursor_right(&view.view_id, n);
+    }
+
+    pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.set_view_cursor_style(&view.view_id, style);
+    }
+
+    pub(crate) fn insert_char(&mut self, c: char) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.insert_char(&view.view_id, c);
+    }
+
+    pub(crate) fn delete_left(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.delete_left(&view.view_id, n);
+    }
+
+    pub(crate) fn delete_right(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.delete_right(&view.view_id, n);
     }
 
     pub(super) fn new(

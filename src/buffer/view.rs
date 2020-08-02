@@ -123,11 +123,11 @@ impl View {
     }
 
     fn snap_to_line(&mut self, linum: usize, data: &Rope, tab_width: usize) {
+        self.sanity_check(data);
         if linum <= self.start_line {
             self.start_line = linum;
             self.off.y = 0.0;
         } else {
-            assert!(linum < data.len_lines());
             let mut iter = data.lines_at(linum + 1);
             let mut start_line = linum + 1;
             let mut height = 0.0;
@@ -155,8 +155,7 @@ impl View {
         data: &Rope,
         tab_width: usize,
     ) {
-        assert!(self.start_line < data.len_lines());
-
+        self.sanity_check(data);
         self.off += scroll;
 
         // Scroll y
@@ -210,7 +209,7 @@ impl View {
     }
 
     pub(super) fn draw(&mut self, data: &Rope, painter: &mut Painter, tab_width: usize) {
-        assert!(self.start_line < data.len_lines());
+        self.sanity_check(data);
         let mut paint_ctx =
             painter.widget_ctx(self.rect, Color::new(0xff, 0xff, 0xff, 0xff), false);
 
@@ -355,6 +354,7 @@ impl View {
 
     pub(super) fn scroll_to_top(&mut self) {
         self.start_line = 0;
+        self.off = vec2(0.0, 0.0);
     }
 
     fn line_metrics(&self, line: &RopeSlice, tab_width: usize) -> LineMetrics {
@@ -390,6 +390,13 @@ impl View {
             width: state.2,
         }
     }
+
+    fn sanity_check(&mut self, data: &Rope) {
+        if self.start_line >= data.len_lines() {
+            self.start_line = data.len_lines() - 1;
+            self.off = vec2(0.0, 0.0);
+        }
+    }
 }
 
 struct LineMetrics {
@@ -398,7 +405,7 @@ struct LineMetrics {
 }
 
 #[derive(Eq, PartialEq)]
-enum CursorStyle {
+pub(crate) enum CursorStyle {
     Line,
     Block,
     Underline,
@@ -417,7 +424,7 @@ pub(super) struct ViewCursor {
     pub(super) line_cidx: usize,
     pub(super) line_gidx: usize,
     pub(super) line_global_x: usize,
-    style: CursorStyle,
+    pub(super) style: CursorStyle,
 }
 
 impl ViewCursor {

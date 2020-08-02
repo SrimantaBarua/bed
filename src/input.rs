@@ -6,6 +6,7 @@ use glutin::event::{
     ElementState, KeyboardInput, ModifiersState, MouseScrollDelta, VirtualKeyCode,
 };
 
+use crate::buffer::CursorStyle;
 use crate::common::PixelSize;
 
 use super::BedHandle;
@@ -76,9 +77,24 @@ impl InputState {
                 'j' => self.bed_handle.move_cursor_down(1),
                 'k' => self.bed_handle.move_cursor_up(1),
                 'l' => self.bed_handle.move_cursor_right(1),
+                // Entering insert mode
+                'i' => {
+                    self.mode = Mode::Insert;
+                    self.bed_handle.set_cursor_style(CursorStyle::Line);
+                }
                 _ => {}
             },
-            Mode::Insert => {}
+            Mode::Insert => match c as u32 {
+                8 => {
+                    // Backspace
+                    self.bed_handle.delete_left(1)
+                }
+                127 => {
+                    // Delete
+                    self.bed_handle.delete_right(1)
+                }
+                _ => self.bed_handle.insert_char(c),
+            },
         }
     }
 
@@ -102,6 +118,11 @@ impl InputState {
                     VirtualKeyCode::Down => self.bed_handle.move_cursor_down(1),
                     VirtualKeyCode::Left => self.bed_handle.move_cursor_left(1),
                     VirtualKeyCode::Right => self.bed_handle.move_cursor_right(1),
+                    // Exiting insert mode
+                    VirtualKeyCode::Escape => {
+                        self.mode = Mode::Normal;
+                        self.bed_handle.set_cursor_style(CursorStyle::Block);
+                    }
                     _ => {}
                 },
             }
@@ -136,5 +157,25 @@ impl BedHandle {
     fn move_cursor_right(&mut self, n: usize) {
         let inner = &mut *self.0.borrow_mut();
         inner.text_tree.active_mut().move_cursor_right(n);
+    }
+
+    fn set_cursor_style(&mut self, style: CursorStyle) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().set_cursor_style(style);
+    }
+
+    fn insert_char(&mut self, c: char) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().insert_char(c);
+    }
+
+    fn delete_left(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().delete_left(n);
+    }
+
+    fn delete_right(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().delete_right(n);
     }
 }

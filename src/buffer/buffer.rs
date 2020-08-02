@@ -12,7 +12,7 @@ use ropey::Rope;
 use crate::common::PixelSize;
 use crate::painter::Painter;
 
-use super::view::View;
+use super::view::{CursorStyle, View};
 use super::{BufferBedHandle, BufferViewId};
 
 #[derive(Clone)]
@@ -53,7 +53,6 @@ impl BufferHandle {
     }
 
     // -------- Cursor movement --------
-
     pub(crate) fn move_view_cursor_up(&mut self, view_id: &BufferViewId, n: usize) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
@@ -107,6 +106,89 @@ impl BufferHandle {
         let cursor = &mut view.cursor;
         cursor.line_cidx += n;
         cursor.sync_line_cidx_gidx_right(&inner.rope, inner.tab_width);
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn set_view_cursor_style(&mut self, view_id: &BufferViewId, style: CursorStyle) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        view.cursor.style = style;
+        view.cursor
+            .sync_line_cidx_gidx_left(&inner.rope, inner.tab_width);
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
+    }
+
+    // -------- Editing --------
+    pub(crate) fn insert_char(&mut self, view_id: &BufferViewId, c: char) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cidx = view.cursor.cidx;
+        inner.rope.insert_char(cidx, c);
+        for view in inner.views.values_mut() {
+            if view.cursor.cidx >= cidx {
+                view.cursor.cidx += 1;
+                view.cursor
+                    .sync_and_update_char_idx_left(&inner.rope, inner.tab_width);
+            }
+        }
+        let view = inner.views.get_mut(view_id).unwrap();
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn delete_left(&mut self, view_id: &BufferViewId, mut n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cidx = view.cursor.cidx;
+        if cidx < n {
+            n = cidx;
+        }
+        let start_cidx = cidx - n;
+        inner.rope.remove(start_cidx..cidx);
+        for view in inner.views.values_mut() {
+            if view.cursor.cidx >= cidx {
+                view.cursor.cidx -= n;
+            } else if view.cursor.cidx > start_cidx {
+                view.cursor.cidx = start_cidx;
+            }
+            if view.cursor.cidx >= start_cidx {
+                view.cursor
+                    .sync_and_update_char_idx_left(&inner.rope, inner.tab_width);
+            }
+        }
+        let view = inner.views.get_mut(view_id).unwrap();
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn delete_right(&mut self, view_id: &BufferViewId, mut n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let mut cidx = view.cursor.cidx;
+        let pre_len_chars = inner.rope.len_chars();
+        assert!(cidx <= pre_len_chars);
+        if cidx == pre_len_chars {
+            cidx = pre_len_chars - 1;
+            n = 1;
+        } else if cidx + n >= pre_len_chars {
+            n = pre_len_chars - cidx;
+        }
+        let end_cidx = cidx + n;
+        inner.rope.remove(cidx..end_cidx);
+        for view in inner.views.values_mut() {
+            if view.cursor.cidx >= end_cidx {
+                view.cursor.cidx -= n;
+            } else if view.cursor.cidx > cidx {
+                view.cursor.cidx = cidx;
+            }
+            if view.cursor.cidx >= cidx {
+                view.cursor
+                    .sync_and_update_char_idx_left(&inner.rope, inner.tab_width);
+            }
+        }
+        let view = inner.views.get_mut(view_id).unwrap();
         view.snap_to_cursor(&inner.rope, inner.tab_width);
         inner.bed_handle.request_redraw();
     }
