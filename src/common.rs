@@ -22,6 +22,12 @@ pub(crate) fn rope_trim_newlines<'a>(line: RopeSlice<'a>) -> RopeSlice<'a> {
     line.slice(..nchars)
 }
 
+#[derive(Eq, PartialEq)]
+pub(crate) enum SplitCbRes {
+    Continue,
+    Stop,
+}
+
 // Split text into runs and spaces
 pub(crate) fn split_text<S, R>(
     line: &RopeSlice, // FIXME: Use RopeOrStr
@@ -29,8 +35,8 @@ pub(crate) fn split_text<S, R>(
     mut space_cb: S,
     mut run_cb: R,
 ) where
-    S: FnMut(usize),
-    R: FnMut(&str),
+    S: FnMut(usize) -> SplitCbRes,
+    R: FnMut(&str) -> SplitCbRes,
 {
     let mut buf = String::new();
     let mut last_is_space = false;
@@ -41,7 +47,9 @@ pub(crate) fn split_text<S, R>(
             '\n' | '\r' | '\x0b' | '\x0c' | '\u{85}' | '\u{2028}' | '\u{2029}' => break,
             ' ' => {
                 if !last_is_space && buf.len() > 0 {
-                    run_cb(&buf);
+                    if run_cb(&buf) == SplitCbRes::Stop {
+                        return;
+                    }
                     buf.clear();
                     last_script = None;
                 }
@@ -51,7 +59,9 @@ pub(crate) fn split_text<S, R>(
             }
             '\t' => {
                 if !last_is_space && buf.len() > 0 {
-                    run_cb(&buf);
+                    if run_cb(&buf) == SplitCbRes::Stop {
+                        return;
+                    }
                     buf.clear();
                     last_script = None;
                 }
@@ -64,14 +74,18 @@ pub(crate) fn split_text<S, R>(
             }
             c => {
                 if last_is_space && buf.len() > 0 {
-                    space_cb(buf.len());
+                    if space_cb(buf.len()) == SplitCbRes::Stop {
+                        return;
+                    }
                     buf.clear();
                 }
                 let script_here = c.script();
                 if script_here != Script::Unknown && script_here != Script::Common {
                     if let Some(script) = last_script {
                         if script != script_here {
-                            run_cb(&buf);
+                            if run_cb(&buf) == SplitCbRes::Stop {
+                                return;
+                            }
                             buf.clear();
                         }
                     }

@@ -25,3 +25,7 @@ servo-fontconfig = "0.5"
 com-wrapper = "0.1.0"
 directwrite = "0.3.0-alpha4"
 winapi = "0.3.8"
+
+[profile.release]
+opt-level = 3
+lto = "thin"

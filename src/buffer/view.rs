@@ -9,7 +9,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::buffer::BufferBedHandle;
 use crate::common::{
     rope_is_grapheme_boundary, rope_next_grapheme_boundary, rope_trim_newlines, split_text,
-    PixelSize, RopeGraphemes,
+    PixelSize, RopeGraphemes, SplitCbRes,
 };
 use crate::painter::Painter;
 use crate::style::{Color, TextStyle};
@@ -41,8 +41,112 @@ impl View {
         }
     }
 
-    pub(super) fn set_rect(&mut self, rect: Rect<f32, PixelSize>) {
+    pub(super) fn set_rect(&mut self, rect: Rect<f32, PixelSize>, data: &Rope, tab_width: usize) {
         self.rect = rect;
+        self.snap_to_cursor(data, tab_width);
+    }
+
+    pub(super) fn snap_to_cursor(&mut self, data: &Rope, tab_width: usize) {
+        // Snap to Y
+        self.snap_to_line(self.cursor.line_num, data, tab_width);
+
+        // Snap to X
+        let line = data.line(self.cursor.line_num);
+        let mut text_font = self.bed_handle.text_font();
+        let text_size = self.bed_handle.text_size();
+        let text_style = TextStyle::default();
+        let space_metrics = text_font.space_metrics(text_size, text_style);
+
+        let cursor_x = Cell::new(0.0);
+        let cursor_block_width = Cell::new(space_metrics.advance.width.to_f32());
+        let line_gidx = self.cursor.line_gidx;
+        let gidx = Cell::new(0);
+
+        split_text(
+            &line,
+            tab_width,
+            |n| {
+                if (gidx.get()..gidx.get() + n).contains(&line_gidx) {
+                    cursor_x.set(
+                        cursor_x.get()
+                            + space_metrics.advance.width.to_f32()
+                                * (line_gidx - gidx.get()) as f32,
+                    );
+                    SplitCbRes::Stop
+                } else {
+                    cursor_x.set(cursor_x.get() + space_metrics.advance.width.to_f32() * n as f32);
+                    gidx.set(gidx.get() + n);
+                    SplitCbRes::Continue
+                }
+            },
+            |text| {
+                let shaped = text_font.shape(text, text_size, TextStyle::default());
+                let mut gis = shaped.glyph_infos.iter().peekable();
+                for (j, _) in text.grapheme_indices(true) {
+                    loop {
+                        if let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
+                            if cluster < j as u32 {
+                                let gi = gis.next().unwrap();
+                                cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+                    if gidx.get() == line_gidx {
+                        if let Some(gi) = gis.peek() {
+                            cursor_block_width.set(gi.advance.width.to_f32());
+                        }
+                        return SplitCbRes::Stop;
+                    }
+                    gidx.set(gidx.get() + 1);
+                }
+                while let Some(gi) = gis.next() {
+                    cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
+                }
+                SplitCbRes::Continue
+            },
+        );
+
+        let cursor_width = if self.cursor.style == CursorStyle::Line {
+            CUSROR_WIDTH
+        } else {
+            cursor_block_width.get()
+        };
+        let cursor_max_x = cursor_x.get() + cursor_width;
+        let cursor_min_x = cursor_x.get();
+        if self.off.x > cursor_min_x {
+            self.off.x = cursor_min_x;
+        } else if self.off.x + self.rect.size.width < cursor_max_x {
+            self.off.x = cursor_max_x - self.rect.size.width;
+        }
+    }
+
+    fn snap_to_line(&mut self, linum: usize, data: &Rope, tab_width: usize) {
+        if linum <= self.start_line {
+            self.start_line = linum;
+            self.off.y = 0.0;
+        } else {
+            assert!(linum < data.len_lines());
+            let mut iter = data.lines_at(linum + 1);
+            let mut start_line = linum + 1;
+            let mut height = 0.0;
+            while let Some(line) = iter.prev() {
+                start_line -= 1;
+                let metrics = self.line_metrics(&line, tab_width);
+                height += metrics.height;
+                if height >= self.rect.size.height {
+                    self.start_line = start_line;
+                    self.off.y = height - self.rect.size.height;
+                    return;
+                }
+                if start_line == self.start_line {
+                    return;
+                }
+            }
+            self.start_line = 0;
+            self.off.y = 0.0;
+        }
     }
 
     pub(super) fn scroll(
@@ -77,7 +181,7 @@ impl View {
             self.start_line += 1;
         }
 
-        // Scroll x
+        // Scroll X
         if self.off.x <= 0.0 {
             self.off.x = 0.0;
         } else {
@@ -117,6 +221,7 @@ impl View {
         let mut origin = self.rect.origin - self.off;
         let spans = RefCell::new(Vec::new());
         let mut linum = self.start_line;
+        let rect_max_x = self.rect.origin.x + self.rect.size.width;
 
         for rope_line in data.lines_at(self.start_line) {
             if origin.y >= self.rect.origin.y + self.rect.size.height {
@@ -151,6 +256,11 @@ impl View {
                         .set(current_x.get() + space_metrics.advance.width.to_f32() * n as f32);
                     let inner = &mut *spans.borrow_mut();
                     inner.push(SpanOrSpace::Space(n));
+                    if current_x.get() >= rect_max_x {
+                        SplitCbRes::Stop
+                    } else {
+                        SplitCbRes::Continue
+                    }
                 },
                 |text| {
                     let shaped = text_font.shape(text, text_size, TextStyle::default());
@@ -187,6 +297,11 @@ impl View {
                     }
                     let inner = &mut *spans.borrow_mut();
                     inner.push(SpanOrSpace::Span(shaped));
+                    if current_x.get() >= rect_max_x {
+                        SplitCbRes::Stop
+                    } else {
+                        SplitCbRes::Continue
+                    }
                 },
             );
             let height = ascender - descender;
@@ -254,6 +369,7 @@ impl View {
             |n| {
                 let inner = &mut *state.borrow_mut();
                 inner.2 += space_metrics.advance.width.to_f32() * n as f32;
+                SplitCbRes::Continue
             },
             |text| {
                 let inner = &mut *state.borrow_mut();
@@ -265,6 +381,7 @@ impl View {
                     inner.1 = shaped.descender;
                 }
                 inner.2 += shaped.width.to_f32();
+                SplitCbRes::Continue
             },
         );
         let state = &*state.borrow();

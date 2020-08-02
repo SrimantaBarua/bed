@@ -37,7 +37,7 @@ impl BufferHandle {
     pub(crate) fn set_view_rect(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
-        view.set_rect(rect);
+        view.set_rect(rect, &inner.rope, inner.tab_width);
     }
 
     pub(crate) fn draw_view(&mut self, view_id: &BufferViewId, painter: &mut Painter) {
@@ -68,6 +68,7 @@ impl BufferHandle {
             }
             cursor.sync_global_x(&inner.rope, inner.tab_width);
         }
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
         inner.bed_handle.request_redraw();
     }
 
@@ -82,6 +83,7 @@ impl BufferHandle {
         } else {
             cursor.sync_global_x(&inner.rope, inner.tab_width);
         }
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
         inner.bed_handle.request_redraw();
     }
 
@@ -95,6 +97,7 @@ impl BufferHandle {
             cursor.line_cidx -= n;
         }
         cursor.sync_line_cidx_gidx_left(&inner.rope, inner.tab_width);
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
         inner.bed_handle.request_redraw();
     }
 
@@ -104,6 +107,7 @@ impl BufferHandle {
         let cursor = &mut view.cursor;
         cursor.line_cidx += n;
         cursor.sync_line_cidx_gidx_right(&inner.rope, inner.tab_width);
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
         inner.bed_handle.request_redraw();
     }
 
