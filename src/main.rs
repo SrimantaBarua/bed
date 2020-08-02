@@ -171,8 +171,8 @@ fn main() {
                 WindowEvent::MouseWheel { delta, .. } => input_state.add_scroll_delta(delta),
                 WindowEvent::CursorMoved { position, .. } => {}
                 WindowEvent::MouseInput { state, button, .. } => {}
-                WindowEvent::ReceivedCharacter(c) => {}
-                WindowEvent::KeyboardInput { input, .. } if input.virtual_keycode.is_some() => {}
+                WindowEvent::ReceivedCharacter(c) => input_state.handle_char(c),
+                WindowEvent::KeyboardInput { input, .. } => input_state.handle_keypress(input),
                 _ => {}
             },
             Event::MainEventsCleared => {

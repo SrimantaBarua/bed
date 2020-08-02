@@ -2,13 +2,20 @@
 
 use euclid::{vec2, Vector2D};
 use glutin::dpi::PhysicalPosition;
-use glutin::event::{ModifiersState, MouseScrollDelta};
+use glutin::event::{KeyboardInput, ModifiersState, MouseScrollDelta};
 
 use crate::common::PixelSize;
 
 use super::BedHandle;
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Mode {
+    Normal,
+    Input,
+}
+
 pub(crate) struct InputState {
+    mode: Mode,
     scroll_delta: Vector2D<f32, PixelSize>,
     bed_handle: BedHandle,
     modifiers: ModifiersState,
@@ -17,6 +24,7 @@ pub(crate) struct InputState {
 impl InputState {
     pub(crate) fn new(bed_handle: BedHandle) -> InputState {
         InputState {
+            mode: Mode::Normal,
             scroll_delta: vec2(0.0, 0.0),
             bed_handle,
             modifiers: ModifiersState::empty(),
@@ -51,11 +59,32 @@ impl InputState {
     pub(crate) fn flush_events(&mut self) {
         // Scroll
         let scroll_delta = vec2(
-            10.0 * self.scroll_delta.x * self.scroll_delta.x.abs(),
-            10.0 * self.scroll_delta.y * self.scroll_delta.y.abs(),
+            20.0 * self.scroll_delta.x * self.scroll_delta.x.abs(),
+            20.0 * self.scroll_delta.y * self.scroll_delta.y.abs(),
         );
         self.bed_handle.scroll_active_view(scroll_delta);
         self.scroll_delta = vec2(0.0, 0.0);
+    }
+
+    pub(crate) fn handle_char(&mut self, c: char) {
+        match self.mode {
+            Mode::Normal => match c {
+                'h' => self.bed_handle.move_cursor_left(1),
+                'j' => self.bed_handle.move_cursor_down(1),
+                'k' => self.bed_handle.move_cursor_up(1),
+                'l' => self.bed_handle.move_cursor_right(1),
+                _ => {}
+            },
+            Mode::Input => {}
+        }
+    }
+
+    pub(crate) fn handle_keypress(&mut self, input: KeyboardInput) {
+        let vkey = if let Some(vkey) = input.virtual_keycode {
+            vkey
+        } else {
+            return;
+        };
     }
 }
 
@@ -66,5 +95,25 @@ impl BedHandle {
         }
         let inner = &mut *self.0.borrow_mut();
         inner.text_tree.active_mut().scroll(scroll);
+    }
+
+    fn move_cursor_up(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().move_cursor_up(n);
+    }
+
+    fn move_cursor_down(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().move_cursor_down(n);
+    }
+
+    fn move_cursor_left(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().move_cursor_left(n);
+    }
+
+    fn move_cursor_right(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().move_cursor_right(n);
     }
 }

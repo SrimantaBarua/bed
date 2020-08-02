@@ -7,10 +7,13 @@ use ropey::{Rope, RopeSlice};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::buffer::BufferBedHandle;
-use crate::common::PixelSize;
+use crate::common::{
+    rope_is_grapheme_boundary, rope_next_grapheme_boundary, rope_trim_newlines, split_text,
+    PixelSize, RopeGraphemes,
+};
 use crate::painter::Painter;
 use crate::style::{Color, TextStyle};
-use crate::text::{split_text, ShapedSpan};
+use crate::text::ShapedSpan;
 
 const CUSROR_WIDTH: f32 = 2.0;
 
@@ -20,7 +23,7 @@ enum SpanOrSpace {
 }
 
 pub(super) struct View {
-    cursor: ViewCursor,
+    pub(super) cursor: ViewCursor,
     rect: Rect<f32, PixelSize>,
     off: Vector2D<f32, PixelSize>,
     start_line: usize,
@@ -42,7 +45,12 @@ impl View {
         self.rect = rect;
     }
 
-    pub(super) fn scroll(&mut self, scroll: Vector2D<f32, PixelSize>, data: &Rope) {
+    pub(super) fn scroll(
+        &mut self,
+        scroll: Vector2D<f32, PixelSize>,
+        data: &Rope,
+        tab_width: usize,
+    ) {
         assert!(self.start_line < data.len_lines());
 
         self.off += scroll;
@@ -50,14 +58,14 @@ impl View {
         // Scroll y
         while self.off.y < 0.0 && self.start_line > 0 {
             self.start_line -= 1;
-            let metrics = self.line_metrics(&data.line(self.start_line));
+            let metrics = self.line_metrics(&data.line(self.start_line), tab_width);
             self.off.y += metrics.height;
         }
         if self.off.y < 0.0 {
             self.off.y = 0.0;
         }
         while self.off.y > 0.0 {
-            let metrics = self.line_metrics(&data.line(self.start_line));
+            let metrics = self.line_metrics(&data.line(self.start_line), tab_width);
             if metrics.height > self.off.y {
                 break;
             }
@@ -76,7 +84,7 @@ impl View {
             let mut height = -self.off.y;
             let mut max_xoff = 0.0;
             for line in data.lines_at(self.start_line) {
-                let metrics = self.line_metrics(&line);
+                let metrics = self.line_metrics(&line, tab_width);
                 if metrics.width > max_xoff {
                     max_xoff = metrics.width;
                 }
@@ -97,7 +105,7 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    pub(super) fn draw(&mut self, data: &Rope, painter: &mut Painter) {
+    pub(super) fn draw(&mut self, data: &Rope, painter: &mut Painter, tab_width: usize) {
         assert!(self.start_line < data.len_lines());
         let mut paint_ctx =
             painter.widget_ctx(self.rect, Color::new(0xff, 0xff, 0xff, 0xff), false);
@@ -119,15 +127,28 @@ impl View {
             let gidx = Cell::new(0);
 
             let cursor = &self.cursor;
-            let mut cursor_x = None;
+            let cursor_x = Cell::new(None);
+            let cursor_underline_height = Cell::new(1.0);
+            let cursor_underline_pos = Cell::new(-1.0);
+            let cursor_block_width = Cell::new(space_metrics.advance.width.to_f32());
             let current_x = Cell::new(origin.x);
 
             split_text(
                 &rope_line,
-                8,
+                tab_width,
                 |n| {
+                    if linum == cursor.line_num
+                        && (gidx.get()..gidx.get() + n).contains(&cursor.line_gidx)
+                    {
+                        cursor_x.set(Some(
+                            current_x.get()
+                                + space_metrics.advance.width.to_f32()
+                                    * (cursor.line_gidx - gidx.get()) as f32,
+                        ));
+                    }
                     gidx.set(gidx.get() + n);
-                    current_x.set(current_x.get() + space_metrics.advance.width.to_f32());
+                    current_x
+                        .set(current_x.get() + space_metrics.advance.width.to_f32() * n as f32);
                     let inner = &mut *spans.borrow_mut();
                     inner.push(SpanOrSpace::Space(n));
                 },
@@ -135,14 +156,28 @@ impl View {
                     let shaped = text_font.shape(text, text_size, TextStyle::default());
                     let mut gis = shaped.glyph_infos.iter().peekable();
                     for (j, _) in text.grapheme_indices(true) {
-                        while gis.peek().unwrap().cluster < j as u32 {
-                            let gi = gis.next().unwrap();
-                            current_x.set(current_x.get() + gi.advance.width.to_f32());
+                        loop {
+                            if let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
+                                if cluster < j as u32 {
+                                    let gi = gis.next().unwrap();
+                                    current_x.set(current_x.get() + gi.advance.width.to_f32());
+                                    continue;
+                                }
+                            }
+                            break;
                         }
                         if linum == cursor.line_num && gidx.get() == cursor.line_gidx {
-                            cursor_x = Some(current_x.get());
+                            cursor_x.set(Some(current_x.get()));
+                            cursor_underline_height.set(shaped.underline_thickness.to_f32());
+                            cursor_underline_pos.set(shaped.underline_pos.to_f32());
+                            if let Some(gi) = gis.peek() {
+                                cursor_block_width.set(gi.advance.width.to_f32());
+                            }
                         }
                         gidx.set(gidx.get() + 1);
+                    }
+                    while let Some(gi) = gis.next() {
+                        current_x.set(current_x.get() + gi.advance.width.to_f32());
                     }
                     if shaped.ascender > ascender {
                         ascender = shaped.ascender;
@@ -156,11 +191,26 @@ impl View {
             );
             let height = ascender - descender;
 
-            if let Some(x) = cursor_x {
+            let (cursor_width, cursor_height, cursor_y) = match cursor.style {
+                CursorStyle::Line => (CUSROR_WIDTH, height.to_f32(), origin.y),
+                CursorStyle::Block => (cursor_block_width.get(), height.to_f32(), origin.y),
+                CursorStyle::Underline => (
+                    cursor_block_width.get(),
+                    cursor_underline_height.get(),
+                    origin.y + ascender.to_f32() + cursor_underline_pos.get(),
+                ),
+            };
+
+            if let Some(x) = cursor_x.get() {
                 let rect: Rect<f32, PixelSize> =
-                    Rect::new(point2(x, origin.y), size2(CUSROR_WIDTH, height.to_f32()));
+                    Rect::new(point2(x, cursor_y), size2(cursor_width, cursor_height));
                 paint_ctx.color_quad(rect, Color::new(0x88, 0x44, 0x22, 0x88), false);
-                //eprintln!("Rect: {:?}", rect);
+            } else if linum == cursor.line_num {
+                let rect: Rect<f32, PixelSize> = Rect::new(
+                    point2(current_x.get(), cursor_y),
+                    size2(cursor_width, cursor_height),
+                );
+                paint_ctx.color_quad(rect, Color::new(0x88, 0x44, 0x22, 0x88), false);
             }
 
             let spans = &mut *spans.borrow_mut();
@@ -192,7 +242,7 @@ impl View {
         self.start_line = 0;
     }
 
-    fn line_metrics(&self, line: &RopeSlice) -> LineMetrics {
+    fn line_metrics(&self, line: &RopeSlice, tab_width: usize) -> LineMetrics {
         let mut text_font = self.bed_handle.text_font();
         let text_size = self.bed_handle.text_size();
         let text_style = TextStyle::default();
@@ -200,7 +250,7 @@ impl View {
         let state = RefCell::new((space_metrics.ascender, space_metrics.descender, 0.0));
         split_text(
             &line,
-            8,
+            tab_width,
             |n| {
                 let inner = &mut *state.borrow_mut();
                 inner.2 += space_metrics.advance.width.to_f32() * n as f32;
@@ -230,11 +280,154 @@ struct LineMetrics {
     width: f32,
 }
 
+#[derive(Eq, PartialEq)]
+enum CursorStyle {
+    Line,
+    Block,
+    Underline,
+}
+
+impl Default for CursorStyle {
+    fn default() -> CursorStyle {
+        CursorStyle::Block
+    }
+}
+
 #[derive(Default)]
-struct ViewCursor {
-    cidx: usize,
-    line_num: usize,
-    line_cidx: usize,
-    line_gidx: usize,
-    line_global_x: usize,
+pub(super) struct ViewCursor {
+    pub(super) cidx: usize,
+    pub(super) line_num: usize,
+    pub(super) line_cidx: usize,
+    pub(super) line_gidx: usize,
+    pub(super) line_global_x: usize,
+    style: CursorStyle,
+}
+
+impl ViewCursor {
+    pub(super) fn reset(&mut self) {
+        *self = ViewCursor::default();
+    }
+
+    pub(super) fn sync_and_update_char_idx_left(&mut self, data: &Rope, tab_width: usize) {
+        self.line_num = data.char_to_line(self.cidx);
+        self.line_cidx = self.cidx - data.line_to_char(self.line_num);
+        self.sync_line_cidx_gidx_left(data, tab_width);
+    }
+
+    pub(super) fn sync_global_x(&mut self, data: &Rope, tab_width: usize) {
+        let trimmed = rope_trim_newlines(data.line(self.line_num));
+        let (cidx, gidx) =
+            cidx_gidx_from_global_x(&trimmed, self.line_global_x, tab_width, self.past_end());
+        self.line_cidx = cidx;
+        self.line_gidx = gidx;
+        self.cidx = data.line_to_char(self.line_num) + self.line_cidx;
+    }
+
+    pub(super) fn sync_line_cidx_gidx_left(&mut self, data: &Rope, tab_width: usize) {
+        let trimmed = rope_trim_newlines(data.line(self.line_num));
+        let len_chars = trimmed.len_chars();
+        if self.line_cidx >= len_chars {
+            self.line_cidx = len_chars;
+            if !self.past_end() && self.line_cidx > 0 {
+                self.line_cidx -= 1;
+            }
+        }
+        let (cidx, gidx) = cidx_gidx_from_cidx(&trimmed, self.line_cidx, tab_width);
+        self.line_cidx = cidx;
+        self.line_gidx = gidx;
+        self.line_global_x = self.line_gidx;
+        self.cidx = data.line_to_char(self.line_num) + self.line_cidx;
+    }
+
+    pub(super) fn sync_line_cidx_gidx_right(&mut self, data: &Rope, tab_width: usize) {
+        let trimmed = rope_trim_newlines(data.line(self.line_num));
+        let len_chars = trimmed.len_chars();
+        if self.line_cidx > len_chars {
+            self.line_cidx = len_chars;
+        }
+        if !rope_is_grapheme_boundary(&trimmed, self.line_cidx) {
+            self.line_cidx = rope_next_grapheme_boundary(&trimmed, self.line_cidx);
+        }
+        if !self.past_end() && self.line_cidx == len_chars && self.line_cidx > 0 {
+            self.line_cidx -= 1;
+        }
+        let (cidx, gidx) = cidx_gidx_from_cidx(&trimmed, self.line_cidx, tab_width);
+        self.line_cidx = cidx;
+        self.line_gidx = gidx;
+        self.line_global_x = self.line_gidx;
+        self.cidx = data.line_to_char(self.line_num) + self.line_cidx;
+    }
+
+    fn past_end(&self) -> bool {
+        self.style == CursorStyle::Line
+    }
+}
+
+fn cidx_gidx_from_cidx(slice: &RopeSlice, cidx: usize, tab_width: usize) -> (usize, usize) {
+    let (mut gidx, mut ccount) = (0, 0);
+    for g in RopeGraphemes::new(slice) {
+        let count_here = g.chars().count();
+        if ccount + count_here > cidx {
+            return (ccount, gidx);
+        }
+        ccount += count_here;
+        if g == "\t" {
+            gidx = (gidx / tab_width) * tab_width + tab_width;
+        } else {
+            gidx += 1;
+        }
+    }
+    (ccount, gidx)
+}
+
+pub(super) fn cidx_gidx_from_gidx(
+    slice: &RopeSlice,
+    gidx: usize,
+    tab_width: usize,
+    past_end: bool,
+) -> (usize, usize) {
+    let (mut gcount, mut cidx) = (0, 0);
+    let mut len_chars = slice.len_chars();
+    if !past_end && len_chars > 0 {
+        len_chars -= 1;
+    }
+    for g in RopeGraphemes::new(slice) {
+        let count_here = g.chars().count();
+        if gcount >= gidx || cidx + count_here > len_chars {
+            return (cidx, gcount);
+        }
+        cidx += count_here;
+        if g == "\t" {
+            gcount = (gcount / tab_width) * tab_width + tab_width;
+        } else {
+            gcount += 1;
+        }
+    }
+    (cidx, gcount)
+}
+
+fn cidx_gidx_from_global_x(
+    slice: &RopeSlice,
+    global_x: usize,
+    tab_width: usize,
+    past_end: bool,
+) -> (usize, usize) {
+    let (mut gidx, mut ccount) = (0, 0);
+    let mut len_chars = slice.len_chars();
+    if !past_end && len_chars > 0 {
+        len_chars -= 1;
+    }
+    for g in RopeGraphemes::new(slice) {
+        let count_here = g.chars().count();
+        if gidx >= global_x || ccount + count_here > len_chars {
+            return (ccount, gidx);
+        }
+        ccount += count_here;
+        if g == "\t" {
+            gidx = (gidx / tab_width) * tab_width + tab_width;
+        } else {
+            gidx += 1;
+        }
+    }
+    (ccount, gidx)
 }

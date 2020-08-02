@@ -22,6 +22,26 @@ impl TextView {
         view.buf_handle.scroll_view(&view.view_id, scroll);
     }
 
+    pub(crate) fn move_cursor_up(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.move_view_cursor_up(&view.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_down(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.move_view_cursor_down(&view.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_left(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.move_view_cursor_left(&view.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_right(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle.move_view_cursor_right(&view.view_id, n);
+    }
+
     pub(super) fn new(
         rect: Rect<f32, PixelSize>,
         mut buf_handle: BufferHandle,

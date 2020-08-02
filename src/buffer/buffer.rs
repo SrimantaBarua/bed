@@ -30,22 +30,81 @@ impl BufferHandle {
     // -------- View manipulation --------
     pub(crate) fn new_view(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
-        inner.new_view(view_id, rect)
+        let view = View::new(inner.bed_handle.clone(), rect);
+        inner.views.insert(view_id.clone(), view);
     }
 
     pub(crate) fn set_view_rect(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
-        inner.set_view_rect(view_id, rect)
+        let view = inner.views.get_mut(view_id).unwrap();
+        view.set_rect(rect);
     }
 
     pub(crate) fn draw_view(&mut self, view_id: &BufferViewId, painter: &mut Painter) {
         let inner = &mut *self.0.borrow_mut();
-        inner.draw_view(view_id, painter)
+        let view = inner.views.get_mut(view_id).unwrap();
+        view.draw(&inner.rope, painter, inner.tab_width);
     }
 
     pub(crate) fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<f32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
-        inner.scroll_view(view_id, scroll)
+        let view = inner.views.get_mut(view_id).unwrap();
+        view.scroll(scroll, &inner.rope, inner.tab_width);
+    }
+
+    // -------- Cursor movement --------
+
+    pub(crate) fn move_view_cursor_up(&mut self, view_id: &BufferViewId, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        if cursor.line_num == 0 {
+            cursor.reset();
+        } else {
+            if n < cursor.line_num {
+                cursor.line_num -= n;
+            } else {
+                cursor.line_num = 0;
+            }
+            cursor.sync_global_x(&inner.rope, inner.tab_width);
+        }
+        inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_down(&mut self, view_id: &BufferViewId, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        cursor.line_num += n;
+        if cursor.line_num >= inner.rope.len_lines() {
+            cursor.cidx = inner.rope.len_chars();
+            cursor.sync_and_update_char_idx_left(&inner.rope, inner.tab_width);
+        } else {
+            cursor.sync_global_x(&inner.rope, inner.tab_width);
+        }
+        inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_left(&mut self, view_id: &BufferViewId, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        if cursor.line_cidx < n {
+            cursor.line_cidx = 0;
+        } else {
+            cursor.line_cidx -= n;
+        }
+        cursor.sync_line_cidx_gidx_left(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_right(&mut self, view_id: &BufferViewId, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        cursor.line_cidx += n;
+        cursor.sync_line_cidx_gidx_right(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
     }
 
     // -------- Buffer creation --------
@@ -70,36 +129,16 @@ struct Buffer {
     views: FnvHashMap<BufferViewId, View>,
     bed_handle: BufferBedHandle,
     rope: Rope,
+    tab_width: usize,
 }
 
 impl Buffer {
-    // -------- View manipulation --------
-    fn new_view(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
-        let view = View::new(self.bed_handle.clone(), rect);
-        self.views.insert(view_id.clone(), view);
-    }
-
-    fn set_view_rect(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
-        let view = self.views.get_mut(view_id).unwrap();
-        view.set_rect(rect);
-    }
-
-    fn draw_view(&mut self, view_id: &BufferViewId, painter: &mut Painter) {
-        let view = self.views.get_mut(view_id).unwrap();
-        view.draw(&self.rope, painter);
-    }
-
-    fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<f32, PixelSize>) {
-        let view = self.views.get_mut(view_id).unwrap();
-        view.scroll(scroll, &self.rope);
-    }
-
-    // -------- Creation / reading from file --------
     fn empty(bed_handle: BufferBedHandle) -> Buffer {
         Buffer {
             views: FnvHashMap::default(),
             rope: Rope::new(),
             bed_handle,
+            tab_width: 8,
         }
     }
 
@@ -110,6 +149,7 @@ impl Buffer {
                 rope,
                 bed_handle,
                 views: FnvHashMap::default(),
+                tab_width: 8,
             })
     }
 

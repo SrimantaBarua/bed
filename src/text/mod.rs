@@ -7,7 +7,6 @@ use std::rc::Rc;
 use euclid::{point2, size2, Point2D, Rect, Size2D};
 use fnv::FnvHashMap;
 use guillotiere::{AllocatorOptions, AtlasAllocator};
-use unicode_script::{Script, UnicodeScript};
 
 use crate::common::{PixelSize, TextureSize};
 use crate::opengl::{ElemArr, GlTexture, Mat4, ShaderProgram, TexRed, TexUnit};
@@ -433,77 +432,6 @@ impl ShapedSpan {
                 core.quad_arr.push(tex_quad);
                 origin += gi.advance;
             }
-        }
-    }
-}
-
-// Split text into runs and spaces
-pub(crate) fn split_text<S, R>(
-    line: &ropey::RopeSlice, // FIXME: Use RopeOrStr
-    tab_width: usize,
-    mut space_cb: S,
-    mut run_cb: R,
-) where
-    S: FnMut(usize),
-    R: FnMut(&str),
-{
-    let mut buf = String::new();
-    let mut last_is_space = false;
-    let mut last_script = None;
-    let mut x = 0;
-    for c in line.chars() {
-        match c {
-            '\n' | '\r' | '\x0b' | '\x0c' | '\u{85}' | '\u{2028}' | '\u{2029}' => break,
-            ' ' => {
-                if !last_is_space && buf.len() > 0 {
-                    run_cb(&buf);
-                    buf.clear();
-                    last_script = None;
-                }
-                last_is_space = true;
-                x += 1;
-                buf.push(c);
-            }
-            '\t' => {
-                if !last_is_space && buf.len() > 0 {
-                    run_cb(&buf);
-                    buf.clear();
-                    last_script = None;
-                }
-                last_is_space = true;
-                let next = ((x / tab_width) + 1) * tab_width;
-                for _ in x..next {
-                    buf.push(' ');
-                }
-                x = next;
-            }
-            c => {
-                if last_is_space && buf.len() > 0 {
-                    space_cb(buf.len());
-                    buf.clear();
-                }
-                let script_here = c.script();
-                if script_here != Script::Unknown && script_here != Script::Common {
-                    if let Some(script) = last_script {
-                        if script != script_here {
-                            run_cb(&buf);
-                            buf.clear();
-                        }
-                    }
-                    last_script = Some(script_here);
-                }
-                last_is_space = false;
-                buf.push(c);
-                x += 1;
-                // FIXME: Move x by graphemes
-            }
-        }
-    }
-    if buf.len() > 0 {
-        if last_is_space {
-            space_cb(buf.len());
-        } else {
-            run_cb(&buf);
         }
     }
 }
