@@ -41,7 +41,7 @@ impl Bed {
         let painter = painter::Painter::new(window_size.cast());
 
         let text_font = font_core.find("monospace").expect("Failed to find font");
-        let text_size = style::TextSize(14);
+        let text_size = style::TextSize(12).scale(scale_factor);
         let buffer_state = buffer::BufferBedHandle::new(text_font, text_size);
         let mut buffer_mgr = buffer::BufferMgr::new(buffer_state.clone());
 

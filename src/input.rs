@@ -2,7 +2,9 @@
 
 use euclid::{vec2, Vector2D};
 use glutin::dpi::PhysicalPosition;
-use glutin::event::{KeyboardInput, ModifiersState, MouseScrollDelta};
+use glutin::event::{
+    ElementState, KeyboardInput, ModifiersState, MouseScrollDelta, VirtualKeyCode,
+};
 
 use crate::common::PixelSize;
 
@@ -11,7 +13,7 @@ use super::BedHandle;
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Mode {
     Normal,
-    Input,
+    Insert,
 }
 
 pub(crate) struct InputState {
@@ -69,22 +71,41 @@ impl InputState {
     pub(crate) fn handle_char(&mut self, c: char) {
         match self.mode {
             Mode::Normal => match c {
+                // Basic movement
                 'h' => self.bed_handle.move_cursor_left(1),
                 'j' => self.bed_handle.move_cursor_down(1),
                 'k' => self.bed_handle.move_cursor_up(1),
                 'l' => self.bed_handle.move_cursor_right(1),
                 _ => {}
             },
-            Mode::Input => {}
+            Mode::Insert => {}
         }
     }
 
     pub(crate) fn handle_keypress(&mut self, input: KeyboardInput) {
-        let vkey = if let Some(vkey) = input.virtual_keycode {
-            vkey
-        } else {
+        if input.state != ElementState::Pressed {
             return;
-        };
+        }
+        if let Some(vkey) = input.virtual_keycode {
+            match self.mode {
+                Mode::Normal => match vkey {
+                    // Basic movement
+                    VirtualKeyCode::Up => self.bed_handle.move_cursor_up(1),
+                    VirtualKeyCode::Down => self.bed_handle.move_cursor_down(1),
+                    VirtualKeyCode::Left => self.bed_handle.move_cursor_left(1),
+                    VirtualKeyCode::Right => self.bed_handle.move_cursor_right(1),
+                    _ => {}
+                },
+                Mode::Insert => match vkey {
+                    // Basic movement
+                    VirtualKeyCode::Up => self.bed_handle.move_cursor_up(1),
+                    VirtualKeyCode::Down => self.bed_handle.move_cursor_down(1),
+                    VirtualKeyCode::Left => self.bed_handle.move_cursor_left(1),
+                    VirtualKeyCode::Right => self.bed_handle.move_cursor_right(1),
+                    _ => {}
+                },
+            }
+        }
     }
 }
 
