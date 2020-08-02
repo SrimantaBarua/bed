@@ -7,6 +7,7 @@ use std::rc::Rc;
 use euclid::{point2, size2, Point2D, Rect, Size2D};
 use fnv::FnvHashMap;
 use guillotiere::{AllocatorOptions, AtlasAllocator};
+use unicode_script::{Script, UnicodeScript};
 
 use crate::common::{PixelSize, TextureSize};
 use crate::opengl::{ElemArr, GlTexture, Mat4, ShaderProgram, TexRed, TexUnit};
@@ -448,6 +449,7 @@ pub(crate) fn split_text<S, R>(
 {
     let mut buf = String::new();
     let mut last_is_space = false;
+    let mut last_script = None;
     let mut x = 0;
     for c in line.chars() {
         match c {
@@ -456,6 +458,7 @@ pub(crate) fn split_text<S, R>(
                 if !last_is_space && buf.len() > 0 {
                     run_cb(&buf);
                     buf.clear();
+                    last_script = None;
                 }
                 last_is_space = true;
                 x += 1;
@@ -465,6 +468,7 @@ pub(crate) fn split_text<S, R>(
                 if !last_is_space && buf.len() > 0 {
                     run_cb(&buf);
                     buf.clear();
+                    last_script = None;
                 }
                 last_is_space = true;
                 let next = ((x / tab_width) + 1) * tab_width;
@@ -478,11 +482,20 @@ pub(crate) fn split_text<S, R>(
                     space_cb(buf.len());
                     buf.clear();
                 }
+                let script_here = c.script();
+                if script_here != Script::Unknown && script_here != Script::Common {
+                    if let Some(script) = last_script {
+                        if script != script_here {
+                            run_cb(&buf);
+                            buf.clear();
+                        }
+                    }
+                    last_script = Some(script_here);
+                }
                 last_is_space = false;
                 buf.push(c);
                 x += 1;
                 // FIXME: Move x by graphemes
-                // FIXME: Split run by language/script
             }
         }
     }

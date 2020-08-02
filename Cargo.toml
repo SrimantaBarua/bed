@@ -15,6 +15,7 @@ glutin = "0.24.1"
 guillotiere = "0.5.2"
 harfbuzz-sys = "0.4.0"
 ropey = "1.2"
+unicode-script = "0.5.2"
 unicode-segmentation = "1.6"
 
 [target.'cfg(unix)'.dependencies]
