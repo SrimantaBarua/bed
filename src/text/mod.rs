@@ -430,8 +430,9 @@ impl ShapedSpan {
                 let rect = Rect::new(rect_origin, allocated.metrics.size.cast());
                 let tex_quad = TexColorQuad::new(rect, allocated.tex_rect, color);
                 core.quad_arr.push(tex_quad);
-                origin += gi.advance;
             }
+
+            origin += gi.advance;
         }
     }
 }
