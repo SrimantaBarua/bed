@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::Result as IOResult;
 use std::rc::Rc;
 
-use euclid::{Rect, Vector2D};
+use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
 
@@ -118,6 +118,16 @@ impl BufferHandle {
             .sync_line_cidx_gidx_left(&inner.rope, inner.tab_width);
         view.snap_to_cursor(&inner.rope, inner.tab_width);
         inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_point(
+        &mut self,
+        view_id: &BufferViewId,
+        point: Point2D<f32, PixelSize>,
+    ) {
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        view.move_cursor_to_point(point, &inner.rope, inner.tab_width);
     }
 
     // -------- Editing --------

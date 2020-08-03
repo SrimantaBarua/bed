@@ -1,9 +1,9 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::{vec2, Vector2D};
+use euclid::{point2, vec2, Point2D, Vector2D};
 use glutin::dpi::PhysicalPosition;
 use glutin::event::{
-    ElementState, KeyboardInput, ModifiersState, MouseScrollDelta, VirtualKeyCode,
+    ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
 };
 
 use crate::buffer::CursorStyle;
@@ -22,6 +22,9 @@ pub(crate) struct InputState {
     scroll_delta: Vector2D<f32, PixelSize>,
     bed_handle: BedHandle,
     modifiers: ModifiersState,
+    // Mouse
+    cursor_pos: Point2D<f32, PixelSize>,
+    cursor_click_pos: Option<Point2D<f32, PixelSize>>,
 }
 
 impl InputState {
@@ -31,6 +34,8 @@ impl InputState {
             scroll_delta: vec2(0.0, 0.0),
             bed_handle,
             modifiers: ModifiersState::empty(),
+            cursor_pos: point2(0.0, 0.0),
+            cursor_click_pos: None,
         }
     }
 
@@ -128,6 +133,23 @@ impl InputState {
             }
         }
     }
+
+    pub(crate) fn handle_mouse_input(&mut self, button: MouseButton, state: ElementState) {
+        match button {
+            MouseButton::Left if state == ElementState::Pressed => {
+                self.cursor_click_pos = Some(self.cursor_pos);
+                self.bed_handle.move_cursor_to_point(self.cursor_pos);
+            }
+            MouseButton::Left if state == ElementState::Released => {
+                self.cursor_click_pos = None;
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn handle_cursor_moved(&mut self, phys_pos: PhysicalPosition<f64>) {
+        self.cursor_pos = point2(phys_pos.x, phys_pos.y).cast();
+    }
 }
 
 impl BedHandle {
@@ -157,6 +179,11 @@ impl BedHandle {
     fn move_cursor_right(&mut self, n: usize) {
         let inner = &mut *self.0.borrow_mut();
         inner.text_tree.active_mut().move_cursor_right(n);
+    }
+
+    fn move_cursor_to_point(&mut self, point: Point2D<f32, PixelSize>) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.move_cursor_to_point(point);
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {

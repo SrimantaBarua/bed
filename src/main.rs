@@ -169,8 +169,12 @@ fn main() {
                 }
                 WindowEvent::ModifiersChanged(m) => input_state.update_modifiers(m),
                 WindowEvent::MouseWheel { delta, .. } => input_state.add_scroll_delta(delta),
-                WindowEvent::CursorMoved { position, .. } => {}
-                WindowEvent::MouseInput { state, button, .. } => {}
+                WindowEvent::CursorMoved { position, .. } => {
+                    input_state.handle_cursor_moved(position)
+                }
+                WindowEvent::MouseInput { state, button, .. } => {
+                    input_state.handle_mouse_input(button, state)
+                }
                 WindowEvent::ReceivedCharacter(c) => input_state.handle_char(c),
                 WindowEvent::KeyboardInput { input, .. } => input_state.handle_keypress(input),
                 _ => {}

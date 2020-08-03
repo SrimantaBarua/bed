@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::Rect;
+use euclid::{Point2D, Rect};
 
 use crate::buffer::{BufferHandle, BufferViewId};
 use crate::common::PixelSize;
@@ -37,20 +37,27 @@ impl TextTree {
     pub(crate) fn active_mut(&mut self) -> &mut TextView {
         self.root.active_mut()
     }
+
+    pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<f32, PixelSize>) {
+        self.root.move_cursor_to_point(point);
+    }
 }
 
 struct Node {
+    rect: Rect<f32, PixelSize>,
     view: TextView,
 }
 
 impl Node {
     fn new_leaf(rect: Rect<f32, PixelSize>, buffer: BufferHandle, view_id: BufferViewId) -> Node {
         Node {
+            rect,
             view: TextView::new(rect, buffer, view_id),
         }
     }
 
     fn set_rect(&mut self, rect: Rect<f32, PixelSize>) {
+        self.rect = rect;
         self.view.set_rect(rect)
     }
 
@@ -60,5 +67,12 @@ impl Node {
 
     fn active_mut(&mut self) -> &mut TextView {
         &mut self.view
+    }
+
+    fn move_cursor_to_point(&mut self, point: Point2D<f32, PixelSize>) {
+        if !self.rect.contains(point) {
+            return;
+        }
+        self.view.move_cursor_to_point(point);
     }
 }

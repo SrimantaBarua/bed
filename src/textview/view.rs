@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::{Rect, Vector2D};
+use euclid::{Point2D, Rect, Vector2D};
 
 use crate::buffer::{BufferHandle, BufferViewId, CursorStyle};
 use crate::common::PixelSize;
@@ -83,5 +83,11 @@ impl TextView {
     pub(super) fn draw(&mut self, painter: &mut Painter) {
         let view = &mut self.views[self.active];
         view.buf_handle.draw_view(&view.view_id, painter);
+    }
+
+    pub(super) fn move_cursor_to_point(&mut self, point: Point2D<f32, PixelSize>) {
+        let view = &mut self.views[self.active];
+        view.buf_handle
+            .move_view_cursor_to_point(&view.view_id, point);
     }
 }
