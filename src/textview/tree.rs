@@ -1,6 +1,8 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::{Point2D, Rect};
+use std::time::Duration;
+
+use euclid::{Point2D, Rect, Vector2D};
 
 use crate::buffer::{BufferHandle, BufferViewId};
 use crate::common::PixelSize;
@@ -41,6 +43,14 @@ impl TextTree {
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<f32, PixelSize>) {
         self.root.move_cursor_to_point(point);
     }
+
+    pub(crate) fn scroll_views_with_active_acc(
+        &mut self,
+        acc: Vector2D<f32, PixelSize>,
+        duration: Duration,
+    ) {
+        self.root.scroll_with_active_acc(acc, duration);
+    }
 }
 
 struct Node {
@@ -74,5 +84,9 @@ impl Node {
             return;
         }
         self.view.move_cursor_to_point(point);
+    }
+
+    fn scroll_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
+        self.view.scroll(acc, duration);
     }
 }

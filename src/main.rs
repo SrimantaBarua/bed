@@ -136,15 +136,17 @@ fn main() {
 
     let target_delta = time::Duration::from_nanos(1_000_000_000 / 60);
     let mut is_fps_boundary = true;
+    let mut last_duration = time::Duration::from_secs(1);
 
     event_loop.run(move |event, _, control_flow| {
         //println!("event: {:?}", event);
         match event {
             Event::NewEvents(cause) => match cause {
-                StartCause::ResumeTimeReached { .. } => {
+                StartCause::ResumeTimeReached { start, .. } => {
                     let now = time::Instant::now();
                     *control_flow = ControlFlow::WaitUntil(now + target_delta);
                     is_fps_boundary = true;
+                    last_duration = now - start;
                 }
                 StartCause::WaitCancelled {
                     requested_resume, ..
@@ -168,7 +170,7 @@ fn main() {
                     bed.set_scale_factor(scale_factor)
                 }
                 WindowEvent::ModifiersChanged(m) => input_state.update_modifiers(m),
-                WindowEvent::MouseWheel { delta, .. } => input_state.add_scroll_delta(delta),
+                WindowEvent::MouseWheel { delta, .. } => input_state.add_scroll_amount(delta),
                 WindowEvent::CursorMoved { position, .. } => {
                     input_state.handle_cursor_moved(position)
                 }
@@ -181,7 +183,7 @@ fn main() {
             },
             Event::MainEventsCleared => {
                 if is_fps_boundary {
-                    input_state.flush_events();
+                    input_state.flush_events(last_duration);
                     bed.check_redraw_required();
                 }
             }

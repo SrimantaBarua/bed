@@ -1,6 +1,8 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use euclid::{Point2D, Rect, Vector2D};
+use std::time::Duration;
+
+use euclid::{vec2, Point2D, Rect, Vector2D};
 
 use crate::buffer::{BufferHandle, BufferViewId, CursorStyle};
 use crate::common::PixelSize;
@@ -12,14 +14,27 @@ struct ViewInner {
 }
 
 pub(crate) struct TextView {
+    scroll_vel: Vector2D<f32, PixelSize>,
     views: Vec<ViewInner>,
     active: usize,
 }
 
 impl TextView {
-    pub(crate) fn scroll(&mut self, scroll: Vector2D<f32, PixelSize>) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.scroll_view(&view.view_id, scroll);
+    pub(crate) fn scroll(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
+        // Make scrolling feel better
+        let target = Duration::from_nanos(1_000_000_000 / 60);
+        let t = duration.as_secs_f32() / target.as_secs_f32();
+        self.scroll_vel += acc * t;
+        let dist = self.scroll_vel * 5.0;
+        self.scroll_vel /= 4.0;
+        // Round of scroll distance so that we do eventually stop
+        let dist = dist.round();
+        if dist.x != 0.0 || dist.y != 0.0 {
+            let view = &mut self.views[self.active];
+            view.buf_handle.scroll_view(&view.view_id, dist);
+        } else {
+            self.scroll_vel = vec2(0.0, 0.0);
+        }
     }
 
     pub(crate) fn move_cursor_up(&mut self, n: usize) {
@@ -72,7 +87,11 @@ impl TextView {
             buf_handle,
             view_id,
         }];
-        TextView { views, active: 0 }
+        TextView {
+            scroll_vel: vec2(0.0, 0.0),
+            views,
+            active: 0,
+        }
     }
 
     pub(super) fn set_rect(&mut self, rect: Rect<f32, PixelSize>) {

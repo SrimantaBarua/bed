@@ -1,5 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::time::Duration;
+
 use euclid::{point2, vec2, Point2D, Vector2D};
 use glutin::dpi::PhysicalPosition;
 use glutin::event::{
@@ -19,7 +21,7 @@ enum Mode {
 
 pub(crate) struct InputState {
     mode: Mode,
-    scroll_delta: Vector2D<f32, PixelSize>,
+    scroll_amount: Vector2D<f32, PixelSize>,
     bed_handle: BedHandle,
     modifiers: ModifiersState,
     // Mouse
@@ -31,7 +33,7 @@ impl InputState {
     pub(crate) fn new(bed_handle: BedHandle) -> InputState {
         InputState {
             mode: Mode::Normal,
-            scroll_delta: vec2(0.0, 0.0),
+            scroll_amount: vec2(0.0, 0.0),
             bed_handle,
             modifiers: ModifiersState::empty(),
             cursor_pos: point2(0.0, 0.0),
@@ -39,7 +41,7 @@ impl InputState {
         }
     }
 
-    pub(crate) fn add_scroll_delta(&mut self, delta: MouseScrollDelta) {
+    pub(crate) fn add_scroll_amount(&mut self, delta: MouseScrollDelta) {
         let scroll = match delta {
             MouseScrollDelta::LineDelta(x, y) => {
                 if self.modifiers.shift() {
@@ -57,21 +59,22 @@ impl InputState {
                 }
             }
         };
-        self.scroll_delta += scroll;
+        self.scroll_amount += scroll;
     }
 
     pub(crate) fn update_modifiers(&mut self, m: ModifiersState) {
         self.modifiers = m;
     }
 
-    pub(crate) fn flush_events(&mut self) {
+    pub(crate) fn flush_events(&mut self, duration: Duration) {
         // Scroll
-        let scroll_delta = vec2(
-            20.0 * self.scroll_delta.x * self.scroll_delta.x.abs(),
-            20.0 * self.scroll_delta.y * self.scroll_delta.y.abs(),
+        let scroll_amount = vec2(
+            20.0 * self.scroll_amount.x * self.scroll_amount.x.abs(),
+            20.0 * self.scroll_amount.y * self.scroll_amount.y.abs(),
         );
-        self.bed_handle.scroll_active_view(scroll_delta);
-        self.scroll_delta = vec2(0.0, 0.0);
+        self.bed_handle
+            .scroll_views_with_active_acc(scroll_amount, duration);
+        self.scroll_amount = vec2(0.0, 0.0);
     }
 
     pub(crate) fn handle_char(&mut self, c: char) {
@@ -153,12 +156,9 @@ impl InputState {
 }
 
 impl BedHandle {
-    fn scroll_active_view(&mut self, scroll: Vector2D<f32, PixelSize>) {
-        if scroll.x == 0.0 && scroll.y == 0.0 {
-            return;
-        }
+    fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
         let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().scroll(scroll);
+        inner.text_tree.scroll_views_with_active_acc(acc, duration)
     }
 
     fn move_cursor_up(&mut self, n: usize) {
