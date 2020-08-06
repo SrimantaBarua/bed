@@ -325,7 +325,7 @@ impl View {
             let cursor_underline_height = Cell::new(1.0);
             let cursor_underline_pos = Cell::new(-1.0);
             let cursor_block_width = Cell::new(sp_awidth);
-            let current_x = Cell::new(0.0);
+            let current_x = Cell::new(origin.x);
 
             split_text(
                 &rope_line,
