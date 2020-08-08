@@ -2,6 +2,9 @@
 
 use std::time;
 
+#[macro_use]
+extern crate bitflags;
+
 mod geom;
 mod window;
 
@@ -9,8 +12,7 @@ mod window;
 struct Bed {}
 
 fn main() {
-    let mut event_loop = window::EventLoop::new();
-    let window = event_loop.new_window(geom::size2(800, 600));
+    let (event_loop, window) = window::EventLoop::with_window(geom::size2(800, 600));
     let target_delta = time::Duration::from_nanos(1_000_000_000 / 60);
     event_loop.run(target_delta, |event| {
         println!("Event: {:?}", event);
