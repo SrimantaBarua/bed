@@ -1,0 +1,10 @@
+[package]
+name = "bed"
+version = "0.0.1"
+authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11 = { version = "2.18", features = [ "xlib" ] }
