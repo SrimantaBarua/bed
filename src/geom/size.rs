@@ -2,6 +2,7 @@
 
 use super::Num;
 
+#[derive(Debug)]
 pub(crate) struct Size2D<T>
 where
     T: Num,

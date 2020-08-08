@@ -1,17 +1,27 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 
 mod point;
 mod rect;
 mod size;
+mod vector;
 
 pub(crate) use point::*;
 pub(crate) use rect::*;
 pub(crate) use size::*;
+pub(crate) use vector::*;
 
 pub(crate) trait Num:
-    Clone + Copy + Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + PartialEq + PartialOrd
+    Clone
+    + Copy
+    + Add<Output = Self>
+    + AddAssign
+    + Sub<Output = Self>
+    + SubAssign
+    + Mul<Output = Self>
+    + PartialEq
+    + PartialOrd
 {
 }
 

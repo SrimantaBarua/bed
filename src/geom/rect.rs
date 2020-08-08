@@ -2,6 +2,7 @@
 
 use super::{Num, Point2D, Size2D};
 
+#[derive(Debug)]
 pub(crate) struct Rect<T>
 where
     T: Num,
