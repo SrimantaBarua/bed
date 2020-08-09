@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::ptr::{null, null_mut};
 use std::rc::Rc;
@@ -19,28 +20,21 @@ use x11::keysym::{
     XK_Y, XK_Z,
 };
 use x11::xlib::{
-    ButtonPress, ButtonPressMask, ButtonRelease, ButtonReleaseMask, Display, KeyPress,
-    KeyPressMask, KeyRelease, KeyReleaseMask, KeymapNotify, KeymapStateMask, MotionNotify,
-    PointerMotionMask, Screen, XBlackPixel, XClearWindow, XCloseDisplay, XCreateSimpleWindow,
-    XDefaultScreen, XDefaultScreenOfDisplay, XDestroyWindow, XLookupString, XMapRaised, XNextEvent,
-    XOpenDisplay, XPending, XRefreshKeyboardMapping, XRootWindowOfScreen, XSelectInput,
-    XWhitePixel,
+    ButtonPress, ButtonPressMask, ButtonRelease, ButtonReleaseMask, Display, Expose, ExposureMask,
+    KeyPress, KeyPressMask, KeyRelease, KeyReleaseMask, KeymapNotify, KeymapStateMask,
+    MotionNotify, PointerMotionMask, XBlackPixel, XClearWindow, XCloseDisplay, XCreateSimpleWindow,
+    XDefaultScreen, XDefaultScreenOfDisplay, XDestroyWindow, XGetWindowAttributes, XLookupString,
+    XMapRaised, XNextEvent, XOpenDisplay, XPending, XRefreshKeyboardMapping, XRootWindowOfScreen,
+    XSelectInput, XStoreName, XWhitePixel,
 };
 
-use crate::geom::{point2, vec2, Size2D};
+use crate::geom::{point2, size2, vec2, Size2D};
 
 use super::{ElemState, Event, Key, Modifers, MouseButton};
 
 // Wrapper around X window
 pub(crate) struct Window {
     shared: Rc<SharedState>,
-    window: u64,
-}
-
-impl Drop for Window {
-    fn drop(&mut self) {
-        unsafe { XDestroyWindow(self.shared.display, self.window) };
-    }
 }
 
 // Wrapper around X server connection
@@ -49,48 +43,53 @@ pub(crate) struct EventLoop {
 }
 
 impl EventLoop {
-    pub(crate) fn with_window(size: Size2D<u32>) -> (EventLoop, Window) {
+    pub(crate) fn with_window(size: Size2D<u32>, name: &str) -> (EventLoop, Window) {
         unsafe {
             // Open the X display
             let display = XOpenDisplay(null());
             assert!(!display.is_null(), "ERROR: Failed to open X display");
             let screen = XDefaultScreenOfDisplay(display);
             let screen_id = XDefaultScreen(display);
-            let shared = Rc::new(SharedState { display });
-
-            let event_loop = EventLoop {
-                shared: shared.clone(),
-            };
 
             // Open the window
             let window = XCreateSimpleWindow(
-                shared.display,
+                display,
                 XRootWindowOfScreen(screen),
                 0,
                 0,
                 size.width,
                 size.height,
                 1,
-                XBlackPixel(shared.display, screen_id),
-                XWhitePixel(shared.display, screen_id),
+                XBlackPixel(display, screen_id),
+                XWhitePixel(display, screen_id),
             );
             XSelectInput(
-                shared.display,
+                display,
                 window,
                 ButtonPressMask
                     | ButtonReleaseMask
+                    | ExposureMask
                     | KeyPressMask
                     | KeyReleaseMask
                     | KeymapStateMask
                     | PointerMotionMask,
             );
 
-            // Show the window
-            XClearWindow(shared.display, window);
-            XMapRaised(shared.display, window);
-            let window = Window { shared, window };
+            // Name the window
+            let cstr = CString::new(name).unwrap();
+            XStoreName(display, window, cstr.as_ptr());
 
-            (event_loop, window)
+            // Show the window
+            XClearWindow(display, window);
+            XMapRaised(display, window);
+
+            let shared = Rc::new(SharedState { display, window });
+            (
+                EventLoop {
+                    shared: shared.clone(),
+                },
+                Window { shared },
+            )
         }
     }
 
@@ -106,41 +105,13 @@ impl EventLoop {
 
         unsafe {
             let mut ev = MaybeUninit::uninit();
+            let mut attribs = MaybeUninit::uninit();
+
             loop {
                 while XPending(self.shared.display) > 0 {
                     XNextEvent(self.shared.display, ev.as_mut_ptr());
-                    let mut ev = ev.assume_init();
+                    let ev = &mut ev.assume_init();
                     match ev.type_ {
-                        KeymapNotify => {
-                            XRefreshKeyboardMapping(&mut ev.mapping);
-                        }
-                        KeyPress | KeyRelease => {
-                            let state = if ev.type_ == KeyPress {
-                                ElemState::Pressed
-                            } else {
-                                ElemState::Released
-                            };
-                            let len = XLookupString(
-                                &mut ev.key,
-                                str_buf.as_mut_ptr() as _,
-                                str_buf.len() as _,
-                                &mut keysym,
-                                null_mut(),
-                            );
-                            if let Some(key) = keysym_map(
-                                keysym,
-                                ev.type_ == KeyPress,
-                                &mut modifers,
-                                &mut callback,
-                            ) {
-                                callback(Event::Key { key, state })
-                            }
-                            if let Ok(s) = str::from_utf8(&str_buf[..len as usize]) {
-                                for ch in s.chars().filter(|ch| !ch.is_ascii_control()) {
-                                    callback(Event::Char { ch, state })
-                                }
-                            }
-                        }
                         ButtonPress => match ev.button.button {
                             1 => callback(Event::MouseButton {
                                 button: MouseButton::Left,
@@ -173,6 +144,45 @@ impl EventLoop {
                             }),
                             _ => {}
                         },
+                        Expose => {
+                            XGetWindowAttributes(
+                                self.shared.display,
+                                self.shared.window,
+                                attribs.as_mut_ptr(),
+                            );
+                            let attribs = &attribs.assume_init();
+                            callback(Event::Resized(size2(attribs.width, attribs.height).cast()));
+                        }
+                        KeymapNotify => {
+                            XRefreshKeyboardMapping(&mut ev.mapping);
+                        }
+                        KeyPress | KeyRelease => {
+                            let state = if ev.type_ == KeyPress {
+                                ElemState::Pressed
+                            } else {
+                                ElemState::Released
+                            };
+                            let len = XLookupString(
+                                &mut ev.key,
+                                str_buf.as_mut_ptr() as _,
+                                str_buf.len() as _,
+                                &mut keysym,
+                                null_mut(),
+                            );
+                            if let Some(key) = keysym_map(
+                                keysym,
+                                ev.type_ == KeyPress,
+                                &mut modifers,
+                                &mut callback,
+                            ) {
+                                callback(Event::Key { key, state })
+                            }
+                            if let Ok(s) = str::from_utf8(&str_buf[..len as usize]) {
+                                for ch in s.chars().filter(|ch| !ch.is_ascii_control()) {
+                                    callback(Event::Char { ch, state })
+                                }
+                            }
+                        }
                         MotionNotify => callback(Event::MouseMotion(point2(
                             ev.motion.x as f64,
                             ev.motion.y as f64,
@@ -205,11 +215,15 @@ where
 
 struct SharedState {
     display: *mut Display,
+    window: u64,
 }
 
 impl Drop for SharedState {
     fn drop(&mut self) {
-        unsafe { XCloseDisplay(self.display) };
+        unsafe {
+            XDestroyWindow(self.display, self.window);
+            XCloseDisplay(self.display);
+        };
     }
 }
 

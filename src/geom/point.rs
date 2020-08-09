@@ -2,7 +2,7 @@
 
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
-use super::{vec2, Num, Vector2D};
+use super::{vec2, Num, NumCast, Vector2D};
 
 #[derive(Debug)]
 pub(crate) struct Point2D<T>
@@ -23,6 +23,14 @@ where
 
     pub(crate) fn to_vec2(self) -> Vector2D<T> {
         vec2(self.x, self.y)
+    }
+
+    pub(crate) fn cast<U>(self) -> Point2D<U>
+    where
+        T: NumCast<U>,
+        U: Num,
+    {
+        point2(self.x.cast(), self.y.cast())
     }
 }
 

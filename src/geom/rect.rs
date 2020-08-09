@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use super::{Num, Point2D, Size2D};
+use super::{Num, NumCast, Point2D, Size2D};
 
 #[derive(Debug)]
 pub(crate) struct Rect<T>
@@ -21,6 +21,14 @@ where
 
     pub(crate) fn area(&self) -> T {
         self.size.width * self.size.height
+    }
+
+    pub(crate) fn cast<U>(self) -> Rect<U>
+    where
+        T: NumCast<U>,
+        U: Num,
+    {
+        rect(self.origin.cast(), self.size.cast())
     }
 }
 
