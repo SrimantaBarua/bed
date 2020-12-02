@@ -8,7 +8,7 @@ edition = "2018"
 bitflags = "1.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-x11 = { version = "2.18", features = [ "xlib" ] }
+x11 = { version = "2.18", features = [ "xlib", "xinput" ] }
 
 [profile.release]
 opt-level = 3

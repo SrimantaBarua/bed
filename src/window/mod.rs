@@ -99,7 +99,7 @@ pub(crate) enum MouseButton {
 
 // State of modifier keys
 bitflags! {
-    pub(crate) struct Modifers : u8 {
+    pub(crate) struct Modifiers : u8 {
         const SHIFT = 1;
         const CTRL  = 2;
         const ALT   = 4;
@@ -121,7 +121,7 @@ pub(crate) enum Event {
         button: MouseButton,
         state: ElemState,
     },
-    Modifiers(Modifers),
+    Modifiers(Modifiers),
     MouseMotion(Point2D<f64>),
     Resized(Size2D<u32>),
     Scroll(Vector2D<f64>),
@@ -129,7 +129,7 @@ pub(crate) enum Event {
 }
 
 #[cfg(target_os = "linux")]
-mod linux_x11;
+mod x11;
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux_x11::*;
+pub(crate) use self::x11::*;
