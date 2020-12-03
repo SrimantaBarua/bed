@@ -7,6 +7,7 @@ use euclid::{vec2, Point2D, Rect, Vector2D};
 use crate::buffer::{BufferHandle, BufferViewId, CursorStyle};
 use crate::common::PixelSize;
 use crate::painter::Painter;
+use crate::TARGET_DELTA;
 
 struct ViewInner {
     buf_handle: BufferHandle,
@@ -22,8 +23,7 @@ pub(crate) struct TextView {
 impl TextView {
     pub(crate) fn scroll(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
         // Make scrolling feel better
-        let target = Duration::from_nanos(1_000_000_000 / 60);
-        let t = duration.as_secs_f32() / target.as_secs_f32();
+        let t = duration.as_secs_f32() / TARGET_DELTA.as_secs_f32();
         self.scroll_vel += acc * t;
         let dist = self.scroll_vel * 5.0;
         self.scroll_vel /= 4.0;

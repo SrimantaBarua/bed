@@ -21,6 +21,8 @@ mod window;
 
 use common::PixelSize;
 
+static TARGET_DELTA: time::Duration = time::Duration::from_nanos(1_000_000_000 / 60);
+
 struct Bed {
     buffer_state: buffer::BufferBedHandle,
     buffer_mgr: buffer::BufferMgr,
@@ -41,11 +43,11 @@ impl Bed {
         let painter = painter::Painter::new(window_size.cast());
 
         let text_font = font_core.find("monospace").expect("Failed to find font");
-        let text_size = style::TextSize(12).scale(scale_factor);
+        let text_size = style::TextSize(10).scale(scale_factor);
         let buffer_state = buffer::BufferBedHandle::new(text_font, text_size);
         let mut buffer_mgr = buffer::BufferMgr::new(buffer_state.clone());
 
-        let first_buffer = buffer_mgr.read_file("src/main.rs").unwrap();
+        let first_buffer = buffer_mgr.read_file("src/buffer/view.rs").unwrap();
         let first_view_id = buffer_mgr.next_view_id();
         let text_tree = textview::TextTree::new(
             Rect::new(point2(0.0, 0.0), window.size()),
@@ -134,7 +136,6 @@ fn main() {
 
     // random_text_here = "Hindi:उनका एक समय में बड़ा नाम था"
 
-    let target_delta = time::Duration::from_nanos(1_000_000_000 / 60);
     let mut is_fps_boundary = true;
     let mut last_duration = time::Duration::from_secs(1);
 
@@ -144,7 +145,7 @@ fn main() {
             Event::NewEvents(cause) => match cause {
                 StartCause::ResumeTimeReached { start, .. } => {
                     let now = time::Instant::now();
-                    *control_flow = ControlFlow::WaitUntil(now + target_delta);
+                    *control_flow = ControlFlow::WaitUntil(now + TARGET_DELTA);
                     is_fps_boundary = true;
                     last_duration = now - start;
                 }
@@ -156,7 +157,7 @@ fn main() {
                     is_fps_boundary = false;
                 }
                 StartCause::Init => {
-                    *control_flow = ControlFlow::WaitUntil(time::Instant::now() + target_delta);
+                    *control_flow = ControlFlow::WaitUntil(time::Instant::now() + TARGET_DELTA);
                     is_fps_boundary = true;
                 }
                 _ => unreachable!(),

@@ -42,24 +42,22 @@ impl InputState {
     }
 
     pub(crate) fn add_scroll_amount(&mut self, delta: MouseScrollDelta) {
-        let scroll = match delta {
+        match delta {
             MouseScrollDelta::LineDelta(x, y) => {
-                if self.modifiers.shift() {
-                    vec2(-y, x)
+                self.scroll_amount += if self.modifiers.shift() {
+                    vec2(-y, x) * 10.0
                 } else {
-                    vec2(x, -y)
-                }
+                    vec2(x, -y) * 10.0
+                };
             }
-            MouseScrollDelta::PixelDelta(log) => {
-                let phys: PhysicalPosition<f64> = log.to_physical(self.bed_handle.scale_factor());
-                if self.modifiers.shift() {
-                    vec2(phys.x, -phys.y).cast()
+            MouseScrollDelta::PixelDelta(pp) => {
+                self.scroll_amount += if self.modifiers.shift() {
+                    vec2(-pp.y, pp.x).cast()
                 } else {
-                    vec2(-phys.y, phys.x).cast()
-                }
+                    vec2(pp.x, -pp.y).cast()
+                };
             }
-        };
-        self.scroll_amount += scroll;
+        }
     }
 
     pub(crate) fn update_modifiers(&mut self, m: ModifiersState) {
@@ -68,12 +66,14 @@ impl InputState {
 
     pub(crate) fn flush_events(&mut self, duration: Duration) {
         // Scroll
-        let scroll_amount = vec2(
-            20.0 * self.scroll_amount.x * self.scroll_amount.x.abs(),
-            20.0 * self.scroll_amount.y * self.scroll_amount.y.abs(),
-        );
-        self.bed_handle
-            .scroll_views_with_active_acc(scroll_amount, duration);
+        let mut acc = self.scroll_amount;
+        if acc.x != 0.0 {
+            acc.x *= acc.x.abs().sqrt()
+        }
+        if acc.y != 0.0 {
+            acc.y *= acc.y.abs().sqrt()
+        }
+        self.bed_handle.scroll_views_with_active_acc(acc, duration);
         self.scroll_amount = vec2(0.0, 0.0);
     }
 
@@ -156,7 +156,11 @@ impl InputState {
 }
 
 impl BedHandle {
-    fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
+    fn scroll_views_with_active_acc(
+        &mut self,
+        mut acc: Vector2D<f32, PixelSize>,
+        duration: Duration,
+    ) {
         let inner = &mut *self.0.borrow_mut();
         inner.text_tree.scroll_views_with_active_acc(acc, duration)
     }
