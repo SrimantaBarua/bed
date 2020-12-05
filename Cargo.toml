@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.2"
+rype = { path = "rype" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11 = { version = "2.18", features = [ "xlib", "xinput" ] }

@@ -5,6 +5,7 @@ name = "bed"
 version = "0.0.1"
 dependencies = [
  "bitflags",
+ "rype",
  "x11",
 ]
 
@@ -25,6 +26,10 @@ name = "pkg-config"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d36492546b6af1463394d46f0c834346f31548646f6ba10849802c9c9a27ac33"
+
+[[package]]
+name = "rype"
+version = "0.0.1"
 
 [[package]]
 name = "x11"
