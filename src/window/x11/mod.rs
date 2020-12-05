@@ -1,8 +1,11 @@
 use std::rc::Rc;
 use std::{thread, time};
 
+use x11::xinput2::{XI_DeviceChanged, XI_Motion};
+use x11::xlib::{XFreeEventData, XGetEventData};
+
 use super::{ElemState, Event, Modifiers, MouseButton};
-use crate::geom::{point2, vec2, Size2D};
+use crate::geom::{point2, vec2, Point2D, Size2D};
 
 mod wrapper;
 pub(crate) use wrapper::Window;
@@ -10,19 +13,37 @@ pub(crate) use wrapper::Window;
 // Wrapper around X server connection
 pub(crate) struct WindowManager {
     display: Rc<wrapper::Display>,
+    xinput2: wrapper::Input,
+    scroll_info: wrapper::ScrollDeviceInfo,
+    root_cursor: Point2D<f64>,
 }
 
 impl WindowManager {
     pub(crate) fn connect() -> WindowManager {
         let display = Rc::new(wrapper::Display::open().expect("failed to open X display"));
-        WindowManager { display }
+        let root_cursor = display.get_root_cursor();
+        let xinput2 = wrapper::Input::open(display.clone());
+        let scroll_info = xinput2
+            .find_scroll_devinfo()
+            .expect("failed to find scroll device");
+        eprintln!("Scroll Info: {:?}", scroll_info);
+        WindowManager {
+            display,
+            xinput2,
+            scroll_info,
+            root_cursor,
+        }
     }
 
     pub(crate) fn new_window(&mut self, size: Size2D<u32>, name: &str) -> Window {
-        Window::create(self.display.clone(), size, name)
+        let window = Window::create(self.display.clone(), size, name);
+        self.xinput2
+            .register_scroll_events(&window, &self.scroll_info);
+        window
     }
 
-    pub(crate) fn run<F>(self, target_delta: time::Duration, mut callback: F)
+    #[allow(non_upper_case_globals)]
+    pub(crate) fn run<F>(mut self, target_delta: time::Duration, mut callback: F)
     where
         F: FnMut(Event),
     {
@@ -46,11 +67,7 @@ impl WindowManager {
                             button: MouseButton::Right,
                             state: ElemState::Pressed,
                         }),
-                        4 => callback(Event::Scroll(vec2(0.0, -1.0))),
-                        5 => callback(Event::Scroll(vec2(0.0, 1.0))),
-                        6 => callback(Event::Scroll(vec2(-1.0, 0.0))),
-                        7 => callback(Event::Scroll(vec2(1.0, 0.0))),
-                        _ => unimplemented!(),
+                        _ => {}
                     },
                     wrapper::Event::ButtonRelease(bev) => match bev.button {
                         1 => callback(Event::MouseButton {
@@ -74,8 +91,23 @@ impl WindowManager {
                     wrapper::Event::KeyPress(mut kev) | wrapper::Event::KeyRelease(mut kev) => {
                         wrapper::handle_key_event(&mut kev, &mut modifiers, &mut callback);
                     }
-                    wrapper::Event::MotionNotify(mev) => {
-                        callback(Event::MouseMotion(point2(mev.x, mev.y).cast()));
+                    wrapper::Event::Generic(mut gev) => {
+                        unsafe { XGetEventData(self.display.raw, &mut gev) };
+
+                        if gev.extension == self.xinput2.major_opcode {
+                            let ev = wrapper::DeviceEvent::from_raw(gev.data as _);
+                            match gev.evtype {
+                                XI_Motion => ev.scroll_event(
+                                    &mut self.scroll_info,
+                                    &mut self.root_cursor,
+                                    &mut callback,
+                                ),
+                                XI_DeviceChanged => eprintln!("XI_DeviceChanged"),
+                                _ => unimplemented!(),
+                            }
+                        }
+
+                        unsafe { XFreeEventData(self.display.raw, &mut gev) };
                     }
                 }
             }

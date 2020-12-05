@@ -5,23 +5,28 @@ use std::mem::MaybeUninit;
 use std::ops::Drop;
 use std::ptr::{null, null_mut};
 use std::rc::Rc;
-use std::str;
+use std::{slice, str};
 
+use x11::xinput2::{
+    XIAllMasterDevices, XIDeviceEvent, XIEventMask, XIFreeDeviceInfo, XIMaskIsSet, XIQueryDevice,
+    XIQueryVersion, XIScrollClass, XIScrollClassInfo, XIScrollTypeHorizontal, XIScrollTypeVertical,
+    XISelectEvents, XISetMask, XIValuatorClass, XIValuatorClassInfo, XI_DeviceChanged, XI_Motion,
+};
 use x11::xlib::{
-    ButtonPress, ButtonPressMask, ButtonRelease, ButtonReleaseMask, Expose, ExposureMask, KeyPress,
-    KeyPressMask, KeyRelease, KeyReleaseMask, MotionNotify, PointerMotionMask, Screen, XBlackPixel,
-    XButtonEvent, XClearWindow, XCloseDisplay, XCreateSimpleWindow, XDefaultScreen,
-    XDefaultScreenOfDisplay, XDestroyWindow, XEvent, XExposeEvent, XFlush, XGetWindowAttributes,
-    XKeyEvent, XLookupString, XMapRaised, XMotionEvent, XNextEvent, XOpenDisplay, XPending,
-    XRootWindowOfScreen, XSelectInput, XStoreName, XWhitePixel,
+    BadRequest, ButtonPress, ButtonPressMask, ButtonRelease, ButtonReleaseMask, Expose,
+    ExposureMask, GenericEvent, KeyPress, KeyPressMask, KeyRelease, KeyReleaseMask, Screen,
+    XBlackPixel, XButtonEvent, XClearWindow, XCloseDisplay, XCreateSimpleWindow, XDefaultScreen,
+    XDefaultScreenOfDisplay, XDestroyWindow, XEvent, XExposeEvent, XFlush, XGenericEventCookie,
+    XGetWindowAttributes, XKeyEvent, XLookupString, XMapRaised, XNextEvent, XOpenDisplay, XPending,
+    XQueryExtension, XQueryPointer, XRootWindowOfScreen, XSelectInput, XStoreName, XWhitePixel,
 };
 
-use crate::geom::{size2, Size2D};
+use crate::geom::{point2, size2, vec2, Point2D, Size2D};
 use crate::window::{ElemState, Event as BedEvent, Key, Modifiers};
 
 // Wrapper around X display
 pub(super) struct Display {
-    raw: *mut x11::xlib::Display,
+    pub(super) raw: *mut x11::xlib::Display,
 }
 
 impl Display {
@@ -49,6 +54,26 @@ impl Display {
         }
     }
 
+    // Get cursor position relative to root window
+    pub(super) fn get_root_cursor(&self) -> Point2D<f64> {
+        let (mut root_x, mut root_y, mut win_x, mut win_y, mut root, mut child, mut mask) =
+            (0, 0, 0, 0, 0, 0, 0);
+        unsafe {
+            XQueryPointer(
+                self.raw,
+                self.root_window(),
+                &mut root,
+                &mut child,
+                &mut root_x,
+                &mut root_y,
+                &mut win_x,
+                &mut win_y,
+                &mut mask,
+            )
+        };
+        point2(root_x, root_y).cast()
+    }
+
     // Get default screen for X display
     unsafe fn default_screen(&self) -> *mut Screen {
         XDefaultScreenOfDisplay(self.raw)
@@ -57,6 +82,11 @@ impl Display {
     // Get default screen number of X display
     unsafe fn default_screen_number(&self) -> i32 {
         XDefaultScreen(self.raw)
+    }
+
+    // Get root window
+    unsafe fn root_window(&self) -> u64 {
+        XRootWindowOfScreen(self.default_screen())
     }
 }
 
@@ -111,7 +141,7 @@ impl Window {
     unsafe fn create_window(display: &Display, size: Size2D<u32>) -> u64 {
         XCreateSimpleWindow(
             display.raw,
-            XRootWindowOfScreen(display.default_screen()),
+            display.root_window(),
             0,
             0,
             size.width,
@@ -127,12 +157,7 @@ impl Window {
         XSelectInput(
             self.display.raw,
             self.raw,
-            ButtonPressMask
-                | ButtonReleaseMask
-                | ExposureMask
-                | KeyPressMask
-                | KeyReleaseMask
-                | PointerMotionMask,
+            ButtonPressMask | ButtonReleaseMask | ExposureMask | KeyPressMask | KeyReleaseMask,
         );
     }
 
@@ -156,6 +181,170 @@ impl Drop for Window {
     }
 }
 
+// Information about scroll device
+#[derive(Debug)]
+pub(super) struct ScrollDeviceInfo {
+    pub(super) device_id: i32,
+    pub(super) vertical_valuator: i32,
+    pub(super) vertical_resolution: i32,
+    pub(super) vertical_increment: f64,
+    pub(super) vertical_min: f64,
+    pub(super) vertical_max: f64,
+    pub(super) vertical_value: f64,
+    pub(super) vertical_mode: i32,
+    pub(super) horizontal_valuator: i32,
+    pub(super) horizontal_resolution: i32,
+    pub(super) horizontal_increment: f64,
+    pub(super) horizontal_min: f64,
+    pub(super) horizontal_max: f64,
+    pub(super) horizontal_value: f64,
+    pub(super) horizontal_mode: i32,
+}
+
+// Wrapper around XInput2 extension
+pub(super) struct Input {
+    display: Rc<Display>,
+    pub(super) major_opcode: i32,
+    //first_event: i32,
+    //first_error: i32,
+    //major: i32,
+    //minor: i32,
+}
+
+impl Input {
+    pub(super) fn open(display: Rc<Display>) -> Input {
+        let (mut op, mut ev, mut err, mut major, mut minor) = (0, 0, 0, 2, 1);
+        unsafe {
+            if XQueryExtension(
+                display.raw,
+                b"XInputExtension\0".as_ptr() as _,
+                &mut op,
+                &mut ev,
+                &mut err,
+            ) == 0
+            {
+                panic!("XInput2 extension not supported");
+            }
+            if XIQueryVersion(display.raw, &mut major, &mut minor) == BadRequest as i32 {
+                panic!(
+                    "XInput2 not supported. Server only supports v{}.{}",
+                    major, minor
+                );
+            }
+        }
+        Input {
+            display,
+            major_opcode: op,
+            //first_event: ev,
+            //first_error: err,
+            //major,
+            //minor,
+        }
+    }
+
+    pub(super) fn register_scroll_events(
+        &mut self,
+        window: &Window,
+        scroll_info: &ScrollDeviceInfo,
+    ) {
+        let mut mask = [0];
+        unsafe {
+            XISetMask(&mut mask, XI_Motion);
+            XISetMask(&mut mask, XI_DeviceChanged);
+            let mut event_mask = XIEventMask {
+                deviceid: scroll_info.device_id,
+                mask_len: 1,
+                mask: mask.as_mut_ptr(),
+            };
+            XISelectEvents(self.display.raw, window.raw, &mut event_mask, 1);
+        }
+    }
+
+    #[allow(non_upper_case_globals)]
+    pub(super) fn find_scroll_devinfo(&self) -> Option<ScrollDeviceInfo> {
+        let mut ndevs = 0;
+
+        unsafe {
+            let devinfo_ptr = XIQueryDevice(self.display.raw, XIAllMasterDevices, &mut ndevs);
+            let devinfo = slice::from_raw_parts(devinfo_ptr, ndevs as usize);
+
+            for dev in devinfo {
+                let (mut vscroll, mut vval, mut hscroll, mut hval) = (None, None, None, None);
+
+                for j in 0..dev.num_classes as isize {
+                    let ptr = *dev.classes.offset(j);
+                    let class = &*ptr;
+                    if class._type != XIScrollClass {
+                        continue;
+                    }
+
+                    let scroll = &*(ptr as *const XIScrollClassInfo);
+                    let mut valuator = None;
+
+                    // Find corresponding valuator
+                    for k in 0..dev.num_classes as isize {
+                        let ptr = *dev.classes.offset(k);
+                        let class = &*ptr;
+                        if class._type != XIValuatorClass {
+                            continue;
+                        }
+
+                        valuator = Some(&*(ptr as *const XIValuatorClassInfo));
+                        break;
+                    }
+                    if valuator.is_none() {
+                        continue;
+                    }
+
+                    match scroll.scroll_type {
+                        XIScrollTypeVertical => {
+                            vscroll = Some(*scroll);
+                            vval = Some(*valuator.unwrap());
+                        }
+                        XIScrollTypeHorizontal => {
+                            hscroll = Some(*scroll);
+                            hval = Some(*valuator.unwrap());
+                        }
+                        _ => unimplemented!(),
+                    }
+
+                    if vscroll.is_some() && vval.is_some() && hscroll.is_some() && hval.is_some() {
+                        let dev_id = dev.deviceid;
+                        let (vscroll, vval, hscroll, hval) = (
+                            vscroll.unwrap(),
+                            vval.unwrap(),
+                            hscroll.unwrap(),
+                            hval.unwrap(),
+                        );
+                        XIFreeDeviceInfo(devinfo_ptr);
+
+                        return Some(ScrollDeviceInfo {
+                            device_id: dev_id,
+                            vertical_valuator: vscroll.number,
+                            vertical_increment: vscroll.increment,
+                            vertical_resolution: vval.resolution,
+                            vertical_min: vval.min,
+                            vertical_max: vval.max,
+                            vertical_value: vval.value,
+                            vertical_mode: vval.mode,
+                            horizontal_valuator: hscroll.number,
+                            horizontal_increment: hscroll.increment,
+                            horizontal_resolution: hval.resolution,
+                            horizontal_min: hval.min,
+                            horizontal_max: hval.max,
+                            horizontal_value: hval.value,
+                            horizontal_mode: hval.mode,
+                        });
+                    }
+                }
+            }
+
+            XIFreeDeviceInfo(devinfo_ptr);
+        }
+        None
+    }
+}
+
 // Wrapper around X event
 pub(super) enum Event {
     ButtonPress(XButtonEvent),
@@ -163,7 +352,7 @@ pub(super) enum Event {
     Expose(XExposeEvent),
     KeyPress(XKeyEvent),
     KeyRelease(XKeyEvent),
-    MotionNotify(XMotionEvent),
+    Generic(XGenericEventCookie),
 }
 
 impl Event {
@@ -175,7 +364,7 @@ impl Event {
             Expose => Event::Expose(raw.expose),
             KeyPress => Event::KeyPress(raw.key),
             KeyRelease => Event::KeyRelease(raw.key),
-            MotionNotify => Event::MotionNotify(raw.motion),
+            GenericEvent => Event::Generic(raw.generic_event_cookie),
             _ => unimplemented!(),
         }
     }
@@ -326,6 +515,64 @@ pub(super) fn handle_key_event<F>(
     if let Ok(s) = str::from_utf8(&str_buf[..len as usize]) {
         for ch in s.chars().filter(|ch| !ch.is_ascii_control()) {
             callback(BedEvent::Char { ch, state });
+        }
+    }
+}
+
+// Wrapper around XIDeviceEvent
+pub(super) struct DeviceEvent {
+    raw: *const XIDeviceEvent,
+}
+
+impl DeviceEvent {
+    pub(super) fn from_raw(raw: *const XIDeviceEvent) -> DeviceEvent {
+        DeviceEvent { raw }
+    }
+
+    pub(super) fn scroll_event<F>(
+        &self,
+        scroll_info: &mut ScrollDeviceInfo,
+        cur_cursor: &mut Point2D<f64>,
+        callback: &mut F,
+    ) where
+        F: FnMut(BedEvent),
+    {
+        unsafe {
+            let data = &*self.raw;
+
+            let new_cursor = point2(data.root_x, data.root_y);
+            if new_cursor.x != cur_cursor.x || new_cursor.y != cur_cursor.y {
+                callback(BedEvent::MouseMotion(point2(data.event_x, data.event_y)));
+                *cur_cursor = new_cursor;
+            }
+
+            let mask_len = data.valuators.mask_len;
+            let mask = slice::from_raw_parts(data.valuators.mask, mask_len as usize);
+            let mut value = data.valuators.values;
+
+            for i in 0..mask_len {
+                if !XIMaskIsSet(mask, i) {
+                    continue;
+                }
+
+                if i == scroll_info.vertical_valuator {
+                    let mut delta = *value - scroll_info.vertical_value;
+                    delta /= scroll_info.vertical_increment;
+                    if delta != 0.0 {
+                        callback(BedEvent::Scroll(vec2(0.0, delta)));
+                    }
+                    scroll_info.vertical_value = *value;
+                } else if i == scroll_info.horizontal_valuator {
+                    let mut delta = *value - scroll_info.horizontal_value;
+                    delta /= scroll_info.horizontal_increment;
+                    if delta != 0.0 {
+                        callback(BedEvent::Scroll(vec2(delta, 0.0)));
+                    }
+                    scroll_info.horizontal_value = *value;
+                }
+
+                value = value.offset(1);
+            }
         }
     }
 }
