@@ -4,24 +4,24 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use super::{Num, NumCast};
 
-#[derive(Debug)]
-pub(crate) struct Vector2D<T>
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Vector2D<T>
 where
     T: Num,
 {
-    pub(crate) x: T,
-    pub(crate) y: T,
+    pub x: T,
+    pub y: T,
 }
 
 impl<T> Vector2D<T>
 where
     T: Num,
 {
-    pub(crate) fn new(x: T, y: T) -> Vector2D<T> {
+    pub fn new(x: T, y: T) -> Vector2D<T> {
         Vector2D { x, y }
     }
 
-    pub(crate) fn cast<U>(self) -> Vector2D<U>
+    pub fn cast<U>(self) -> Vector2D<U>
     where
         T: NumCast<U>,
         U: Num,
@@ -30,7 +30,7 @@ where
     }
 }
 
-pub(crate) fn vec2<T>(x: T, y: T) -> Vector2D<T>
+pub fn vec2<T>(x: T, y: T) -> Vector2D<T>
 where
     T: Num,
 {

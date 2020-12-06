@@ -1,11 +1,11 @@
 use std::rc::Rc;
 use std::{thread, time};
 
+use geom::{point2, vec2, Point2D, Size2D};
 use x11::xinput2::{XI_DeviceChanged, XI_Motion};
 use x11::xlib::{XFreeEventData, XGetEventData};
 
 use super::{ElemState, Event, Modifiers, MouseButton};
-use crate::geom::{point2, vec2, Point2D, Size2D};
 
 mod wrapper;
 pub(crate) use wrapper::Window;

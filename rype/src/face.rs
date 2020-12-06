@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use super::error::*;
+use super::head::Head;
 use super::rcbuffer::RcBuf;
 use super::types::*;
 
@@ -11,6 +12,7 @@ pub struct Face {
     data: RcBuf,                 // Data for file
     face_offset: usize,          // Offset into file for this face
     tables: HashMap<Tag, RcBuf>, // Hashmap of tables keyed by tag
+    head: Head,                  // "head" table
 }
 
 impl Face {
@@ -34,10 +36,15 @@ impl Face {
             record_offset += sizes::TABLE_RECORD;
         }
 
+        let head = Tag::from_str("head")
+            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+            .and_then(|data| Head::load(data.clone()))?;
+
         Ok(Face {
             data,
             face_offset: offset,
             tables,
+            head,
         })
     }
 }

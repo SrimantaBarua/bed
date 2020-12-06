@@ -5,6 +5,7 @@ name = "bed"
 version = "0.0.1"
 dependencies = [
  "bitflags",
+ "geom",
  "rype",
  "x11",
 ]
@@ -14,6 +15,10 @@ name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+
+[[package]]
+name = "geom"
+version = "0.0.1"
 
 [[package]]
 name = "libc"
@@ -30,6 +35,10 @@ checksum = "d36492546b6af1463394d46f0c834346f31548646f6ba10849802c9c9a27ac33"
 [[package]]
 name = "rype"
 version = "0.0.1"
+dependencies = [
+ "bitflags",
+ "geom",
+]
 
 [[package]]
 name = "x11"

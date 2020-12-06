@@ -13,6 +13,15 @@ pub(crate) fn get_u16(b: &[u8], offset: usize) -> Result<u16> {
     }
 }
 
+/// Get big-endian i16
+pub(crate) fn get_i16(b: &[u8], offset: usize) -> Result<i16> {
+    if b.len() < offset + 2 {
+        Err(Error::Invalid)
+    } else {
+        Ok(((b[offset] as i16) << 8) | (b[offset + 1] as i16))
+    }
+}
+
 /// Get big-endian u32
 pub(crate) fn get_u32(b: &[u8], offset: usize) -> Result<u32> {
     if b.len() < offset + 4 {

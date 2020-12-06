@@ -2,24 +2,24 @@
 
 use super::{Num, NumCast};
 
-#[derive(Debug)]
-pub(crate) struct Size2D<T>
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Size2D<T>
 where
     T: Num,
 {
-    pub(crate) width: T,
-    pub(crate) height: T,
+    pub width: T,
+    pub height: T,
 }
 
 impl<T> Size2D<T>
 where
     T: Num,
 {
-    pub(crate) fn new(width: T, height: T) -> Size2D<T> {
+    pub fn new(width: T, height: T) -> Size2D<T> {
         Size2D { width, height }
     }
 
-    pub(crate) fn cast<U>(self) -> Size2D<U>
+    pub fn cast<U>(self) -> Size2D<U>
     where
         T: NumCast<U>,
         U: Num,
@@ -28,7 +28,7 @@ where
     }
 }
 
-pub(crate) fn size2<T>(width: T, height: T) -> Size2D<T>
+pub fn size2<T>(width: T, height: T) -> Size2D<T>
 where
     T: Num,
 {

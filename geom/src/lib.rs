@@ -2,17 +2,19 @@
 
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 
+mod bbox;
 mod point;
 mod rect;
 mod size;
 mod vector;
 
-pub(crate) use point::*;
-pub(crate) use rect::*;
-pub(crate) use size::*;
-pub(crate) use vector::*;
+pub use bbox::*;
+pub use point::*;
+pub use rect::*;
+pub use size::*;
+pub use vector::*;
 
-pub(crate) trait Num:
+pub trait Num:
     Clone
     + Copy
     + Add<Output = Self>
@@ -25,7 +27,7 @@ pub(crate) trait Num:
 {
 }
 
-pub(crate) trait NumCast<T>: Num {
+pub trait NumCast<T>: Num {
     fn cast(self) -> T;
 }
 

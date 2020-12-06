@@ -1,9 +1,7 @@
 [package]
-name = "rype"
+name = "geom"
 version = "0.0.1"
 authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-bitflags = "1.2"
-geom = { path = "../geom" }

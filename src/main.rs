@@ -5,7 +5,6 @@ use std::time;
 #[macro_use]
 extern crate bitflags;
 
-mod geom;
 mod window;
 
 // Central editor state

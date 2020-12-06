@@ -2,28 +2,28 @@
 
 use super::{Num, NumCast, Point2D, Size2D};
 
-#[derive(Debug)]
-pub(crate) struct Rect<T>
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rect<T>
 where
     T: Num,
 {
-    pub(crate) origin: Point2D<T>,
-    pub(crate) size: Size2D<T>,
+    pub origin: Point2D<T>,
+    pub size: Size2D<T>,
 }
 
 impl<T> Rect<T>
 where
     T: Num,
 {
-    pub(crate) fn new(origin: Point2D<T>, size: Size2D<T>) -> Rect<T> {
+    pub fn new(origin: Point2D<T>, size: Size2D<T>) -> Rect<T> {
         Rect { origin, size }
     }
 
-    pub(crate) fn area(&self) -> T {
+    pub fn area(&self) -> T {
         self.size.width * self.size.height
     }
 
-    pub(crate) fn cast<U>(self) -> Rect<U>
+    pub fn cast<U>(self) -> Rect<U>
     where
         T: NumCast<U>,
         U: Num,
@@ -32,7 +32,7 @@ where
     }
 }
 
-pub(crate) fn rect<T>(origin: Point2D<T>, size: Size2D<T>) -> Rect<T>
+pub fn rect<T>(origin: Point2D<T>, size: Size2D<T>) -> Rect<T>
 where
     T: Num,
 {

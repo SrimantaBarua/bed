@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::geom::{Point2D, Size2D, Vector2D};
+use geom::{Point2D, Size2D, Vector2D};
 
 // Whether the element (key, mouse button) was pressed or released
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

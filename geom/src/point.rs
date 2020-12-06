@@ -4,28 +4,28 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use super::{vec2, Num, NumCast, Vector2D};
 
-#[derive(Debug)]
-pub(crate) struct Point2D<T>
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Point2D<T>
 where
     T: Num,
 {
-    pub(crate) x: T,
-    pub(crate) y: T,
+    pub x: T,
+    pub y: T,
 }
 
 impl<T> Point2D<T>
 where
     T: Num,
 {
-    pub(crate) fn new(x: T, y: T) -> Point2D<T> {
+    pub fn new(x: T, y: T) -> Point2D<T> {
         Point2D { x, y }
     }
 
-    pub(crate) fn to_vec2(self) -> Vector2D<T> {
+    pub fn to_vec2(self) -> Vector2D<T> {
         vec2(self.x, self.y)
     }
 
-    pub(crate) fn cast<U>(self) -> Point2D<U>
+    pub fn cast<U>(self) -> Point2D<U>
     where
         T: NumCast<U>,
         U: Num,
@@ -34,7 +34,7 @@ where
     }
 }
 
-pub(crate) fn point2<T>(x: T, y: T) -> Point2D<T>
+pub fn point2<T>(x: T, y: T) -> Point2D<T>
 where
     T: Num,
 {

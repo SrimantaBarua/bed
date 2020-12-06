@@ -7,6 +7,7 @@ use std::ptr::{null, null_mut};
 use std::rc::Rc;
 use std::{slice, str};
 
+use geom::{point2, size2, vec2, Point2D, Size2D};
 use x11::xinput2::{
     XIAllMasterDevices, XIDeviceEvent, XIEventMask, XIFreeDeviceInfo, XIMaskIsSet, XIQueryDevice,
     XIQueryVersion, XIScrollClass, XIScrollClassInfo, XIScrollTypeHorizontal, XIScrollTypeVertical,
@@ -21,7 +22,6 @@ use x11::xlib::{
     XQueryExtension, XQueryPointer, XRootWindowOfScreen, XSelectInput, XStoreName, XWhitePixel,
 };
 
-use crate::geom::{point2, size2, vec2, Point2D, Size2D};
 use crate::window::{ElemState, Event as BedEvent, Key, Modifiers};
 
 // Wrapper around X display
