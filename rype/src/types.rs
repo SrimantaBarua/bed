@@ -4,6 +4,15 @@ use std::fmt;
 
 use crate::{Error, Result};
 
+/// Get big-endian u16
+pub(crate) fn get_u16(b: &[u8], offset: usize) -> Result<u16> {
+    if b.len() < offset + 2 {
+        Err(Error::Invalid)
+    } else {
+        Ok(((b[offset] as u16) << 8) | (b[offset + 1] as u16))
+    }
+}
+
 /// Get big-endian u32
 pub(crate) fn get_u32(b: &[u8], offset: usize) -> Result<u32> {
     if b.len() < offset + 4 {
