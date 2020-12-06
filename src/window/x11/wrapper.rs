@@ -531,48 +531,49 @@ impl DeviceEvent {
 
     pub(super) fn scroll_event<F>(
         &self,
-        scroll_info: &mut ScrollDeviceInfo,
+        info: &mut ScrollDeviceInfo,
         cur_cursor: &mut Point2D<f64>,
         callback: &mut F,
     ) where
         F: FnMut(BedEvent),
     {
-        unsafe {
-            let data = &*self.raw;
+        let mut scroll_amount = vec2(0.0, 0.0);
+        let data = unsafe { &*self.raw };
 
-            let new_cursor = point2(data.root_x, data.root_y);
-            if new_cursor.x != cur_cursor.x || new_cursor.y != cur_cursor.y {
-                callback(BedEvent::MouseMotion(point2(data.event_x, data.event_y)));
-                *cur_cursor = new_cursor;
+        let new_cursor = point2(data.root_x, data.root_y);
+        if new_cursor.x != cur_cursor.x || new_cursor.y != cur_cursor.y {
+            callback(BedEvent::MouseMotion(point2(data.event_x, data.event_y)));
+            *cur_cursor = new_cursor;
+        }
+
+        let mask_len = data.valuators.mask_len;
+        let mask = unsafe { slice::from_raw_parts(data.valuators.mask, mask_len as usize) };
+        let mut value_ptr = data.valuators.values;
+
+        for i in 0..mask_len {
+            if !XIMaskIsSet(mask, i) {
+                continue;
             }
 
-            let mask_len = data.valuators.mask_len;
-            let mask = slice::from_raw_parts(data.valuators.mask, mask_len as usize);
-            let mut value = data.valuators.values;
+            let value = unsafe {
+                let val = *value_ptr;
+                value_ptr = value_ptr.offset(1);
+                val
+            };
 
-            for i in 0..mask_len {
-                if !XIMaskIsSet(mask, i) {
-                    continue;
-                }
-
-                if i == scroll_info.vertical_valuator {
-                    let mut delta = *value - scroll_info.vertical_value;
-                    delta /= scroll_info.vertical_increment;
-                    if delta != 0.0 {
-                        callback(BedEvent::Scroll(vec2(0.0, delta)));
-                    }
-                    scroll_info.vertical_value = *value;
-                } else if i == scroll_info.horizontal_valuator {
-                    let mut delta = *value - scroll_info.horizontal_value;
-                    delta /= scroll_info.horizontal_increment;
-                    if delta != 0.0 {
-                        callback(BedEvent::Scroll(vec2(delta, 0.0)));
-                    }
-                    scroll_info.horizontal_value = *value;
-                }
-
-                value = value.offset(1);
+            if i == info.vertical_valuator {
+                let delta = (value - info.vertical_value) / info.vertical_increment;
+                scroll_amount.y += delta;
+                info.vertical_value = value;
+            } else if i == info.horizontal_valuator {
+                let delta = (value - info.horizontal_value) / info.horizontal_increment;
+                scroll_amount.x += delta;
+                info.horizontal_value = value;
             }
+        }
+
+        if scroll_amount.x != 0.0 || scroll_amount.y != 0.0 {
+            callback(BedEvent::Scroll(scroll_amount));
         }
     }
 }
