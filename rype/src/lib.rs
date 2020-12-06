@@ -7,6 +7,8 @@ mod error;
 mod face;
 mod font_collection;
 mod head;
+mod hhea;
+mod maxp;
 mod rcbuffer;
 mod types;
 

@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::{fmt, io, result};
+use std::{error, fmt, io, result};
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -30,3 +30,5 @@ impl fmt::Display for Error {
         }
     }
 }
+
+impl error::Error for Error {}

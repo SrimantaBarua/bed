@@ -1,9 +1,12 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::collections::HashMap;
+use std::fmt;
 
 use super::error::*;
 use super::head::Head;
+use super::hhea::Hhea;
+use super::maxp::Maxp;
 use super::rcbuffer::RcBuf;
 use super::types::*;
 
@@ -13,6 +16,8 @@ pub struct Face {
     face_offset: usize,          // Offset into file for this face
     tables: HashMap<Tag, RcBuf>, // Hashmap of tables keyed by tag
     head: Head,                  // "head" table
+    hhea: Hhea,                  // "hhea" table
+    maxp: Maxp,                  // "maxp" table
 }
 
 impl Face {
@@ -39,13 +44,32 @@ impl Face {
         let head = Tag::from_str("head")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
             .and_then(|data| Head::load(data.clone()))?;
+        let hhea = Tag::from_str("hhea")
+            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+            .and_then(|data| Hhea::load(data.clone()))?;
+        let maxp = Tag::from_str("maxp")
+            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+            .and_then(|data| Maxp::load(data.clone()))?;
 
         Ok(Face {
             data,
             face_offset: offset,
             tables,
             head,
+            hhea,
+            maxp,
         })
+    }
+}
+
+impl fmt::Debug for Face {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Face")
+            .field("head", &self.head)
+            .field("hhea", &self.hhea)
+            .field("maxp", &self.maxp)
+            .field("face_offset", &self.face_offset)
+            .finish()
     }
 }
 
