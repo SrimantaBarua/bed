@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use super::cmap::Cmap;
 use super::error::*;
 use super::head::Head;
 use super::hhea::Hhea;
@@ -20,6 +21,7 @@ pub struct Face {
     hhea: Hhea,
     maxp: Maxp,
     hmtx: Hmtx,
+    cmap: Cmap,
 }
 
 impl Face {
@@ -61,6 +63,9 @@ impl Face {
                     hhea.num_h_metrics as usize,
                 )
             })?;
+        let cmap = Tag::from_str("cmap")
+            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+            .and_then(|data| Cmap::load(data.clone()))?;
 
         Ok(Face {
             data,
@@ -70,6 +75,7 @@ impl Face {
             hhea,
             maxp,
             hmtx,
+            cmap,
         })
     }
 }
@@ -77,6 +83,14 @@ impl Face {
 impl fmt::Debug for Face {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Face")
+            .field(
+                "tables",
+                &self
+                    .tables
+                    .keys()
+                    .map(|k| format!("{}", k))
+                    .collect::<Vec<_>>(),
+            )
             .field("head", &self.head)
             .field("hhea", &self.hhea)
             .field("maxp", &self.maxp)

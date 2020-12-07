@@ -25,9 +25,7 @@ impl FontCollection {
                 face_offsets.push(get_u32(&data, offsets::FONT_OFFSETS + i * 4)?);
             }
             Ok(FontCollection { data, face_offsets })
-        } else if tag == Tag::from_str("OTTO")? {
-            unimplemented!("CCF fonts not supported yet");
-        } else if tag != Tag(consts::TRUETYPE) {
+        } else if tag != Tag(consts::TRUETYPE) && tag != Tag::from_str("OTTO")? {
             Err(Error::Invalid)
         } else {
             Ok(FontCollection {

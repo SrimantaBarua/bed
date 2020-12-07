@@ -13,6 +13,8 @@ pub enum Error {
     Invalid,
     /// Face index out of bounds
     FaceIndexOutOfBounds,
+    /// No suitable table found for cmap
+    CmapNoTable,
 }
 
 impl From<io::Error> for Error {
@@ -27,6 +29,7 @@ impl fmt::Display for Error {
             Error::Io(e) => writeln!(f, "IO error: {}", e),
             Error::Invalid => writeln!(f, "invalid font file"),
             Error::FaceIndexOutOfBounds => writeln!(f, "face index out of bounds"),
+            Error::CmapNoTable => writeln!(f, "no suitable cmap table found"),
         }
     }
 }

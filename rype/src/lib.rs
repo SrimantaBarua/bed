@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate bitflags;
 
+mod cmap;
 mod error;
 mod face;
 mod font_collection;
