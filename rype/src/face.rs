@@ -6,6 +6,7 @@ use std::fmt;
 use super::error::*;
 use super::head::Head;
 use super::hhea::Hhea;
+use super::hmtx::Hmtx;
 use super::maxp::Maxp;
 use super::rcbuffer::RcBuf;
 use super::types::*;
@@ -15,9 +16,10 @@ pub struct Face {
     data: RcBuf,                 // Data for file
     face_offset: usize,          // Offset into file for this face
     tables: HashMap<Tag, RcBuf>, // Hashmap of tables keyed by tag
-    head: Head,                  // "head" table
-    hhea: Hhea,                  // "hhea" table
-    maxp: Maxp,                  // "maxp" table
+    head: Head,
+    hhea: Hhea,
+    maxp: Maxp,
+    hmtx: Hmtx,
 }
 
 impl Face {
@@ -50,6 +52,15 @@ impl Face {
         let maxp = Tag::from_str("maxp")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
             .and_then(|data| Maxp::load(data.clone()))?;
+        let hmtx = Tag::from_str("hmtx")
+            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+            .and_then(|data| {
+                Hmtx::load(
+                    data.clone(),
+                    maxp.num_glyphs as usize,
+                    hhea.num_h_metrics as usize,
+                )
+            })?;
 
         Ok(Face {
             data,
@@ -58,6 +69,7 @@ impl Face {
             head,
             hhea,
             maxp,
+            hmtx,
         })
     }
 }
@@ -68,6 +80,7 @@ impl fmt::Debug for Face {
             .field("head", &self.head)
             .field("hhea", &self.hhea)
             .field("maxp", &self.maxp)
+            //.field("hmtx", &self.hmtx)
             .field("face_offset", &self.face_offset)
             .finish()
     }

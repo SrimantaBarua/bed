@@ -8,6 +8,7 @@ mod face;
 mod font_collection;
 mod head;
 mod hhea;
+mod hmtx;
 mod maxp;
 mod rcbuffer;
 mod types;
