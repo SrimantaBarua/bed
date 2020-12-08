@@ -5,6 +5,7 @@ use std::fmt;
 
 use super::cmap::Cmap;
 use super::error::*;
+use super::gasp::Gasp;
 use super::head::Head;
 use super::hhea::Hhea;
 use super::hmtx::Hmtx;
@@ -22,13 +23,14 @@ pub struct Face {
     maxp: Maxp,
     hmtx: Hmtx,
     cmap: Cmap,
+    face_type: FaceType,
 }
 
 impl Face {
     /// Initialize face structure
     pub(super) fn load(data: RcBuf, offset: usize) -> Result<Face> {
         let slice = data.as_ref();
-        //let sfnt_version = get_tag(slice, offset)?;
+        let sfnt_version = get_tag(slice, offset)?;
         let num_tables = get_u16(slice, offset + offsets::NUM_TABLES)? as usize;
         let mut record_offset = offset + offsets::TABLE_RECORDS;
         let mut tables = HashMap::new();
@@ -67,6 +69,18 @@ impl Face {
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
             .and_then(|data| Cmap::load(data.clone()))?;
 
+        let face_type = match sfnt_version {
+            Tag(0x00010000) => {
+                let gasp = Tag::from_str("gasp")
+                    .ok()
+                    .and_then(|t| tables.get(&t))
+                    .map(|d| Gasp::load(d.clone()).expect("failed to load gasp"));
+                FaceType::TTF { gasp }
+            }
+            Tag(0x4F54544F) => FaceType::CFF,
+            _ => return Err(Error::Invalid),
+        };
+
         Ok(Face {
             data,
             face_offset: offset,
@@ -76,6 +90,7 @@ impl Face {
             maxp,
             hmtx,
             cmap,
+            face_type,
         })
     }
 }
@@ -97,8 +112,15 @@ impl fmt::Debug for Face {
             .field("cmap", &self.cmap)
             //.field("hmtx", &self.hmtx)
             .field("face_offset", &self.face_offset)
+            .field("face_type", &self.face_type)
             .finish()
     }
+}
+
+#[derive(Debug)]
+enum FaceType {
+    TTF { gasp: Option<Gasp> },
+    CFF,
 }
 
 mod offsets {

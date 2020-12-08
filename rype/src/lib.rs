@@ -7,6 +7,7 @@ mod cmap;
 mod error;
 mod face;
 mod font_collection;
+mod gasp;
 mod head;
 mod hhea;
 mod hmtx;
