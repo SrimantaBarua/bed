@@ -6,6 +6,7 @@ extern crate bitflags;
 mod cmap;
 mod error;
 mod face;
+mod featurelist;
 mod font_collection;
 mod gasp;
 mod gsub;
