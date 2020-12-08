@@ -18,6 +18,6 @@ fn main() {
 fn try_main(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let fc = FontCollection::open(&args[1])?;
     let face = fc.get_face(0)?;
-    eprintln!("Face: {:?}", face);
+    eprintln!("Face: {:#?}", face);
     Ok(())
 }

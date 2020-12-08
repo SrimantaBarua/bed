@@ -2,7 +2,7 @@
 
 use std::alloc::{alloc, dealloc, Layout};
 use std::mem::{align_of, size_of};
-use std::ops::{Deref, Range};
+use std::ops::{Bound, Deref, RangeBounds};
 use std::ptr::copy_nonoverlapping;
 use std::{fmt, slice};
 
@@ -82,12 +82,22 @@ impl RcBuf {
     }
 
     /// Get a slice into this buffer - adds to the refcound. Panics if index out of bounds
-    pub(crate) fn slice(&self, range: Range<usize>) -> RcBuf {
-        assert!(!range.is_empty(), "empty range provided");
-        assert!(range.end <= self.size);
+    pub(crate) fn slice<T: RangeBounds<usize>>(&self, range: T) -> RcBuf {
+        let start = match range.start_bound() {
+            Bound::Unbounded => 0,
+            Bound::Included(n) => *n,
+            Bound::Excluded(n) => *n + 1,
+        };
+        let end = match range.end_bound() {
+            Bound::Unbounded => self.size,
+            Bound::Included(n) => *n + 1,
+            Bound::Excluded(n) => *n,
+        };
+        assert!(end > start, "empty range provided");
+        assert!(end <= self.size, "range index out of bounds");
         let mut ret = self.clone();
-        ret.start = range.start;
-        ret.size = range.end - range.start;
+        ret.start = self.start + start;
+        ret.size = end - start;
         ret
     }
 

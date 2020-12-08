@@ -94,6 +94,7 @@ impl fmt::Debug for Face {
             .field("head", &self.head)
             .field("hhea", &self.hhea)
             .field("maxp", &self.maxp)
+            .field("cmap", &self.cmap)
             //.field("hmtx", &self.hmtx)
             .field("face_offset", &self.face_offset)
             .finish()
