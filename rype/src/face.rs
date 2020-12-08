@@ -6,6 +6,7 @@ use std::fmt;
 use super::cmap::Cmap;
 use super::error::*;
 use super::gasp::Gasp;
+use super::gsub::Gsub;
 use super::head::Head;
 use super::hhea::Hhea;
 use super::hmtx::Hmtx;
@@ -24,6 +25,7 @@ pub struct Face {
     hmtx: Hmtx,
     cmap: Cmap,
     face_type: FaceType,
+    gsub: Option<Gsub>,
 }
 
 impl Face {
@@ -81,6 +83,11 @@ impl Face {
             _ => return Err(Error::Invalid),
         };
 
+        let gsub = Tag::from_str("GSUB")
+            .ok()
+            .and_then(|t| tables.get(&t))
+            .map(|d| Gsub::load(d.clone()).expect("failed to load GSUB"));
+
         Ok(Face {
             data,
             face_offset: offset,
@@ -91,6 +98,7 @@ impl Face {
             hmtx,
             cmap,
             face_type,
+            gsub,
         })
     }
 }
@@ -103,7 +111,7 @@ impl fmt::Debug for Face {
                 &self
                     .tables
                     .keys()
-                    .map(|k| format!("{}", k))
+                    .map(|k| format!("{:?}", k))
                     .collect::<Vec<_>>(),
             )
             .field("head", &self.head)
@@ -113,6 +121,7 @@ impl fmt::Debug for Face {
             //.field("hmtx", &self.hmtx)
             .field("face_offset", &self.face_offset)
             .field("face_type", &self.face_type)
+            .field("GSUB", &self.gsub)
             .finish()
     }
 }

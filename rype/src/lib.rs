@@ -8,11 +8,13 @@ mod error;
 mod face;
 mod font_collection;
 mod gasp;
+mod gsub;
 mod head;
 mod hhea;
 mod hmtx;
 mod maxp;
 mod rcbuffer;
+mod scriptlist;
 mod types;
 
 pub use error::*;

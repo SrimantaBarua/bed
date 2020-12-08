@@ -64,7 +64,7 @@ impl Tag {
     }
 }
 
-impl fmt::Display for Tag {
+impl fmt::Debug for Tag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let a = (self.0 >> 24) as u8 as char;
         let b = ((self.0 >> 16) & 0xff) as u8 as char;

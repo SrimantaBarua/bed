@@ -41,14 +41,19 @@ impl fmt::Debug for Gasp {
         let num_ranges = unsafe { get_u16_unchecked(slice, offsets::NUM_RANGES) as usize };
         f.debug_struct("Gasp")
             .field("numRanges", &num_ranges)
-            .field("gaspRanges", &(0..num_ranges * sizes::RECORD).step_by(sizes::RECORD)
-                .map(|off| {
-                    let max_ppem = unsafe { get_u16_unchecked(slice, off + offsets::RANGES) };
-                    let behavior = unsafe { get_u16_unchecked(slice, off + offsets::RANGES + 2) };
-                    let behavior = GaspBehavior::from_bits_truncate(behavior);
-                    GaspRangeRecord { max_ppem, behavior }
-                })
-                .collect::<Vec<_>>())
+            .field(
+                "gaspRanges",
+                &(0..num_ranges * sizes::RECORD)
+                    .step_by(sizes::RECORD)
+                    .map(|off| {
+                        let max_ppem = unsafe { get_u16_unchecked(slice, off + offsets::RANGES) };
+                        let behavior =
+                            unsafe { get_u16_unchecked(slice, off + offsets::RANGES + 2) };
+                        let behavior = GaspBehavior::from_bits_truncate(behavior);
+                        GaspRangeRecord { max_ppem, behavior }
+                    })
+                    .collect::<Vec<_>>(),
+            )
             .finish()
     }
 }
