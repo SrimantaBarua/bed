@@ -25,9 +25,9 @@ impl fmt::Debug for ScriptList {
                 "scriptRecords",
                 &(2..count * 6 + 2)
                     .step_by(6)
-                    .map(|offset| {
-                        let tag = get_tag(slice, offset).unwrap();
-                        let offset = get_u16(slice, offset + 4).unwrap() as usize;
+                    .map(|off| {
+                        let tag = get_tag(slice, off).unwrap();
+                        let offset = get_u16(slice, off + 4).unwrap() as usize;
                         let data = self.0.slice(offset..);
                         ScriptTable { tag, data }
                     })

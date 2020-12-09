@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::error::*;
 use crate::rcbuffer::RcBuf;
-use crate::types::{get_i16, get_u16, get_u32};
+use crate::types::{get_u16, get_u32};
 
 /// Wrapper around character to glyph index mapping table
 #[derive(Debug)]

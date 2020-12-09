@@ -4,6 +4,7 @@
 extern crate bitflags;
 
 mod cmap;
+mod coverage;
 mod error;
 mod face;
 mod featurelist;
@@ -13,6 +14,7 @@ mod gsub;
 mod head;
 mod hhea;
 mod hmtx;
+mod lookuplist;
 mod maxp;
 mod rcbuffer;
 mod scriptlist;
