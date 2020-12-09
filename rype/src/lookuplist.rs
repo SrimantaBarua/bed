@@ -45,8 +45,6 @@ impl<T: LookupSubtable> fmt::Debug for LookupTable<T> {
         let count = get_u16(slice, 4).unwrap() as usize;
         let flags = LookupFlag::from_bits_truncate(slice[3]);
 
-        if lookup_type == 3 {
-
         let mut tmp = f.debug_struct("LookupTable");
         tmp.field("lookupType", &lookup_type)
             .field("lookupFlag", &flags)
@@ -66,9 +64,6 @@ impl<T: LookupSubtable> fmt::Debug for LookupTable<T> {
             tmp.field("markFilteringSet", &get_u16(slice, 6 + count * 2).unwrap());
         }
         tmp.finish()
-
-        } else { write!(f, "") }
-
     }
 }
 

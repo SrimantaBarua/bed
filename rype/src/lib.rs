@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate bitflags;
 
+mod classdef;
 mod cmap;
 mod coverage;
 mod error;
