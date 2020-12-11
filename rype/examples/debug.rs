@@ -2,7 +2,7 @@
 
 use std::env;
 
-use rype::FontCollection;
+use rype::Face;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -16,8 +16,7 @@ fn main() {
 }
 
 fn try_main(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    let fc = FontCollection::open(&args[1])?;
-    let face = fc.get_face(0)?;
+    let face = Face::open(&args[1], 0)?;
     eprintln!("Face: {:#?}", face);
     Ok(())
 }

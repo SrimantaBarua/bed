@@ -16,8 +16,6 @@ use super::types::*;
 
 /// A face within an OpenType file
 pub struct Face {
-    data: RcBuf,                 // Data for file
-    face_offset: usize,          // Offset into file for this face
     tables: HashMap<Tag, RcBuf>, // Hashmap of tables keyed by tag
     head: Head,
     hhea: Hhea,
@@ -29,8 +27,30 @@ pub struct Face {
 }
 
 impl Face {
+    /// Load face at given index from font file
+    pub fn open<P: AsRef<std::path::Path>>(path: P, index: usize) -> Result<Face> {
+        let data = RcBuf::new(std::fs::read(path)?);
+        // Is this a font collection or a single face?
+        let tag = get_tag(&data, 0)?;
+        if tag == Tag::from_str("ttcf")? {
+            let num_fonts = get_u32(&data, 8)? as usize;
+            if num_fonts <= index {
+                Err(Error::Invalid)
+            } else {
+                let offset = get_u32(&data, 12 + index * 4)? as usize;
+                Self::load_face(data, offset)
+            }
+        } else if index != 0 {
+            Err(Error::Invalid)
+        } else if tag != Tag(0x00010000) && tag != Tag::from_str("OTTO")? {
+            Err(Error::Invalid)
+        } else {
+            Self::load_face(data, 0)
+        }
+    }
+
     /// Initialize face structure
-    pub(super) fn load(data: RcBuf, offset: usize) -> Result<Face> {
+    fn load_face(data: RcBuf, offset: usize) -> Result<Face> {
         let slice = data.as_ref();
         let sfnt_version = get_tag(slice, offset)?;
         let num_tables = get_u16(slice, offset + offsets::NUM_TABLES)? as usize;
@@ -51,32 +71,28 @@ impl Face {
 
         let head = Tag::from_str("head")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
-            .and_then(|data| Head::load(data.clone()))?;
+            .and_then(|data| Head::load(data))?;
         let hhea = Tag::from_str("hhea")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
-            .and_then(|data| Hhea::load(data.clone()))?;
+            .and_then(|data| Hhea::load(data))?;
         let maxp = Tag::from_str("maxp")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
-            .and_then(|data| Maxp::load(data.clone()))?;
+            .and_then(|data| Maxp::load(data))?;
         let hmtx = Tag::from_str("hmtx")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
             .and_then(|data| {
-                Hmtx::load(
-                    data.clone(),
-                    maxp.num_glyphs as usize,
-                    hhea.num_h_metrics as usize,
-                )
+                Hmtx::load(data, maxp.num_glyphs as usize, hhea.num_h_metrics as usize)
             })?;
         let cmap = Tag::from_str("cmap")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
-            .and_then(|data| Cmap::load(data.clone()))?;
+            .and_then(|data| Cmap::load(data))?;
 
         let face_type = match sfnt_version {
             Tag(0x00010000) => {
                 let gasp = Tag::from_str("gasp")
                     .ok()
                     .and_then(|t| tables.get(&t))
-                    .map(|d| Gasp::load(d.clone()).expect("failed to load gasp"));
+                    .map(|d| Gasp::load(d).expect("failed to load gasp"));
                 FaceType::TTF { gasp }
             }
             Tag(0x4F54544F) => FaceType::CFF,
@@ -89,8 +105,6 @@ impl Face {
             .map(|d| Gsub::load(d.clone()).expect("failed to load GSUB"));
 
         Ok(Face {
-            data,
-            face_offset: offset,
             tables,
             head,
             hhea,
@@ -119,7 +133,6 @@ impl fmt::Debug for Face {
             .field("maxp", &self.maxp)
             .field("cmap", &self.cmap)
             //.field("hmtx", &self.hmtx)
-            .field("face_offset", &self.face_offset)
             .field("face_type", &self.face_type)
             .field("GSUB", &self.gsub)
             .finish()

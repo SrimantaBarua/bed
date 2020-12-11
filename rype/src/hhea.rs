@@ -1,7 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use crate::error::Result;
-use crate::rcbuffer::RcBuf;
 use crate::types::{get_i16, get_u16};
 
 /// Wrapper around the horizontal head table
@@ -18,16 +17,15 @@ pub(crate) struct Hhea {
 }
 
 impl Hhea {
-    pub(crate) fn load(data: RcBuf) -> Result<Hhea> {
-        let slice = data.as_ref();
-        let ascender = get_i16(slice, offsets::ASCENDER)?;
-        let descender = get_i16(slice, offsets::DESCENDER)?;
-        let line_gap = get_i16(slice, offsets::LINE_GAP)?;
-        let advance_width_max = get_u16(slice, offsets::ADVANCE_WIDTH_MAX)?;
-        let min_lsb = get_i16(slice, offsets::MIN_LSB)?;
-        let min_rsb = get_i16(slice, offsets::MIN_RSB)?;
-        let x_max_extent = get_i16(slice, offsets::X_MAX_EXTENT)?;
-        let num_h_metrics = get_u16(slice, offsets::NUM_H_METRICS)?;
+    pub(crate) fn load(data: &[u8]) -> Result<Hhea> {
+        let ascender = get_i16(data, offsets::ASCENDER)?;
+        let descender = get_i16(data, offsets::DESCENDER)?;
+        let line_gap = get_i16(data, offsets::LINE_GAP)?;
+        let advance_width_max = get_u16(data, offsets::ADVANCE_WIDTH_MAX)?;
+        let min_lsb = get_i16(data, offsets::MIN_LSB)?;
+        let min_rsb = get_i16(data, offsets::MIN_RSB)?;
+        let x_max_extent = get_i16(data, offsets::X_MAX_EXTENT)?;
+        let num_h_metrics = get_u16(data, offsets::NUM_H_METRICS)?;
         Ok(Hhea {
             ascender,
             descender,

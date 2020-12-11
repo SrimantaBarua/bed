@@ -1,7 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use crate::error::Result;
-use crate::rcbuffer::RcBuf;
 use crate::types::get_u16;
 
 /// Wrapper around Maximum Profile table
@@ -11,8 +10,8 @@ pub(crate) struct Maxp {
 }
 
 impl Maxp {
-    pub(crate) fn load(data: RcBuf) -> Result<Maxp> {
-        let num_glyphs = get_u16(&data, offsets::NUM_GLYPHS)?;
+    pub(crate) fn load(data: &[u8]) -> Result<Maxp> {
+        let num_glyphs = get_u16(data, offsets::NUM_GLYPHS)?;
         Ok(Maxp { num_glyphs })
     }
 }

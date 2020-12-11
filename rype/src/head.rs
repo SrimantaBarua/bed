@@ -3,7 +3,6 @@
 use geom::{point2, BBox};
 
 use crate::error::*;
-use crate::rcbuffer::RcBuf;
 use crate::types::{get_i16, get_u16};
 
 bitflags! {
@@ -36,17 +35,16 @@ pub(crate) struct Head {
 }
 
 impl Head {
-    pub(crate) fn load(data: RcBuf) -> Result<Head> {
-        let slice = data.as_ref();
-        let flags = Flags::from_bits_truncate(get_u16(slice, offsets::FLAGS)?);
-        let units_per_em = get_u16(slice, offsets::UNITS_PER_EM)?;
-        let xmin = get_i16(slice, offsets::XMIN)?;
-        let ymin = get_i16(slice, offsets::YMIN)?;
-        let xmax = get_i16(slice, offsets::XMAX)?;
-        let ymax = get_i16(slice, offsets::YMAX)?;
+    pub(crate) fn load(data: &[u8]) -> Result<Head> {
+        let flags = Flags::from_bits_truncate(get_u16(data, offsets::FLAGS)?);
+        let units_per_em = get_u16(data, offsets::UNITS_PER_EM)?;
+        let xmin = get_i16(data, offsets::XMIN)?;
+        let ymin = get_i16(data, offsets::YMIN)?;
+        let xmax = get_i16(data, offsets::XMAX)?;
+        let ymax = get_i16(data, offsets::YMAX)?;
         let bbox = BBox::new(point2(xmin, ymin), point2(xmax, ymax));
-        let lowest_rec_ppem = get_u16(slice, offsets::LOW_REC_PPEM)?;
-        let idx_loc_fmt = get_i16(slice, offsets::IDX_LOC_FMT).and_then(|i| match i {
+        let lowest_rec_ppem = get_u16(data, offsets::LOW_REC_PPEM)?;
+        let idx_loc_fmt = get_i16(data, offsets::IDX_LOC_FMT).and_then(|i| match i {
             0 => Ok(IdxLocFmt::Off16),
             1 => Ok(IdxLocFmt::Off32),
             _ => Err(Error::Invalid),
