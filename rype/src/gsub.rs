@@ -6,7 +6,7 @@ use crate::error::*;
 use crate::featurelist::FeatureList;
 use crate::lookuplist::{LookupList, LookupSubtable};
 use crate::scriptlist::ScriptList;
-use crate::types::{get_i16, get_u16};
+use crate::types::{get_i16, get_u16, get_u32};
 
 /// Wrapper around glyph substitution table
 #[derive(Debug)]
@@ -80,8 +80,12 @@ enum Subtable {
     },
     Context(SequenceContextFormat),
     ChainedContext(ChainedSequenceContextFormat),
-    ExtensionSubstitution {},
-    ReverseChainedContextSingle {},
+    ReverseChainedContextSingle {
+        coverage: Coverage,
+        backtrack_coverages: Vec<Coverage>,
+        lookahead_coverages: Vec<Coverage>,
+        subst_glyphs: Vec<u16>,
+    },
 }
 
 impl LookupSubtable for Subtable {
@@ -204,10 +208,48 @@ impl Subtable {
     }
 
     fn load_extension_substitution(data: &[u8]) -> Result<Subtable> {
-        Ok(Subtable::ExtensionSubstitution {})
+        if get_u16(data, 0)? != 1 {
+            panic!("invalid subtable format");
+        }
+        let typ = get_u16(data, 2)?;
+        let offset = get_u32(data, 4)? as usize;
+        Subtable::load(&data[offset..], typ)
     }
 
     fn load_reverse_chained_context_single(data: &[u8]) -> Result<Subtable> {
-        Ok(Subtable::ReverseChainedContextSingle {})
+        if get_u16(data, 0)? != 1 {
+            panic!("invalid subtable format");
+        }
+        let coverage_offset = get_u16(data, 2)? as usize;
+        let coverage = Coverage::load(&data[coverage_offset..])?;
+
+        let backtrack_glyph_count = get_u16(data, 4)? as usize;
+        let mut backtrack_coverages = Vec::new();
+        for off in (6..6 + backtrack_glyph_count * 2).step_by(2) {
+            let cov_off = get_u16(data, off)? as usize;
+            backtrack_coverages.push(Coverage::load(&data[cov_off..])?);
+        }
+
+        let lookahead_off = 6 + backtrack_glyph_count * 2;
+        let lookahead_glyph_count = get_u16(data, lookahead_off)? as usize;
+        let mut lookahead_coverages = Vec::new();
+        for off in (lookahead_off + 2..lookahead_off + 2 + lookahead_glyph_count * 2).step_by(2) {
+            let cov_off = get_u16(data, off)? as usize;
+            lookahead_coverages.push(Coverage::load(&data[cov_off..])?);
+        }
+
+        let glyph_off = lookahead_off + 2 + lookahead_glyph_count * 2;
+        let glyph_count = get_u16(data, glyph_off)? as usize;
+        let mut subst_glyphs = Vec::new();
+        for off in (glyph_off + 2..glyph_off + 2 + glyph_count * 2).step_by(2) {
+            subst_glyphs.push(get_u16(data, off)?);
+        }
+
+        Ok(Subtable::ReverseChainedContextSingle {
+            coverage,
+            backtrack_coverages,
+            lookahead_coverages,
+            subst_glyphs,
+        })
     }
 }
