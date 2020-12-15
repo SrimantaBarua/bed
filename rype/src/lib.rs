@@ -6,6 +6,7 @@ extern crate bitflags;
 mod classdef;
 mod cmap;
 mod coverage;
+mod ctx_lookup;
 mod error;
 mod face;
 mod featurelist;
@@ -16,7 +17,6 @@ mod hhea;
 mod hmtx;
 mod lookuplist;
 mod maxp;
-mod rcbuffer;
 mod scriptlist;
 mod types;
 

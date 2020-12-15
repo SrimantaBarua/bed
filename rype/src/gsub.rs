@@ -1,12 +1,10 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::fmt;
-
 use crate::coverage::Coverage;
+use crate::ctx_lookup::SequenceContextFormat;
 use crate::error::*;
 use crate::featurelist::FeatureList;
 use crate::lookuplist::{LookupList, LookupSubtable};
-use crate::rcbuffer::RcBuf;
 use crate::scriptlist::ScriptList;
 use crate::types::{get_i16, get_u16};
 
@@ -19,15 +17,14 @@ pub(crate) struct Gsub {
 }
 
 impl Gsub {
-    pub(crate) fn load(data: RcBuf) -> Result<Gsub> {
-        let slice = &data;
+    pub(crate) fn load(data: &[u8]) -> Result<Gsub> {
         //let minor_version = get_u16(slice, 2)?;
-        let scriptlist_off = get_u16(slice, 4)? as usize;
-        let featurelist_off = get_u16(slice, 6)? as usize;
-        let lookuplist_off = get_u16(slice, 8)? as usize;
-        let scriptlist = ScriptList::load(data.slice(scriptlist_off..))?;
-        let featurelist = FeatureList::load(data.slice(featurelist_off..))?;
-        let lookuplist = LookupList::load(data.slice(lookuplist_off..))?;
+        let scriptlist_off = get_u16(data, 4)? as usize;
+        let featurelist_off = get_u16(data, 6)? as usize;
+        let lookuplist_off = get_u16(data, 8)? as usize;
+        let scriptlist = ScriptList::load(&data[scriptlist_off..])?;
+        let featurelist = FeatureList::load(&data[featurelist_off..])?;
+        let lookuplist = LookupList::load(&data[lookuplist_off..])?;
         Ok(Gsub {
             scriptlist,
             featurelist,
@@ -36,339 +33,181 @@ impl Gsub {
     }
 }
 
+#[derive(Debug)]
+enum SingleFormat {
+    Format1 { delta: i16 },
+    Format2 { subst: Vec<u16> },
+}
+
+#[derive(Debug)]
+struct LigatureTable {
+    ligature_glyph: u16,
+    component_glyphs: Vec<u16>,
+}
+
+impl LigatureTable {
+    fn load(data: &[u8]) -> Result<LigatureTable> {
+        let ligature_glyph = get_u16(data, 0)?;
+        let count = get_u16(data, 2)? as usize;
+        let mut component_glyphs = Vec::new();
+        for off in (4..4 + count * 2).step_by(2) {
+            component_glyphs.push(get_u16(data, off)?);
+        }
+        Ok(LigatureTable {
+            ligature_glyph,
+            component_glyphs,
+        })
+    }
+}
+
+#[derive(Debug)]
 enum Subtable {
-    Single(RcBuf),
-    Multiple(RcBuf),
-    Alternate(RcBuf),
-    Ligature(RcBuf),
-    Context(RcBuf),
-    ChainingContext(RcBuf),
-    ExtensionSubstitution(RcBuf),
-    ReverseChainingContextSingle(RcBuf),
+    Single {
+        coverage: Coverage,
+        format: SingleFormat,
+    },
+    Multiple {
+        coverage: Coverage,
+        sequences: Vec<Vec<u16>>,
+    },
+    Alternate {
+        coverage: Coverage,
+        alternate_sets: Vec<Vec<u16>>,
+    },
+    Ligature {
+        coverage: Coverage,
+        ligature_sets: Vec<Vec<LigatureTable>>,
+    },
+    Context(SequenceContextFormat),
+    ChainedContext {},
+    ExtensionSubstitution {},
+    ReverseChainedContextSingle {},
 }
 
 impl LookupSubtable for Subtable {
-    fn load(data: RcBuf, lookup_type: u16) -> Result<Subtable> {
+    fn load(data: &[u8], lookup_type: u16) -> Result<Subtable> {
         match lookup_type {
-            1 => Ok(Subtable::Single(data)),
-            2 => Ok(Subtable::Multiple(data)),
-            3 => Ok(Subtable::Alternate(data)),
-            4 => Ok(Subtable::Ligature(data)),
-            5 => Ok(Subtable::Context(data)),
-            6 => Ok(Subtable::ChainingContext(data)),
-            7 => Ok(Subtable::ExtensionSubstitution(data)),
-            8 => Ok(Subtable::ReverseChainingContextSingle(data)),
+            1 => Subtable::load_single(data),
+            2 => Subtable::load_multiple(data),
+            3 => Subtable::load_alternate(data),
+            4 => Subtable::load_ligature(data),
+            5 => Subtable::load_context(data),
+            6 => Subtable::load_chained_context(data),
+            7 => Subtable::load_extension_substitution(data),
+            8 => Subtable::load_reverse_chained_context_single(data),
             _ => Err(Error::Invalid),
         }
     }
 }
 
-impl fmt::Debug for Subtable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Subtable::Single(data) => fmt_single(data, f),
-            Subtable::Multiple(data) => fmt_multiple(data, f),
-            Subtable::Alternate(data) => fmt_alternate(data, f),
-            Subtable::Ligature(data) => fmt_ligature(data, f),
-            Subtable::Context(data) => fmt_context(data, f),
-            Subtable::ChainingContext(data) => fmt_chainingcontext(data, f),
-            Subtable::ExtensionSubstitution(data) => fmt_extensionsubstitution(data, f),
-            Subtable::ReverseChainingContextSingle(data) => {
-                fmt_reversechainingcontextsingle(data, f)
+impl Subtable {
+    fn load_single(data: &[u8]) -> Result<Subtable> {
+        let coverage_offset = get_u16(data, 2)? as usize;
+        let coverage = Coverage::load(&data[coverage_offset..])?;
+        let format = match get_u16(data, 0)? {
+            1 => SingleFormat::Format1 {
+                delta: get_i16(data, 4)?,
+            },
+            2 => {
+                let glyph_count = get_u16(data, 4).unwrap() as usize;
+                let mut subst = Vec::new();
+                for off in (6..6 + glyph_count * 2).step_by(2) {
+                    subst.push(get_u16(data, off)?);
+                }
+                SingleFormat::Format2 { subst }
             }
+            _ => panic!("invalid subtable format"),
+        };
+        Ok(Subtable::Single { coverage, format })
+    }
+
+    fn load_multiple(data: &[u8]) -> Result<Subtable> {
+        let coverage_offset = get_u16(data, 2)? as usize;
+        let coverage = Coverage::load(&data[coverage_offset..])?;
+        if get_u16(data, 0)? != 1 {
+            panic!("invalid subtable format");
         }
-    }
-}
-
-fn fmt_single(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    let slice = &data;
-    let format = get_u16(slice, 0).unwrap();
-    let mut tmp = f.debug_struct("Single");
-    tmp.field("format", &format).field("coverage", {
-        let offset = get_u16(slice, 2).unwrap() as usize;
-        &Coverage::load(data.slice(offset..)).unwrap()
-    });
-    match format {
-        1 => {
-            tmp.field("deltaGlyphID", &get_i16(slice, 4).unwrap());
+        let mut sequences = Vec::new();
+        let seq_tab_count = get_u16(data, 4)? as usize;
+        for seq_tab_off_off in (6..6 + seq_tab_count * 2).step_by(2) {
+            let seq_tab_off = get_u16(data, seq_tab_off_off)? as usize;
+            let data = &data[seq_tab_off..];
+            let glyph_count = get_u16(data, 0)? as usize;
+            let mut glyphs = Vec::new();
+            for off in (2..2 + glyph_count * 2).step_by(2) {
+                glyphs.push(get_u16(data, off)?);
+            }
+            sequences.push(glyphs);
         }
-        2 => {
-            let glyph_count = get_u16(slice, 4).unwrap() as usize;
-            tmp.field("glyphCount", &glyph_count).field(
-                "substituteGlyphIDs",
-                &(6..6 + glyph_count * 2)
-                    .step_by(2)
-                    .map(|off| get_u16(slice, off).unwrap())
-                    .collect::<Vec<_>>(),
-            );
-        }
-        _ => unreachable!("invalid subtable format"),
-    }
-    tmp.finish()
-}
-
-// Sequence table for multiple substitution subtable
-struct SequenceTable(RcBuf);
-
-impl fmt::Debug for SequenceTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let count = get_u16(slice, 0).unwrap() as usize;
-        f.debug_struct("SequenceTable")
-            .field("glyphCount", &count)
-            .field(
-                "substituteGlyphIDs",
-                &(2..2 + count * 2)
-                    .step_by(2)
-                    .map(|off| get_u16(slice, off).unwrap())
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
-fn fmt_multiple(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    let slice = &data;
-    let format = get_u16(slice, 0).unwrap();
-    if format != 1 {
-        unreachable!("invalid subtable format");
-    }
-    let count = get_u16(slice, 4).unwrap() as usize;
-    f.debug_struct("Multiple")
-        .field("format", &format)
-        .field("coverage", {
-            let offset = get_u16(slice, 2).unwrap() as usize;
-            &Coverage::load(data.slice(offset..)).unwrap()
+        Ok(Subtable::Multiple {
+            coverage,
+            sequences,
         })
-        .field("sequnceCount", &count)
-        .field(
-            "sequences",
-            &(6..6 + count * 2)
-                .step_by(2)
-                .map(|off| {
-                    let offset = get_u16(slice, off).unwrap() as usize;
-                    SequenceTable(data.slice(offset..))
-                })
-                .collect::<Vec<_>>(),
-        )
-        .finish()
-}
-
-struct AlternateSetTable(RcBuf);
-
-impl fmt::Debug for AlternateSetTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let count = get_u16(slice, 0).unwrap() as usize;
-        f.debug_struct("AlternateSetTable")
-            .field("glyphCount", &count)
-            .field(
-                "alternateGlyphIDs",
-                &(2..2 + count * 2)
-                    .step_by(2)
-                    .map(|off| get_u16(slice, off).unwrap())
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
     }
-}
 
-fn fmt_alternate(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    let slice = &data;
-    let format = get_u16(slice, 0).unwrap();
-    if format != 1 {
-        unreachable!("invalid subtable format");
-    }
-    let count = get_u16(slice, 4).unwrap() as usize;
-    f.debug_struct("Alternate")
-        .field("format", &format)
-        .field("coverage", {
-            let offset = get_u16(slice, 2).unwrap() as usize;
-            &Coverage::load(data.slice(offset..)).unwrap()
-        })
-        .field("alternateSetCount", &count)
-        .field(
-            "alternateSets",
-            &(6..6 + count * 2)
-                .step_by(2)
-                .map(|off| {
-                    let offset = get_u16(slice, off).unwrap() as usize;
-                    AlternateSetTable(data.slice(offset..))
-                })
-                .collect::<Vec<_>>(),
-        )
-        .finish()
-}
-
-struct LigatureTable(RcBuf);
-
-impl fmt::Debug for LigatureTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let count = get_u16(slice, 2).unwrap() as usize;
-        f.debug_struct("LigatureTable")
-            .field("ligatureGlyph", &get_u16(slice, 0).unwrap())
-            .field("componentCount", &count)
-            .field(
-                "componentGlyphIDs",
-                &(4..4 + count * 2)
-                    .step_by(2)
-                    .map(|off| get_u16(slice, off).unwrap())
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
-struct LigatureSetTable(RcBuf);
-
-impl fmt::Debug for LigatureSetTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let count = get_u16(slice, 0).unwrap() as usize;
-        f.debug_struct("LigatureSetTable")
-            .field("ligatureCount", &count)
-            .field(
-                "ligatureTables",
-                &(2..2 + count * 2)
-                    .step_by(2)
-                    .map(|off| {
-                        let offset = get_u16(slice, off).unwrap() as usize;
-                        LigatureTable(self.0.slice(offset..))
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
-fn fmt_ligature(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    let slice = &data;
-    let format = get_u16(slice, 0).unwrap();
-    if format != 1 {
-        unreachable!("invalid subtable format");
-    }
-    let count = get_u16(slice, 4).unwrap() as usize;
-    f.debug_struct("Ligature")
-        .field("format", &format)
-        .field("coverage", {
-            let offset = get_u16(slice, 2).unwrap() as usize;
-            &Coverage::load(data.slice(offset..)).unwrap()
-        })
-        .field("ligatureSetCount", &count)
-        .field(
-            "ligatureSets",
-            &(6..6 + count * 2)
-                .step_by(2)
-                .map(|off| {
-                    let offset = get_u16(slice, off).unwrap() as usize;
-                    LigatureSetTable(data.slice(offset..))
-                })
-                .collect::<Vec<_>>(),
-        )
-        .finish()
-}
-
-#[derive(Debug)]
-struct SequenceLookupRecord {
-    sequence_index: u16,
-    lookup_list_index: u16,
-}
-
-struct SequenceRuleTable(RcBuf);
-
-impl fmt::Debug for SequenceRuleTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let glyph_count = get_u16(slice, 0).unwrap() as usize;
-        let seq_lookup_count = get_u16(slice, 2).unwrap() as usize;
-        f.debug_struct("SequenceRuleTable")
-            .field("glyphCount", &glyph_count)
-            .field("seqLookupCount", &seq_lookup_count)
-            .field(
-                "inputSequence",
-                &(4..4 + glyph_count * 2)
-                    .step_by(2)
-                    .map(|off| get_u16(slice, off).unwrap())
-                    .collect::<Vec<_>>(),
-            )
-            .field(
-                "seqLookupRecords",
-                &(4 + glyph_count * 2..4 + glyph_count * 2 + seq_lookup_count * 4)
-                    .step_by(4)
-                    .map(|off| {
-                        let sequence_index = get_u16(slice, off).unwrap();
-                        let lookup_list_index = get_u16(slice, off + 2).unwrap();
-                        SequenceLookupRecord {
-                            sequence_index,
-                            lookup_list_index,
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
-struct SequenceRuleSetTable(RcBuf);
-
-impl fmt::Debug for SequenceRuleSetTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let count = get_u16(slice, 0).unwrap() as usize;
-        f.debug_struct("SequenceRuleSetTable")
-            .field("seqRuleCount", &count)
-            .field(
-                "seqRules",
-                &(2..2 + count * 2)
-                    .step_by(2)
-                    .map(|off| {
-                        let offset = get_u16(slice, off).unwrap() as usize;
-                        SequenceRuleTable(self.0.slice(offset..))
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
-fn fmt_context(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    let slice = &data;
-    let format = get_u16(slice, 0).unwrap();
-    let mut tmp = f.debug_struct("Context");
-    tmp.field("format", &format).field("coverage", {
-        let offset = get_u16(slice, 2).unwrap() as usize;
-        &Coverage::load(data.slice(offset..)).unwrap()
-    });
-    match format {
-        1 => {
-            let count = get_u16(slice, 4).unwrap() as usize;
-            tmp.field("seqRuleSetCount", &count).field(
-                "seqRuleSets",
-                &(6..6 + count * 2)
-                    .step_by(2)
-                    .map(|off| {
-                        let offset = get_u16(slice, off).unwrap() as usize;
-                        SequenceRuleSetTable(data.slice(offset..))
-                    })
-                    .collect::<Vec<_>>(),
-            );
+    fn load_alternate(data: &[u8]) -> Result<Subtable> {
+        let coverage_offset = get_u16(data, 2)? as usize;
+        let coverage = Coverage::load(&data[coverage_offset..])?;
+        if get_u16(data, 0)? != 1 {
+            panic!("invalid subtable format");
         }
-        2 => {}
-        3 => {}
-        _ => unreachable!("invalid subtable format"),
+        let mut alternate_sets = Vec::new();
+        let alt_set_count = get_u16(data, 4)? as usize;
+        for alt_set_off_off in (6..6 + alt_set_count * 2).step_by(2) {
+            let alt_set_off = get_u16(data, alt_set_off_off)? as usize;
+            let data = &data[alt_set_off..];
+            let glyph_count = get_u16(data, 0)? as usize;
+            let mut glyphs = Vec::new();
+            for off in (2..2 + glyph_count * 2).step_by(2) {
+                glyphs.push(get_u16(data, off)?);
+            }
+            alternate_sets.push(glyphs);
+        }
+        Ok(Subtable::Alternate {
+            coverage,
+            alternate_sets,
+        })
     }
-    tmp.finish()
-}
 
-fn fmt_chainingcontext(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    f.debug_struct("ChainingContext").finish()
-}
+    fn load_ligature(data: &[u8]) -> Result<Subtable> {
+        let coverage_offset = get_u16(data, 2)? as usize;
+        let coverage = Coverage::load(&data[coverage_offset..])?;
+        if get_u16(data, 0)? != 1 {
+            panic!("invalid subtable format");
+        }
+        let lig_set_count = get_u16(data, 4)? as usize;
+        let mut ligature_sets = Vec::new();
+        for lig_set_off_off in (6..6 + lig_set_count * 2).step_by(2) {
+            let lig_set_off = get_u16(data, lig_set_off_off)? as usize;
 
-fn fmt_extensionsubstitution(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    f.debug_struct("ExtensionSubstitution").finish()
-}
+            let data = &data[lig_set_off..];
+            let lig_tab_count = get_u16(data, 0)? as usize;
+            let mut lig_tables = Vec::new();
+            for lig_tab_off_off in (2..2 + lig_tab_count * 2).step_by(2) {
+                let lig_tab_off = get_u16(data, lig_tab_off_off)? as usize;
+                lig_tables.push(LigatureTable::load(&data[lig_tab_off..])?);
+            }
+            ligature_sets.push(lig_tables);
+        }
+        Ok(Subtable::Ligature {
+            coverage,
+            ligature_sets,
+        })
+    }
 
-fn fmt_reversechainingcontextsingle(data: &RcBuf, f: &mut fmt::Formatter) -> fmt::Result {
-    f.debug_struct("ReverseChainingContextSingle").finish()
+    fn load_context(data: &[u8]) -> Result<Subtable> {
+        SequenceContextFormat::load(data).map(|f| Subtable::Context(f))
+    }
+
+    fn load_chained_context(data: &[u8]) -> Result<Subtable> {
+        Ok(Subtable::ChainedContext {})
+    }
+
+    fn load_extension_substitution(data: &[u8]) -> Result<Subtable> {
+        Ok(Subtable::ExtensionSubstitution {})
+    }
+
+    fn load_reverse_chained_context_single(data: &[u8]) -> Result<Subtable> {
+        Ok(Subtable::ReverseChainedContextSingle {})
+    }
 }

@@ -1,69 +1,58 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::fmt;
-use std::marker::PhantomData;
-
 use crate::error::*;
-use crate::rcbuffer::RcBuf;
 use crate::types::get_u16;
 
-pub(crate) struct LookupList<T: LookupSubtable>(RcBuf, PhantomData<T>);
+#[derive(Debug)]
+pub(crate) struct LookupList<T: LookupSubtable>(Vec<LookupTable<T>>);
 
 impl<T: LookupSubtable> LookupList<T> {
-    pub(crate) fn load(data: RcBuf) -> Result<LookupList<T>> {
-        Ok(LookupList(data, PhantomData))
-    }
-}
-
-impl<T: LookupSubtable> fmt::Debug for LookupList<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let count = get_u16(slice, 0).unwrap() as usize;
-        f.debug_struct("LookupList")
-            .field("lookupCount", &count)
-            .field(
-                "lookups",
-                &(2..2 + count * 2)
-                    .step_by(2)
-                    .map(|off| {
-                        let offset = get_u16(slice, off).unwrap() as usize;
-                        let data = self.0.slice(offset..);
-                        LookupTable::<T>(data, PhantomData)
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
-struct LookupTable<T: LookupSubtable>(RcBuf, PhantomData<T>);
-
-impl<T: LookupSubtable> fmt::Debug for LookupTable<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let lookup_type = get_u16(slice, 0).unwrap();
-        let count = get_u16(slice, 4).unwrap() as usize;
-        let flags = LookupFlag::from_bits_truncate(slice[3]);
-
-        let mut tmp = f.debug_struct("LookupTable");
-        tmp.field("lookupType", &lookup_type)
-            .field("lookupFlag", &flags)
-            .field("markAttachmentTypeMask", &slice[2])
-            .field("subtableCount", &count)
-            .field(
-                "subtableOffsets",
-                &(6..6 + count * 2)
-                    .step_by(2)
-                    .map(|off| {
-                        let offset = get_u16(slice, off).unwrap() as usize;
-                        T::load(self.0.slice(offset..), lookup_type).unwrap()
-                    })
-                    .collect::<Vec<_>>(),
-            );
-        if flags.contains(LookupFlag::USE_MARK_FILTERING_SET) {
-            tmp.field("markFilteringSet", &get_u16(slice, 6 + count * 2).unwrap());
+    pub(crate) fn load(data: &[u8]) -> Result<LookupList<T>> {
+        let count = get_u16(data, 0)? as usize;
+        let mut tables = Vec::new();
+        for off in (2..2 + count * 2).step_by(2) {
+            let offset = get_u16(data, off)? as usize;
+            tables.push(LookupTable::load(&data[offset..])?);
         }
-        tmp.finish()
+        Ok(LookupList(tables))
+    }
+}
+
+#[derive(Debug)]
+struct LookupTable<T: LookupSubtable> {
+    lookup_type: u16,
+    lookup_flag: LookupFlag,
+    mark_attachment_type_mask: u8,
+    mark_filtering_set: Option<u16>,
+    subtables: Vec<T>,
+}
+
+impl<T: LookupSubtable> LookupTable<T> {
+    fn load(data: &[u8]) -> Result<LookupTable<T>> {
+        if data.len() < 6 {
+            return Err(Error::Invalid);
+        }
+        let mut subtables = Vec::new();
+        let lookup_type = get_u16(data, 0)?;
+        let mark_attachment_type_mask = data[2];
+        let lookup_flag = LookupFlag::from_bits_truncate(data[3]);
+        let count = get_u16(data, 4)? as usize;
+        for off in (6..6 + count * 2).step_by(2) {
+            let offset = get_u16(data, off)? as usize;
+            subtables.push(T::load(&data[offset..], lookup_type)?);
+        }
+        let mark_filtering_set = if lookup_flag.contains(LookupFlag::USE_MARK_FILTERING_SET) {
+            Some(get_u16(data, 6 + count * 2)?)
+        } else {
+            None
+        };
+        Ok(LookupTable {
+            lookup_type,
+            lookup_flag,
+            mark_attachment_type_mask,
+            mark_filtering_set,
+            subtables,
+        })
     }
 }
 
@@ -77,6 +66,6 @@ bitflags! {
     }
 }
 
-pub(crate) trait LookupSubtable: Sized + fmt::Debug {
-    fn load(data: RcBuf, lookup_type: u16) -> Result<Self>;
+pub(crate) trait LookupSubtable: Sized + std::fmt::Debug {
+    fn load(data: &[u8], lookup_type: u16) -> Result<Self>;
 }

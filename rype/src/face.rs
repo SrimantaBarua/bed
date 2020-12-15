@@ -11,12 +11,11 @@ use super::head::Head;
 use super::hhea::Hhea;
 use super::hmtx::Hmtx;
 use super::maxp::Maxp;
-use super::rcbuffer::RcBuf;
 use super::types::*;
 
 /// A face within an OpenType file
 pub struct Face {
-    tables: HashMap<Tag, RcBuf>, // Hashmap of tables keyed by tag
+    tables: Vec<Tag>, // Hashmap of tables keyed by tag
     head: Head,
     hhea: Hhea,
     maxp: Maxp,
@@ -29,7 +28,7 @@ pub struct Face {
 impl Face {
     /// Load face at given index from font file
     pub fn open<P: AsRef<std::path::Path>>(path: P, index: usize) -> Result<Face> {
-        let data = RcBuf::new(std::fs::read(path)?);
+        let data = std::fs::read(path)?;
         // Is this a font collection or a single face?
         let tag = get_tag(&data, 0)?;
         if tag == Tag::from_str("ttcf")? {
@@ -38,33 +37,32 @@ impl Face {
                 Err(Error::Invalid)
             } else {
                 let offset = get_u32(&data, 12 + index * 4)? as usize;
-                Self::load_face(data, offset)
+                Self::load_face(&data, offset)
             }
         } else if index != 0 {
             Err(Error::Invalid)
         } else if tag != Tag(0x00010000) && tag != Tag::from_str("OTTO")? {
             Err(Error::Invalid)
         } else {
-            Self::load_face(data, 0)
+            Self::load_face(&data, 0)
         }
     }
 
     /// Initialize face structure
-    fn load_face(data: RcBuf, offset: usize) -> Result<Face> {
-        let slice = data.as_ref();
-        let sfnt_version = get_tag(slice, offset)?;
-        let num_tables = get_u16(slice, offset + offsets::NUM_TABLES)? as usize;
+    fn load_face(data: &[u8], offset: usize) -> Result<Face> {
+        let sfnt_version = get_tag(data, offset)?;
+        let num_tables = get_u16(data, offset + offsets::NUM_TABLES)? as usize;
         let mut record_offset = offset + offsets::TABLE_RECORDS;
         let mut tables = HashMap::new();
 
         for _ in 0..num_tables {
-            let tag = get_tag(slice, record_offset)?;
-            let table_offset = get_u32(slice, record_offset + offsets::TABLE_OFFSET)? as usize;
-            let table_size = get_u32(slice, record_offset + offsets::TABLE_SIZE)? as usize;
-            if table_offset + table_size > slice.len() {
+            let tag = get_tag(data, record_offset)?;
+            let table_offset = get_u32(data, record_offset + offsets::TABLE_OFFSET)? as usize;
+            let table_size = get_u32(data, record_offset + offsets::TABLE_SIZE)? as usize;
+            if table_offset + table_size > data.len() {
                 return Err(Error::Invalid);
             }
-            let table_data = data.slice(table_offset..table_offset + table_size);
+            let table_data = &data[table_offset..table_offset + table_size];
             tables.insert(tag, table_data);
             record_offset += sizes::TABLE_RECORD;
         }
@@ -102,10 +100,10 @@ impl Face {
         let gsub = Tag::from_str("GSUB")
             .ok()
             .and_then(|t| tables.get(&t))
-            .map(|d| Gsub::load(d.clone()).expect("failed to load GSUB"));
+            .map(|d| Gsub::load(d).expect("failed to load GSUB"));
 
         Ok(Face {
-            tables,
+            tables: tables.keys().map(|t| *t).collect::<Vec<_>>(),
             head,
             hhea,
             maxp,
@@ -120,14 +118,7 @@ impl Face {
 impl fmt::Debug for Face {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Face")
-            .field(
-                "tables",
-                &self
-                    .tables
-                    .keys()
-                    .map(|k| format!("{:?}", k))
-                    .collect::<Vec<_>>(),
-            )
+            .field("tables", &self.tables)
             .field("head", &self.head)
             .field("hhea", &self.hhea)
             .field("maxp", &self.maxp)

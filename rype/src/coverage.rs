@@ -1,63 +1,48 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::fmt;
-
 use crate::error::*;
-use crate::rcbuffer::RcBuf;
 use crate::types::get_u16;
 
-pub(crate) struct Coverage(RcBuf);
-
-impl Coverage {
-    pub(crate) fn load(data: RcBuf) -> Result<Coverage> {
-        Ok(Coverage(data))
-    }
+#[derive(Debug)]
+pub(crate) enum Coverage {
+    Format1 { glyphs: Vec<u16> },
+    Format2 { ranges: Vec<RangeRecord> },
 }
 
-impl fmt::Debug for Coverage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let format = get_u16(slice, 0).unwrap();
-        let mut tmp = f.debug_struct("Coverage");
-        tmp.field("format", &format);
+impl Coverage {
+    pub(crate) fn load(data: &[u8]) -> Result<Coverage> {
+        let format = get_u16(data, 0)?;
         match format {
             1 => {
-                let glyph_count = get_u16(slice, 2).unwrap() as usize;
-                tmp.field("glyphCount", &glyph_count).field(
-                    "glyphArray",
-                    &(4..4 + glyph_count * 2)
-                        .step_by(2)
-                        .map(|off| get_u16(slice, off).unwrap())
-                        .collect::<Vec<_>>(),
-                );
+                let glyph_count = get_u16(data, 2)? as usize;
+                let mut glyphs = Vec::new();
+                for off in (4..4 + glyph_count * 2).step_by(2) {
+                    glyphs.push(get_u16(data, off)?);
+                }
+                Ok(Coverage::Format1 { glyphs })
             }
             2 => {
-                let range_count = get_u16(slice, 2).unwrap() as usize;
-                tmp.field("rangeCount", &range_count).field(
-                    "rangeRecords",
-                    &(4..4 + range_count * 6)
-                        .step_by(6)
-                        .map(|off| {
-                            let start_glyph_id = get_u16(slice, off).unwrap();
-                            let end_glyph_id = get_u16(slice, off + 2).unwrap();
-                            let start_coverage_index = get_u16(slice, off + 4).unwrap();
-                            RangeRecord {
-                                start_glyph_id,
-                                end_glyph_id,
-                                start_coverage_index,
-                            }
-                        })
-                        .collect::<Vec<_>>(),
-                );
+                let range_count = get_u16(data, 2)? as usize;
+                let mut ranges = Vec::new();
+                for off in (4..4 + range_count * 6).step_by(6) {
+                    let start_glyph_id = get_u16(data, off)?;
+                    let end_glyph_id = get_u16(data, off + 2)?;
+                    let start_coverage_index = get_u16(data, off + 4)?;
+                    ranges.push(RangeRecord {
+                        start_glyph_id,
+                        end_glyph_id,
+                        start_coverage_index,
+                    });
+                }
+                Ok(Coverage::Format2 { ranges })
             }
-            _ => unreachable!("invalid coverage format"),
+            _ => panic!("invalid coverage format"),
         }
-        tmp.finish()
     }
 }
 
 #[derive(Debug)]
-struct RangeRecord {
+pub(crate) struct RangeRecord {
     start_glyph_id: u16,
     end_glyph_id: u16,
     start_coverage_index: u16,

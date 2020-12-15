@@ -1,92 +1,75 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::fmt;
+use std::collections::HashMap;
 
 use crate::error::*;
-use crate::rcbuffer::RcBuf;
 use crate::types::{get_tag, get_u16, Tag};
 
 /// Wrapper around ScriptList table common to GSUB and GPOS
-pub(crate) struct ScriptList(RcBuf);
+#[derive(Debug)]
+pub(crate) struct ScriptList(HashMap<Tag, ScriptTable>);
 
 impl ScriptList {
-    pub(crate) fn load(data: RcBuf) -> Result<ScriptList> {
-        Ok(ScriptList(data))
+    pub(crate) fn load(data: &[u8]) -> Result<ScriptList> {
+        let mut table = HashMap::new();
+        let record_count = get_u16(data, 0)? as usize;
+        for record_off in (2..2 + record_count * 6).step_by(6) {
+            let tag = get_tag(data, record_off)?;
+            let table_off = get_u16(data, record_off + 4)? as usize;
+            let script_table = ScriptTable::load(&data[table_off..])?;
+            table.insert(tag, script_table);
+        }
+        Ok(ScriptList(table))
     }
 }
 
-impl fmt::Debug for ScriptList {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.0;
-        let count = get_u16(slice, 0).unwrap() as usize;
-        f.debug_struct("ScriptList")
-            .field("scriptCount", &count)
-            .field(
-                "scriptRecords",
-                &(2..count * 6 + 2)
-                    .step_by(6)
-                    .map(|off| {
-                        let tag = get_tag(slice, off).unwrap();
-                        let offset = get_u16(slice, off + 4).unwrap() as usize;
-                        let data = self.0.slice(offset..);
-                        ScriptTable { tag, data }
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
-    }
-}
-
+#[derive(Debug)]
 struct ScriptTable {
-    tag: Tag,
-    data: RcBuf,
+    default_lang_sys: Option<LangSysTable>,
+    lang_sys_records: HashMap<Tag, LangSysTable>,
 }
 
-impl fmt::Debug for ScriptTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.data;
-        let count = get_u16(slice, 2).unwrap() as usize;
-        f.debug_struct("ScriptTable")
-            .field("tag", &self.tag)
-            .field("defaultLangSysOffset", &get_u16(slice, 0).unwrap())
-            .field("langSysCount", &count)
-            .field(
-                "langSysRecords",
-                &(4..count * 6 + 4)
-                    .step_by(6)
-                    .map(|off| {
-                        let tag = get_tag(slice, off).unwrap();
-                        let offset = get_u16(slice, off + 4).unwrap() as usize;
-                        let data = self.data.slice(offset..);
-                        LangSysTable { tag, data }
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
+impl ScriptTable {
+    fn load(data: &[u8]) -> Result<ScriptTable> {
+        let mut lang_sys_records = HashMap::new();
+        let default_lang_sys = match get_u16(data, 0)? as usize {
+            0 => None,
+            off => Some(LangSysTable::load(&data[off..])?),
+        };
+        let lang_sys_rec_count = get_u16(data, 2)? as usize;
+        for lang_sys_rec_off in (4..4 + lang_sys_rec_count * 6).step_by(6) {
+            let tag = get_tag(data, lang_sys_rec_off)?;
+            let lang_sys_off = get_u16(data, lang_sys_rec_off + 4)? as usize;
+            let lang_sys_table = LangSysTable::load(&data[lang_sys_off..])?;
+            lang_sys_records.insert(tag, lang_sys_table);
+        }
+        Ok(ScriptTable {
+            default_lang_sys,
+            lang_sys_records,
+        })
     }
 }
 
+#[derive(Debug)]
 struct LangSysTable {
-    tag: Tag,
-    data: RcBuf,
+    required_feature_index: Option<u16>,
+    feature_indices: Vec<u16>,
 }
 
-impl fmt::Debug for LangSysTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let slice = &self.data;
-        let count = get_u16(slice, 4).unwrap() as usize;
-        f.debug_struct("LangSysTable")
-            .field("tag", &self.tag)
-            .field("lookupOrderOffset", &get_u16(slice, 0).unwrap())
-            .field("requiredFeatureIndex", &get_u16(slice, 2).unwrap())
-            .field("featureIndexCount", &count)
-            .field(
-                "featureIndices",
-                &(6..6 + count * 2)
-                    .step_by(2)
-                    .map(|off| get_u16(slice, off).unwrap())
-                    .collect::<Vec<_>>(),
-            )
-            .finish()
+impl LangSysTable {
+    fn load(data: &[u8]) -> Result<LangSysTable> {
+        let mut feature_indices = Vec::new();
+        let required_feature_index = match get_u16(data, 2)? {
+            0xffff => None,
+            i => Some(i),
+        };
+        let count = get_u16(data, 4).unwrap() as usize;
+        for off in (6..6 + count * 2).step_by(2) {
+            feature_indices.push(get_u16(data, off)?);
+        }
+        Ok(LangSysTable {
+            required_feature_index,
+            feature_indices,
+        })
     }
 }
