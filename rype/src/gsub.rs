@@ -1,7 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use crate::coverage::Coverage;
-use crate::ctx_lookup::SequenceContextFormat;
+use crate::ctx_lookup::{ChainedSequenceContextFormat, SequenceContextFormat};
 use crate::error::*;
 use crate::featurelist::FeatureList;
 use crate::lookuplist::{LookupList, LookupSubtable};
@@ -79,7 +79,7 @@ enum Subtable {
         ligature_sets: Vec<Vec<LigatureTable>>,
     },
     Context(SequenceContextFormat),
-    ChainedContext {},
+    ChainedContext(ChainedSequenceContextFormat),
     ExtensionSubstitution {},
     ReverseChainedContextSingle {},
 }
@@ -200,7 +200,7 @@ impl Subtable {
     }
 
     fn load_chained_context(data: &[u8]) -> Result<Subtable> {
-        Ok(Subtable::ChainedContext {})
+        ChainedSequenceContextFormat::load(data).map(|f| Subtable::ChainedContext(f))
     }
 
     fn load_extension_substitution(data: &[u8]) -> Result<Subtable> {

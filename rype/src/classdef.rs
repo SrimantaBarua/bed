@@ -1,5 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::collections::HashMap;
+
 use crate::error::*;
 use crate::types::get_u16;
 
@@ -17,7 +19,10 @@ pub(crate) enum ClassDef {
         start_glyph: u16,
         class_values: Vec<u16>,
     },
-    Fmt2(Vec<ClassRangeRecord>),
+    Fmt2 {
+        map: HashMap<u16, u16>,
+        ranges: Vec<ClassRangeRecord>,
+    },
 }
 
 impl ClassDef {
@@ -37,18 +42,23 @@ impl ClassDef {
             }
             2 => {
                 let range_count = get_u16(data, 2)? as usize;
+                let mut map = HashMap::new();
                 let mut ranges = Vec::new();
                 for off in (4..4 + range_count * 6).step_by(6) {
                     let start_glyph = get_u16(data, off)?;
                     let end_glyph = get_u16(data, off + 2)?;
                     let class = get_u16(data, off + 4)?;
-                    ranges.push(ClassRangeRecord {
-                        start_glyph,
-                        end_glyph,
-                        class,
-                    });
+                    if start_glyph == end_glyph {
+                        map.insert(start_glyph, class);
+                    } else {
+                        ranges.push(ClassRangeRecord {
+                            start_glyph,
+                            end_glyph,
+                            class,
+                        });
+                    }
                 }
-                Ok(ClassDef::Fmt2(ranges))
+                Ok(ClassDef::Fmt2 { map, ranges })
             }
             _ => Err(Error::Invalid),
         }

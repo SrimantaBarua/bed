@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use crate::error::*;
 use crate::types::{get_u16, get_u32};
@@ -8,8 +9,8 @@ use crate::types::{get_u16, get_u32};
 /// Wrapper around character to glyph index mapping table
 #[derive(Debug)]
 pub(crate) struct Cmap {
-    subtables: Vec<Vec<CmapEntry>>, // Subtables are sorted arrays of cmap entries
-    active: usize,                  // Index of active subtable
+    subtables: Vec<Subtable>,
+    active: usize, // Index of active subtable
 }
 
 impl Cmap {
@@ -28,12 +29,12 @@ impl Cmap {
                         active = Some(subtables.len());
                     }
                     let end = subtable_off + get_u16(data, subtable_off + 2)? as usize;
-                    subtables.push(load_format_4(&data[subtable_off..end])?);
+                    subtables.push(Subtable::load_format_4(&data[subtable_off..end])?);
                 }
                 12 => {
                     active = Some(subtables.len());
                     let end = subtable_off + get_u32(data, subtable_off + 4)? as usize;
-                    subtables.push(load_format_12(&data[subtable_off..end])?);
+                    subtables.push(Subtable::load_format_12(&data[subtable_off..end])?);
                 }
                 // We're only interested in table format 4 and 12
                 _ => continue,
@@ -47,19 +48,7 @@ impl Cmap {
     }
 
     pub(crate) fn glyph_id_for_codepoint(&self, codepoint: u32) -> u32 {
-        let active = &self.subtables[self.active];
-        active
-            .binary_search_by(|entry| {
-                if entry.start_codepoint > codepoint {
-                    Ordering::Greater
-                } else if entry.end_codepoint < codepoint {
-                    Ordering::Less
-                } else {
-                    Ordering::Equal
-                }
-            })
-            .map(|index| active[index].start_glyph + (codepoint - active[index].start_codepoint))
-            .unwrap_or(0)
+        self.subtables[self.active].find(codepoint)
     }
 }
 
@@ -70,56 +59,94 @@ struct CmapEntry {
     start_glyph: u32,
 }
 
-fn load_format_4(data: &[u8]) -> Result<Vec<CmapEntry>> {
-    let mut ret = Vec::new();
-    let segcount_x2 = get_u16(data, offsets::SEGCOUNT_X2)? as usize;
-    for offset in (0..segcount_x2).step_by(2) {
-        let end_codepoint = get_u16(data, 14 + offset)? as u32;
-        let start_codepoint = get_u16(data, 16 + segcount_x2 + offset)? as u32;
-        let delta = get_u16(data, 16 + segcount_x2 * 2 + offset)? as u32;
-        let range = get_u16(data, 16 + segcount_x2 * 3 + offset)? as u32;
-        if range == 0 {
-            let start_glyph = (start_codepoint + delta) & 0xffff;
-            ret.push(CmapEntry {
-                start_codepoint,
-                end_codepoint,
-                start_glyph,
-            });
-        } else {
-            let glyph_off = 16 + segcount_x2 * 3 + offset + range as usize;
-            for i in start_codepoint..=end_codepoint {
-                let code_off = (i - start_codepoint) as usize;
-                let glyph_id = get_u16(data, glyph_off + code_off * 2)? as u32;
-                let start_glyph = if glyph_id == 0 {
-                    0
+#[derive(Debug)]
+struct Subtable {
+    map: HashMap<u32, u32>,
+    ranges: Vec<CmapEntry>,
+}
+
+impl Subtable {
+    fn find(&self, codepoint: u32) -> u32 {
+        self.map
+            .get(&codepoint)
+            .map(|u| *u)
+            .or_else(|| {
+                self.ranges
+                    .binary_search_by(|entry| {
+                        if entry.start_codepoint > codepoint {
+                            Ordering::Greater
+                        } else if entry.end_codepoint < codepoint {
+                            Ordering::Less
+                        } else {
+                            Ordering::Equal
+                        }
+                    })
+                    .ok()
+                    .map(|index| {
+                        self.ranges[index].start_glyph
+                            + (codepoint - self.ranges[index].start_codepoint)
+                    })
+            })
+            .unwrap_or(0)
+    }
+
+    fn load_format_4(data: &[u8]) -> Result<Subtable> {
+        let mut map = HashMap::new();
+        let mut ranges = Vec::new();
+        let segcount_x2 = get_u16(data, offsets::SEGCOUNT_X2)? as usize;
+        for offset in (0..segcount_x2).step_by(2) {
+            let end_codepoint = get_u16(data, 14 + offset)? as u32;
+            let start_codepoint = get_u16(data, 16 + segcount_x2 + offset)? as u32;
+            let delta = get_u16(data, 16 + segcount_x2 * 2 + offset)? as u32;
+            let range = get_u16(data, 16 + segcount_x2 * 3 + offset)? as u32;
+            if range == 0 {
+                let start_glyph = (start_codepoint + delta) & 0xffff;
+                map.insert(start_codepoint, start_glyph);
+                if start_codepoint == end_codepoint {
                 } else {
-                    (glyph_id + delta) & 0xffff
-                };
-                ret.push(CmapEntry {
-                    start_codepoint: i,
-                    end_codepoint: i,
+                    ranges.push(CmapEntry {
+                        start_codepoint,
+                        end_codepoint,
+                        start_glyph,
+                    });
+                }
+            } else {
+                let glyph_off = 16 + segcount_x2 * 3 + offset + range as usize;
+                for i in start_codepoint..=end_codepoint {
+                    let code_off = (i - start_codepoint) as usize;
+                    let glyph_id = get_u16(data, glyph_off + code_off * 2)? as u32;
+                    let start_glyph = if glyph_id == 0 {
+                        0
+                    } else {
+                        (glyph_id + delta) & 0xffff
+                    };
+                    map.insert(i, start_glyph);
+                }
+            }
+        }
+        Ok(Subtable { map, ranges })
+    }
+
+    fn load_format_12(data: &[u8]) -> Result<Subtable> {
+        let mut map = HashMap::new();
+        let mut ranges = Vec::new();
+        let num_groups = get_u32(data, offsets::NUM_GROUPS)? as usize;
+        for offset in (0..num_groups * sizes::TABLE_12_RECORD).step_by(sizes::TABLE_12_RECORD) {
+            let start_codepoint = get_u32(data, offsets::REC_START_CODE + offset)?;
+            let end_codepoint = get_u32(data, offsets::REC_END_CODE + offset)?;
+            let start_glyph = get_u32(data, offsets::REC_START_GLYPH + offset)?;
+            if start_codepoint == end_codepoint {
+                map.insert(start_codepoint, start_glyph);
+            } else {
+                ranges.push(CmapEntry {
+                    start_codepoint,
+                    end_codepoint,
                     start_glyph,
                 });
             }
         }
+        Ok(Subtable { map, ranges })
     }
-    Ok(ret)
-}
-
-fn load_format_12(data: &[u8]) -> Result<Vec<CmapEntry>> {
-    let mut ret = Vec::new();
-    let num_groups = get_u32(data, offsets::NUM_GROUPS)? as usize;
-    for offset in (0..num_groups * sizes::TABLE_12_RECORD).step_by(sizes::TABLE_12_RECORD) {
-        let start_codepoint = get_u32(data, offsets::REC_START_CODE + offset)?;
-        let end_codepoint = get_u32(data, offsets::REC_END_CODE + offset)?;
-        let start_glyph = get_u32(data, offsets::REC_START_GLYPH + offset)?;
-        ret.push(CmapEntry {
-            start_codepoint,
-            end_codepoint,
-            start_glyph,
-        });
-    }
-    Ok(ret)
 }
 
 mod offsets {
