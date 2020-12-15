@@ -113,7 +113,7 @@ impl Subtable {
                 delta: get_i16(data, 4)?,
             },
             2 => {
-                let glyph_count = get_u16(data, 4).unwrap() as usize;
+                let glyph_count = get_u16(data, 4)? as usize;
                 let mut subst = Vec::new();
                 for off in (6..6 + glyph_count * 2).step_by(2) {
                     subst.push(get_u16(data, off)?);

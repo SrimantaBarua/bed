@@ -63,7 +63,7 @@ impl LangSysTable {
             0xffff => None,
             i => Some(i),
         };
-        let count = get_u16(data, 4).unwrap() as usize;
+        let count = get_u16(data, 4)? as usize;
         for off in (6..6 + count * 2).step_by(2) {
             feature_indices.push(get_u16(data, off)?);
         }

@@ -25,9 +25,7 @@ pub(crate) struct Hmtx {
 
 impl Hmtx {
     pub(crate) fn load(data: &[u8], num_glyphs: usize, num_h_metrics: usize) -> Result<Hmtx> {
-        if num_h_metrics == 0 {
-            unimplemented!("can num_h_metrics be zero?");
-        }
+        assert!(num_h_metrics > 0, "can num_h_metrics be zero?");
         let size = num_glyphs * 2 + num_h_metrics * 2;
         if data.len() < size {
             Err(Error::Invalid)

@@ -139,9 +139,7 @@ impl SequenceContextFormat {
                     lookup_records,
                 })
             }
-            _ => {
-                unimplemented!()
-            }
+            _ => Err(Error::Invalid),
         }
     }
 }
@@ -308,9 +306,7 @@ impl ChainedSequenceContextFormat {
                     lookup_records,
                 })
             }
-            _ => {
-                unimplemented!()
-            }
+            _ => Err(Error::Invalid),
         }
     }
 }
