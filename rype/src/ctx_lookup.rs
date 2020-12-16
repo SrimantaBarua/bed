@@ -286,9 +286,9 @@ impl ChainedSequenceContextFormat {
                 }
 
                 let lookahead_off = input_off + 2 + input_glyph_count * 2;
-                let lookahead_glyph_count = get_u16(data, input_off)? as usize;
+                let lookahead_glyph_count = get_u16(data, lookahead_off)? as usize;
                 let mut lookahead_coverages = Vec::new();
-                for off in (lookahead_off + 2..input_off + 2 + input_glyph_count * 2).step_by(2) {
+                for off in (lookahead_off + 2..lookahead_off + 2 + lookahead_glyph_count * 2).step_by(2) {
                     let cov_off = get_u16(data, off)? as usize;
                     lookahead_coverages.push(Coverage::load(&data[cov_off..])?);
                 }
