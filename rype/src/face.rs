@@ -6,6 +6,7 @@ use std::fmt;
 use super::cmap::Cmap;
 use super::error::*;
 use super::gasp::Gasp;
+use super::gdef::Gdef;
 use super::gpos::Gpos;
 use super::gsub::Gsub;
 use super::head::Head;
@@ -27,6 +28,7 @@ pub struct Face {
     gsub: Option<Gsub>,
     gpos: Option<Gpos>,
     kern: Option<Kern>,
+    gdef: Option<Gdef>,
 }
 
 impl Face {
@@ -113,6 +115,10 @@ impl Face {
             .ok()
             .and_then(|t| tables.get(&t))
             .map(|d| Kern::load(d).expect("failed to load kern"));
+        let gdef = Tag::from_str("GDEF")
+            .ok()
+            .and_then(|t| tables.get(&t))
+            .map(|d| Gdef::load(d).expect("failed to load GDEF"));
 
         Ok(Face {
             tables: tables.keys().map(|t| *t).collect::<Vec<_>>(),
@@ -125,6 +131,7 @@ impl Face {
             gsub,
             gpos,
             kern,
+            gdef,
         })
     }
 }
@@ -141,7 +148,8 @@ impl fmt::Debug for Face {
             .field("face_type", &self.face_type)
             //.field("GSUB", &self.gsub)
             //.field("GPOS", &self.gpos)
-            .field("kern", &self.kern)
+            //.field("kern", &self.kern)
+            .field("GDEF", &self.gdef)
             .finish()
     }
 }

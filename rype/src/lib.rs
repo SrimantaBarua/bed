@@ -11,6 +11,7 @@ mod error;
 mod face;
 mod featurelist;
 mod gasp;
+mod gdef;
 mod gpos;
 mod gsub;
 mod head;
