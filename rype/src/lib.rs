@@ -18,6 +18,7 @@ mod head;
 mod hhea;
 mod hmtx;
 mod kern;
+mod loca;
 mod lookuplist;
 mod maxp;
 mod scriptlist;

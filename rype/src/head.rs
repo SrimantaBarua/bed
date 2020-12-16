@@ -18,7 +18,7 @@ bitflags! {
 }
 
 /// Index to loc format
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum IdxLocFmt {
     Off16, // Short offsets (16 bit)
     Off32, // Long offsets (32 bit)
