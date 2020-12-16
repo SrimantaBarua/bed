@@ -11,6 +11,7 @@ use super::gsub::Gsub;
 use super::head::Head;
 use super::hhea::Hhea;
 use super::hmtx::Hmtx;
+use super::kern::Kern;
 use super::maxp::Maxp;
 use super::types::*;
 
@@ -25,6 +26,7 @@ pub struct Face {
     face_type: FaceType,
     gsub: Option<Gsub>,
     gpos: Option<Gpos>,
+    kern: Option<Kern>,
 }
 
 impl Face {
@@ -107,6 +109,10 @@ impl Face {
             .ok()
             .and_then(|t| tables.get(&t))
             .map(|d| Gpos::load(d).expect("failed to load GPOS"));
+        let kern = Tag::from_str("kern")
+            .ok()
+            .and_then(|t| tables.get(&t))
+            .map(|d| Kern::load(d).expect("failed to load kern"));
 
         Ok(Face {
             tables: tables.keys().map(|t| *t).collect::<Vec<_>>(),
@@ -118,6 +124,7 @@ impl Face {
             face_type,
             gsub,
             gpos,
+            kern,
         })
     }
 }
@@ -129,11 +136,12 @@ impl fmt::Debug for Face {
             .field("head", &self.head)
             .field("hhea", &self.hhea)
             .field("maxp", &self.maxp)
-            .field("cmap", &self.cmap)
+            //.field("cmap", &self.cmap)
             //.field("hmtx", &self.hmtx)
             .field("face_type", &self.face_type)
-            .field("GSUB", &self.gsub)
-            .field("GPOS", &self.gpos)
+            //.field("GSUB", &self.gsub)
+            //.field("GPOS", &self.gpos)
+            .field("kern", &self.kern)
             .finish()
     }
 }

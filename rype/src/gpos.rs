@@ -165,9 +165,12 @@ impl LookupSubtable for Subtable {
 
 impl Subtable {
     fn load_single_adjustment(data: &[u8]) -> Result<Subtable> {
+        if data.len() < 6 {
+            return Err(Error::Invalid);
+        }
         let coverage_offset = get_u16(data, 2)? as usize;
         let coverage = Coverage::load(&data[coverage_offset..])?;
-        let value_format = ValueFormat::from_bits_truncate(data[4]);
+        let value_format = ValueFormat::from_bits_truncate(data[5]);
         let format = match get_u16(data, 0)? {
             1 => SingleFormat::Format1(ValueRecord::load(data, 6, value_format)?),
             2 => {
@@ -189,10 +192,13 @@ impl Subtable {
     }
 
     fn load_pair_adjustment(data: &[u8]) -> Result<Subtable> {
+        if data.len() < 8 {
+            return Err(Error::Invalid);
+        }
         let coverage_offset = get_u16(data, 2)? as usize;
         let coverage = Coverage::load(&data[coverage_offset..])?;
-        let value_format1 = ValueFormat::from_bits_truncate(data[4]);
-        let value_format2 = ValueFormat::from_bits_truncate(data[6]);
+        let value_format1 = ValueFormat::from_bits_truncate(data[5]);
+        let value_format2 = ValueFormat::from_bits_truncate(data[7]);
         let (size1, size2) = (value_format1.record_size(), value_format2.record_size());
         let format = match get_u16(data, 0)? {
             1 => {
