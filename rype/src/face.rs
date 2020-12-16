@@ -6,6 +6,7 @@ use std::fmt;
 use super::cmap::Cmap;
 use super::error::*;
 use super::gasp::Gasp;
+use super::gpos::Gpos;
 use super::gsub::Gsub;
 use super::head::Head;
 use super::hhea::Hhea;
@@ -23,6 +24,7 @@ pub struct Face {
     cmap: Cmap,
     face_type: FaceType,
     gsub: Option<Gsub>,
+    gpos: Option<Gpos>,
 }
 
 impl Face {
@@ -101,6 +103,10 @@ impl Face {
             .ok()
             .and_then(|t| tables.get(&t))
             .map(|d| Gsub::load(d).expect("failed to load GSUB"));
+        let gpos = Tag::from_str("GPOS")
+            .ok()
+            .and_then(|t| tables.get(&t))
+            .map(|d| Gpos::load(d).expect("failed to load GPOS"));
 
         Ok(Face {
             tables: tables.keys().map(|t| *t).collect::<Vec<_>>(),
@@ -111,6 +117,7 @@ impl Face {
             cmap,
             face_type,
             gsub,
+            gpos,
         })
     }
 }
@@ -126,6 +133,7 @@ impl fmt::Debug for Face {
             //.field("hmtx", &self.hmtx)
             .field("face_type", &self.face_type)
             .field("GSUB", &self.gsub)
+            .field("GPOS", &self.gpos)
             .finish()
     }
 }

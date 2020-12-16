@@ -120,7 +120,7 @@ impl Subtable {
                 }
                 SingleFormat::Format2 { subst }
             }
-            _ => panic!("invalid subtable format"),
+            _ => return Err(Error::Invalid),
         };
         Ok(Subtable::Single { coverage, format })
     }
@@ -129,7 +129,7 @@ impl Subtable {
         let coverage_offset = get_u16(data, 2)? as usize;
         let coverage = Coverage::load(&data[coverage_offset..])?;
         if get_u16(data, 0)? != 1 {
-            panic!("invalid subtable format");
+            return Err(Error::Invalid);
         }
         let mut sequences = Vec::new();
         let seq_tab_count = get_u16(data, 4)? as usize;
@@ -153,7 +153,7 @@ impl Subtable {
         let coverage_offset = get_u16(data, 2)? as usize;
         let coverage = Coverage::load(&data[coverage_offset..])?;
         if get_u16(data, 0)? != 1 {
-            panic!("invalid subtable format");
+            return Err(Error::Invalid);
         }
         let mut alternate_sets = Vec::new();
         let alt_set_count = get_u16(data, 4)? as usize;
@@ -177,7 +177,7 @@ impl Subtable {
         let coverage_offset = get_u16(data, 2)? as usize;
         let coverage = Coverage::load(&data[coverage_offset..])?;
         if get_u16(data, 0)? != 1 {
-            panic!("invalid subtable format");
+            return Err(Error::Invalid);
         }
         let lig_set_count = get_u16(data, 4)? as usize;
         let mut ligature_sets = Vec::new();
@@ -209,7 +209,7 @@ impl Subtable {
 
     fn load_extension_substitution(data: &[u8]) -> Result<Subtable> {
         if get_u16(data, 0)? != 1 {
-            panic!("invalid subtable format");
+            return Err(Error::Invalid);
         }
         let typ = get_u16(data, 2)?;
         let offset = get_u32(data, 4)? as usize;
@@ -218,7 +218,7 @@ impl Subtable {
 
     fn load_reverse_chained_context_single(data: &[u8]) -> Result<Subtable> {
         if get_u16(data, 0)? != 1 {
-            panic!("invalid subtable format");
+            return Err(Error::Invalid);
         }
         let coverage_offset = get_u16(data, 2)? as usize;
         let coverage = Coverage::load(&data[coverage_offset..])?;

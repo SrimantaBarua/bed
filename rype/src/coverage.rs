@@ -36,7 +36,7 @@ impl Coverage {
                 }
                 Ok(Coverage::Format2 { ranges })
             }
-            _ => panic!("invalid coverage format"),
+            _ => Err(Error::Invalid),
         }
     }
 }
