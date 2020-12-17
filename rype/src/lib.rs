@@ -22,6 +22,7 @@ mod kern;
 mod loca;
 mod lookuplist;
 mod maxp;
+mod os2;
 mod scriptlist;
 mod types;
 

@@ -16,6 +16,7 @@ use super::hmtx::Hmtx;
 use super::kern::Kern;
 use super::loca::Loca;
 use super::maxp::Maxp;
+use super::os2::Os2;
 use super::types::*;
 
 /// A face within an OpenType file
@@ -26,6 +27,7 @@ pub struct Face {
     maxp: Maxp,
     hmtx: Hmtx,
     cmap: Cmap,
+    os2: Os2,
     face_type: FaceType,
     gsub: Option<Gsub>,
     gpos: Option<Gpos>,
@@ -92,6 +94,9 @@ impl Face {
         let cmap = Tag::from_str("cmap")
             .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
             .and_then(|data| Cmap::load(data))?;
+        let os2 = Tag::from_str("OS/2")
+            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+            .and_then(|data| Os2::load(data))?;
 
         let face_type = match sfnt_version {
             Tag(0x00010000) => {
@@ -142,6 +147,7 @@ impl Face {
             gpos,
             kern,
             gdef,
+            os2,
         })
     }
 }
@@ -153,6 +159,7 @@ impl fmt::Debug for Face {
             .field("head", &self.head)
             .field("hhea", &self.hhea)
             .field("maxp", &self.maxp)
+            .field("OS/2", &self.os2)
             //.field("cmap", &self.cmap)
             //.field("hmtx", &self.hmtx)
             .field("face_type", &self.face_type)
