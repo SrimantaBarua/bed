@@ -12,6 +12,7 @@ mod face;
 mod featurelist;
 mod gasp;
 mod gdef;
+mod glyf;
 mod gpos;
 mod gsub;
 mod head;

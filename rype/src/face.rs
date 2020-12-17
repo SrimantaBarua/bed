@@ -7,6 +7,7 @@ use super::cmap::Cmap;
 use super::error::*;
 use super::gasp::Gasp;
 use super::gdef::Gdef;
+use super::glyf::Glyf;
 use super::gpos::Gpos;
 use super::gsub::Gsub;
 use super::head::Head;
@@ -99,11 +100,14 @@ impl Face {
                     .and_then(|data| {
                         Loca::load(data, maxp.num_glyphs as usize, head.idx_loc_fmt)
                     })?;
+                let glyf = Tag::from_str("glyf")
+                    .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+                    .and_then(|data| Glyf::load(data, &loca))?;
                 let gasp = Tag::from_str("gasp")
                     .ok()
                     .and_then(|t| tables.get(&t))
                     .map(|d| Gasp::load(d).expect("failed to load gasp"));
-                FaceType::TTF { gasp, loca }
+                FaceType::TTF { gasp, glyf }
             }
             Tag(0x4F54544F) => FaceType::CFF,
             _ => return Err(Error::Invalid),
@@ -162,7 +166,7 @@ impl fmt::Debug for Face {
 
 #[derive(Debug)]
 enum FaceType {
-    TTF { gasp: Option<Gasp>, loca: Loca },
+    TTF { gasp: Option<Gasp>, glyf: Glyf },
     CFF,
 }
 
