@@ -23,8 +23,10 @@ mod loca;
 mod lookuplist;
 mod maxp;
 mod os2;
+mod script;
 mod scriptlist;
 mod types;
 
 pub use error::*;
 pub use face::Face;
+pub use script::Script;
