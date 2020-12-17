@@ -114,7 +114,7 @@ impl Face {
                     .map(|d| Gasp::load(d).expect("failed to load gasp"));
                 FaceType::TTF { gasp, glyf }
             }
-            Tag(0x4F54544F) => FaceType::CFF,
+            Tag(0x4F54544F) => unimplemented!(), // OTTO = CFF
             _ => return Err(Error::Invalid),
         };
 
@@ -160,12 +160,12 @@ impl fmt::Debug for Face {
             .field("hhea", &self.hhea)
             .field("maxp", &self.maxp)
             .field("OS/2", &self.os2)
-            //.field("cmap", &self.cmap)
-            //.field("hmtx", &self.hmtx)
+            .field("cmap", &self.cmap)
+            .field("hmtx", &self.hmtx)
             .field("face_type", &self.face_type)
-            //.field("GSUB", &self.gsub)
-            //.field("GPOS", &self.gpos)
-            //.field("kern", &self.kern)
+            .field("GSUB", &self.gsub)
+            .field("GPOS", &self.gpos)
+            .field("kern", &self.kern)
             .field("GDEF", &self.gdef)
             .finish()
     }
@@ -174,7 +174,6 @@ impl fmt::Debug for Face {
 #[derive(Debug)]
 enum FaceType {
     TTF { gasp: Option<Gasp>, glyf: Glyf },
-    CFF,
 }
 
 mod offsets {

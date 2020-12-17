@@ -135,10 +135,6 @@ impl GlyphTyp {
                 off += 4;
             }
             if !flags.contains(CompositeFlags::MORE_COMPONENTS) {
-                if flags.contains(CompositeFlags::HAVE_INSTR) {
-                    let num_instr = get_u16(data, off)? as usize;
-                    off += 2 + num_instr;
-                }
                 break;
             }
         }
