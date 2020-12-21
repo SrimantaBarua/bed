@@ -4,7 +4,7 @@ use crate::types::Tag;
 
 macro_rules! scripts {
     ($pt:vis $name:ident { $( $feat:ident $stag:expr ),* } ) => {
-        #[derive(Debug)]
+        #[derive(Clone, Copy, Debug)]
         $pt enum $name {
             $( $feat ),*
         }

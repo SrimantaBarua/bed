@@ -30,7 +30,7 @@ mod script;
 mod scriptlist;
 mod types;
 
-pub use common::GlyphInfo;
+pub use common::ScaledGlyphInfo;
 pub use direction::Direction;
 pub use error::*;
 pub use face::Face;

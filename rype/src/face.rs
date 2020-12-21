@@ -7,7 +7,7 @@ use fnv::FnvHashMap;
 use geom::{size2, vec2, Size2D};
 
 use super::cmap::Cmap;
-use super::common::GlyphInfo;
+use super::common::{GlyphInfo, ScaledGlyphInfo};
 use super::direction::Direction;
 use super::error::*;
 use super::features::*;
@@ -29,8 +29,7 @@ use super::Script;
 /// A face that has been scaled
 #[derive(Debug)]
 pub struct ScaledFace {
-    point_size: u16,
-    dpi: Size2D<u16>,
+    scale: Size2D<f32>,
     face_inner: Rc<FaceInner>,
 }
 
@@ -40,7 +39,7 @@ impl ScaledFace {
         text: &S,
         script: Script,
         direction: Direction,
-    ) -> Result<(Vec<char>, Vec<GlyphInfo>)> {
+    ) -> Result<(Vec<char>, Vec<ScaledGlyphInfo>)> {
         let codepoints = text.as_ref().chars().collect::<Vec<_>>();
         let mut glyph_ids = codepoints
             .iter()
@@ -52,33 +51,29 @@ impl ScaledFace {
             .chain(direction.features().iter().map(|f| f.tag()))
             .collect();
         if let Some(gsub) = &self.face_inner.gsub {
-            glyph_ids = gsub.substitute(glyph_ids, script, &features)?;
+            gsub.substitute(&mut glyph_ids, script, &features);
         }
-        let glyph_infos = glyph_ids
-            .iter()
-            .map(|g| {
-                let hor_metrics = self.face_inner.hmtx.get_metrics(*g);
-                let bbox = match &self.face_inner.face_type {
-                    FaceType::TTF { glyf, .. } => glyf.glyph_bbox(*g),
-                };
-                GlyphInfo {
-                    glyph: *g,
-                    size: size2(bbox.max.x - bbox.min.x, bbox.max.y - bbox.min.y).cast(),
-                    bearing: vec2(hor_metrics.lsb, bbox.max.y),
-                    offset: vec2(0, 0),
-                    advance: vec2(hor_metrics.advance_width, 0),
-                }
-            })
-            .collect();
-        Ok((codepoints, glyph_infos))
-    }
-
-    fn new(point_size: u16, dpi: Size2D<u16>, face_inner: Rc<FaceInner>) -> ScaledFace {
-        ScaledFace {
-            point_size,
-            dpi,
-            face_inner,
+        let glyph_infos = glyph_ids.iter().map(|g| {
+            let hor_metrics = self.face_inner.hmtx.get_metrics(*g);
+            let bbox = match &self.face_inner.face_type {
+                FaceType::TTF { glyf, .. } => glyf.glyph_bbox(*g),
+            };
+            GlyphInfo {
+                glyph: *g,
+                size: size2(bbox.max.x - bbox.min.x, bbox.max.y - bbox.min.y).cast(),
+                bearing: vec2(hor_metrics.lsb, bbox.max.y),
+                offset: vec2(0, 0),
+                advance: vec2(hor_metrics.advance_width, 0),
+            }
+        });
+        /*
+        if let Some(gpos) = &self.face_inner.gpos {
+            gpos.apply(&mut glyph_infos, script, &features);
         }
+        */
+        // Scale all glyph data
+        let scaled_glyph_infos = glyph_infos.map(|g| g.scale(self.scale)).collect();
+        Ok((codepoints, scaled_glyph_infos))
     }
 }
 
@@ -111,7 +106,12 @@ impl Face {
 
     /// Get scaled face
     pub fn scale(&self, point_size: u16, dpi: Size2D<u16>) -> ScaledFace {
-        ScaledFace::new(point_size, dpi, self.0.clone())
+        let point_size = point_size as f32;
+        let units_per_em = self.0.head.units_per_em as f32;
+        let mult = point_size / (72.0 * units_per_em);
+        let scale = size2(dpi.width as f32 * mult, dpi.height as f32 * mult);
+        let face_inner = self.0.clone();
+        ScaledFace { scale, face_inner }
     }
 
     /// Initialize face structure

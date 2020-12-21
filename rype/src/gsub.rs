@@ -45,10 +45,10 @@ impl Gsub {
 
     pub(crate) fn substitute(
         &self,
-        mut glyphs: Vec<GlyphID>,
+        glyphs: &mut Vec<GlyphID>,
         script: Script,
         enabled_features: &FnvHashSet<Tag>,
-    ) -> Result<Vec<GlyphID>> {
+    ) {
         // Get feature indices
         let feature_indices = self.scriptlist.feature_indices(script);
         let features = feature_indices
@@ -64,9 +64,8 @@ impl Gsub {
         // Apply all lookups
         for idx in lookuplist_indices {
             let lookup = &self.lookuplist[*idx as usize];
-            lookup.apply(&mut glyphs, gdef_ref, &self.lookuplist);
+            lookup.apply(glyphs, gdef_ref, &self.lookuplist);
         }
-        Ok(glyphs)
     }
 }
 
