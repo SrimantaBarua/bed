@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use crate::common::GlyphID;
 use crate::error::*;
 use crate::types::{get_i16, get_u16};
 
@@ -47,8 +48,8 @@ impl Hmtx {
         }
     }
 
-    pub(crate) fn get_metrics(&self, glyph_id: u32) -> GlyphHorMetrics {
-        let mut glyph_id = glyph_id as usize;
+    pub(crate) fn get_metrics(&self, glyph_id: GlyphID) -> GlyphHorMetrics {
+        let mut glyph_id = glyph_id.0 as usize;
         if glyph_id < self.long_hor_metrics.len() {
             return GlyphHorMetrics {
                 advance_width: self.long_hor_metrics[glyph_id].advance_width,

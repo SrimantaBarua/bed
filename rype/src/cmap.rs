@@ -1,8 +1,10 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
+use fnv::FnvHashMap;
+
+use crate::common::GlyphID;
 use crate::error::*;
 use crate::types::{get_u16, get_u32};
 
@@ -47,7 +49,7 @@ impl Cmap {
             .map(|active| Cmap { subtables, active })
     }
 
-    pub(crate) fn glyph_id_for_codepoint(&self, codepoint: u32) -> u32 {
+    pub(crate) fn glyph_id_for_codepoint(&self, codepoint: u32) -> GlyphID {
         self.subtables[self.active].find(codepoint)
     }
 }
@@ -61,15 +63,15 @@ struct CmapEntry {
 
 #[derive(Debug)]
 struct Subtable {
-    map: HashMap<u32, u32>,
+    map: FnvHashMap<u32, u32>,
     ranges: Vec<CmapEntry>,
 }
 
 impl Subtable {
-    fn find(&self, codepoint: u32) -> u32 {
+    fn find(&self, codepoint: u32) -> GlyphID {
         self.map
             .get(&codepoint)
-            .map(|u| *u)
+            .map(|u| GlyphID(*u))
             .or_else(|| {
                 self.ranges
                     .binary_search_by(|entry| {
@@ -83,15 +85,17 @@ impl Subtable {
                     })
                     .ok()
                     .map(|index| {
-                        self.ranges[index].start_glyph
-                            + (codepoint - self.ranges[index].start_codepoint)
+                        GlyphID(
+                            self.ranges[index].start_glyph
+                                + (codepoint - self.ranges[index].start_codepoint),
+                        )
                     })
             })
-            .unwrap_or(0)
+            .unwrap_or(GlyphID(0))
     }
 
     fn load_format_4(data: &[u8]) -> Result<Subtable> {
-        let mut map = HashMap::new();
+        let mut map = FnvHashMap::default();
         let mut ranges = Vec::new();
         let segcount_x2 = get_u16(data, offsets::SEGCOUNT_X2)? as usize;
         for offset in (0..segcount_x2).step_by(2) {
@@ -128,7 +132,7 @@ impl Subtable {
     }
 
     fn load_format_12(data: &[u8]) -> Result<Subtable> {
-        let mut map = HashMap::new();
+        let mut map = FnvHashMap::default();
         let mut ranges = Vec::new();
         let num_groups = get_u32(data, offsets::NUM_GROUPS)? as usize;
         for offset in (0..num_groups * sizes::TABLE_12_RECORD).step_by(sizes::TABLE_12_RECORD) {

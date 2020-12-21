@@ -1,10 +1,16 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::collections::HashMap;
 use std::fmt;
+use std::rc::Rc;
+
+use fnv::FnvHashMap;
+use geom::{size2, vec2, Size2D};
 
 use super::cmap::Cmap;
+use super::common::GlyphInfo;
+use super::direction::Direction;
 use super::error::*;
+use super::features::*;
 use super::gasp::Gasp;
 use super::gdef::Gdef;
 use super::glyf::Glyf;
@@ -18,10 +24,104 @@ use super::loca::Loca;
 use super::maxp::Maxp;
 use super::os2::Os2;
 use super::types::*;
+use super::Script;
+
+/// A face that has been scaled
+#[derive(Debug)]
+pub struct ScaledFace {
+    point_size: u16,
+    dpi: Size2D<u16>,
+    face_inner: Rc<FaceInner>,
+}
+
+impl ScaledFace {
+    pub fn shape<S: AsRef<str>>(
+        &self,
+        text: &S,
+        script: Script,
+        direction: Direction,
+    ) -> Result<(Vec<char>, Vec<GlyphInfo>)> {
+        let codepoints = text.as_ref().chars().collect::<Vec<_>>();
+        let mut glyph_ids = codepoints
+            .iter()
+            .map(|cp| self.face_inner.cmap.glyph_id_for_codepoint(*cp as u32))
+            .collect::<Vec<_>>();
+        let features = DEFAULT_FEATURES
+            .iter()
+            .map(|f| f.tag())
+            .chain(direction.features().iter().map(|f| f.tag()))
+            .collect();
+        if let Some(gsub) = &self.face_inner.gsub {
+            glyph_ids = gsub.substitute(glyph_ids, script, &features)?;
+        }
+        let glyph_infos = glyph_ids
+            .iter()
+            .map(|g| {
+                let hor_metrics = self.face_inner.hmtx.get_metrics(*g);
+                let bbox = match &self.face_inner.face_type {
+                    FaceType::TTF { glyf, .. } => glyf.glyph_bbox(*g),
+                };
+                GlyphInfo {
+                    glyph: *g,
+                    size: size2(bbox.max.x - bbox.min.x, bbox.max.y - bbox.min.y).cast(),
+                    bearing: vec2(hor_metrics.lsb, bbox.max.y),
+                    offset: vec2(0, 0),
+                    advance: vec2(hor_metrics.advance_width, 0),
+                }
+            })
+            .collect();
+        Ok((codepoints, glyph_infos))
+    }
+
+    fn new(point_size: u16, dpi: Size2D<u16>, face_inner: Rc<FaceInner>) -> ScaledFace {
+        ScaledFace {
+            point_size,
+            dpi,
+            face_inner,
+        }
+    }
+}
 
 /// A face within an OpenType file
-pub struct Face {
-    tables: Vec<Tag>, // Hashmap of tables keyed by tag
+#[derive(Debug)]
+pub struct Face(Rc<FaceInner>);
+
+impl Face {
+    /// Load face at given index from font file
+    pub fn open<P: AsRef<std::path::Path>>(path: P, index: usize) -> Result<Face> {
+        let data = std::fs::read(path)?;
+        // Is this a font collection or a single face?
+        let tag = get_tag(&data, 0)?;
+        if tag == Tag::from(b"ttcf") {
+            let num_fonts = get_u32(&data, 8)? as usize;
+            if num_fonts <= index {
+                Err(Error::Invalid)
+            } else {
+                let offset = get_u32(&data, 12 + index * 4)? as usize;
+                Self::load_face(&data, offset)
+            }
+        } else if index != 0 {
+            Err(Error::Invalid)
+        } else if tag != Tag(0x00010000) && tag != Tag::from(b"OTTO") {
+            Err(Error::Invalid)
+        } else {
+            Self::load_face(&data, 0)
+        }
+    }
+
+    /// Get scaled face
+    pub fn scale(&self, point_size: u16, dpi: Size2D<u16>) -> ScaledFace {
+        ScaledFace::new(point_size, dpi, self.0.clone())
+    }
+
+    /// Initialize face structure
+    fn load_face(data: &[u8], offset: usize) -> Result<Face> {
+        FaceInner::load(data, offset).map(|fi| Face(Rc::new(fi)))
+    }
+}
+
+pub(crate) struct FaceInner {
+    tables: Vec<Tag>, // Table tags for debugging purposes
     head: Head,
     hhea: Hhea,
     maxp: Maxp,
@@ -32,38 +132,15 @@ pub struct Face {
     gsub: Option<Gsub>,
     gpos: Option<Gpos>,
     kern: Option<Kern>,
-    gdef: Option<Gdef>,
+    gdef: Option<Rc<Gdef>>,
 }
 
-impl Face {
-    /// Load face at given index from font file
-    pub fn open<P: AsRef<std::path::Path>>(path: P, index: usize) -> Result<Face> {
-        let data = std::fs::read(path)?;
-        // Is this a font collection or a single face?
-        let tag = get_tag(&data, 0)?;
-        if tag == Tag::from_str("ttcf")? {
-            let num_fonts = get_u32(&data, 8)? as usize;
-            if num_fonts <= index {
-                Err(Error::Invalid)
-            } else {
-                let offset = get_u32(&data, 12 + index * 4)? as usize;
-                Self::load_face(&data, offset)
-            }
-        } else if index != 0 {
-            Err(Error::Invalid)
-        } else if tag != Tag(0x00010000) && tag != Tag::from_str("OTTO")? {
-            Err(Error::Invalid)
-        } else {
-            Self::load_face(&data, 0)
-        }
-    }
-
-    /// Initialize face structure
-    fn load_face(data: &[u8], offset: usize) -> Result<Face> {
+impl FaceInner {
+    fn load(data: &[u8], offset: usize) -> Result<FaceInner> {
         let sfnt_version = get_tag(data, offset)?;
         let num_tables = get_u16(data, offset + offsets::NUM_TABLES)? as usize;
         let mut record_offset = offset + offsets::TABLE_RECORDS;
-        let mut tables = HashMap::new();
+        let mut tables = FnvHashMap::default();
 
         for _ in 0..num_tables {
             let tag = get_tag(data, record_offset)?;
@@ -77,65 +154,69 @@ impl Face {
             record_offset += sizes::TABLE_RECORD;
         }
 
-        let head = Tag::from_str("head")
-            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+        let head = tables
+            .get(&Tag::from(b"head"))
+            .ok_or(Error::Invalid)
             .and_then(|data| Head::load(data))?;
-        let hhea = Tag::from_str("hhea")
-            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+        let hhea = tables
+            .get(&Tag::from(b"hhea"))
+            .ok_or(Error::Invalid)
             .and_then(|data| Hhea::load(data))?;
-        let maxp = Tag::from_str("maxp")
-            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+        let maxp = tables
+            .get(&Tag::from(b"maxp"))
+            .ok_or(Error::Invalid)
             .and_then(|data| Maxp::load(data))?;
-        let hmtx = Tag::from_str("hmtx")
-            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+        let hmtx = tables
+            .get(&Tag::from(b"hmtx"))
+            .ok_or(Error::Invalid)
             .and_then(|data| {
                 Hmtx::load(data, maxp.num_glyphs as usize, hhea.num_h_metrics as usize)
             })?;
-        let cmap = Tag::from_str("cmap")
-            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+        let cmap = tables
+            .get(&Tag::from(b"cmap"))
+            .ok_or(Error::Invalid)
             .and_then(|data| Cmap::load(data))?;
-        let os2 = Tag::from_str("OS/2")
-            .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+        let os2 = tables
+            .get(&Tag::from(b"OS/2"))
+            .ok_or(Error::Invalid)
             .and_then(|data| Os2::load(data))?;
 
+        const OTTO: Tag = Tag::from(b"OTTO");
         let face_type = match sfnt_version {
             Tag(0x00010000) => {
-                let loca = Tag::from_str("loca")
-                    .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+                let loca = tables
+                    .get(&Tag::from(b"loca"))
+                    .ok_or(Error::Invalid)
                     .and_then(|data| {
                         Loca::load(data, maxp.num_glyphs as usize, head.idx_loc_fmt)
                     })?;
-                let glyf = Tag::from_str("glyf")
-                    .and_then(|t| tables.get(&t).ok_or(Error::Invalid))
+                let glyf = tables
+                    .get(&Tag::from(b"glyf"))
+                    .ok_or(Error::Invalid)
                     .and_then(|data| Glyf::load(data, &loca))?;
-                let gasp = Tag::from_str("gasp")
-                    .ok()
-                    .and_then(|t| tables.get(&t))
+                let gasp = tables
+                    .get(&Tag::from(b"gasp"))
                     .map(|d| Gasp::load(d).expect("failed to load gasp"));
                 FaceType::TTF { gasp, glyf }
             }
-            Tag(0x4F54544F) => unimplemented!(), // OTTO = CFF
+            OTTO => unimplemented!(), // OTTO = CFF
             _ => return Err(Error::Invalid),
         };
 
-        let gsub = Tag::from_str("GSUB")
-            .ok()
-            .and_then(|t| tables.get(&t))
-            .map(|d| Gsub::load(d).expect("failed to load GSUB"));
-        let gpos = Tag::from_str("GPOS")
-            .ok()
-            .and_then(|t| tables.get(&t))
-            .map(|d| Gpos::load(d).expect("failed to load GPOS"));
-        let kern = Tag::from_str("kern")
-            .ok()
-            .and_then(|t| tables.get(&t))
+        let gdef = tables
+            .get(&Tag::from(b"GDEF"))
+            .map(|d| Rc::new(Gdef::load(d).expect("failed to load GDEF")));
+        let gsub = tables
+            .get(&Tag::from(b"GSUB"))
+            .map(|d| Gsub::load(d, gdef.clone()).expect("failed to load GSUB"));
+        let gpos = tables
+            .get(&Tag::from(b"GPOS"))
+            .map(|d| Gpos::load(d, gdef.clone()).expect("failed to load GPOS"));
+        let kern = tables
+            .get(&Tag::from(b"kern"))
             .map(|d| Kern::load(d).expect("failed to load kern"));
-        let gdef = Tag::from_str("GDEF")
-            .ok()
-            .and_then(|t| tables.get(&t))
-            .map(|d| Gdef::load(d).expect("failed to load GDEF"));
 
-        Ok(Face {
+        Ok(FaceInner {
             tables: tables.keys().map(|t| *t).collect::<Vec<_>>(),
             head,
             hhea,
@@ -152,7 +233,7 @@ impl Face {
     }
 }
 
-impl fmt::Debug for Face {
+impl fmt::Debug for FaceInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Face")
             .field("tables", &self.tables)

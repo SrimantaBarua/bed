@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use crate::common::GlyphID;
 use crate::error::*;
 use crate::types::get_u16;
 
@@ -37,6 +38,34 @@ impl Coverage {
                 Ok(Coverage::Format2 { ranges })
             }
             _ => Err(Error::Invalid),
+        }
+    }
+
+    pub(crate) fn for_glyph(&self, g: GlyphID) -> Option<usize> {
+        match self {
+            Coverage::Format1 { glyphs } => {
+                for i in 0..glyphs.len() {
+                    if glyphs[i] as u32 == g.0 {
+                        return Some(i);
+                    }
+                }
+                None
+            }
+            Coverage::Format2 { ranges } => {
+                for range in ranges {
+                    if (range.end_glyph_id as u32) < g.0 {
+                        break;
+                    }
+                    if (range.start_glyph_id as u32) > g.0 {
+                        continue;
+                    }
+                    return Some(
+                        ((g.0 - range.start_glyph_id as u32) + range.start_coverage_index as u32)
+                            as usize,
+                    );
+                }
+                None
+            }
         }
     }
 }

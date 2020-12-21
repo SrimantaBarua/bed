@@ -1,5 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::ops::Index;
+
 use crate::error::*;
 use crate::types::{get_tag, get_u16, Tag};
 
@@ -23,5 +25,13 @@ impl FeatureList {
             vec.push((tag, lookup_list_indices));
         }
         Ok(FeatureList(vec))
+    }
+}
+
+impl Index<usize> for FeatureList {
+    type Output = (Tag, Vec<u16>);
+
+    fn index(&self, idx: usize) -> &(Tag, Vec<u16>) {
+        &self.0[idx]
     }
 }

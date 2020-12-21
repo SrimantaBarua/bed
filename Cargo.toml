@@ -1,16 +1,9 @@
-[package]
-name = "bed"
-version = "0.0.1"
-authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
-edition = "2018"
-
-[dependencies]
-bitflags = "1.2"
-rype = { path = "rype" }
-geom = { path = "geom" }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-x11 = { version = "2.18", features = [ "xlib", "xinput" ] }
+[workspace]
+members = [
+    "bed",
+    "geom",
+    "rype"
+]
 
 [profile.release]
 opt-level = 3

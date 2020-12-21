@@ -2,6 +2,7 @@
 
 use geom::{bbox, point2, BBox};
 
+use crate::common::GlyphID;
 use crate::error::*;
 use crate::loca::Loca;
 use crate::types::{get_i16, get_u16};
@@ -20,6 +21,13 @@ impl Glyf {
             }
         }
         Ok(Glyf(glyphs))
+    }
+
+    pub(crate) fn glyph_bbox(&self, glyph: GlyphID) -> BBox<i16> {
+        self.0[glyph.0 as usize]
+            .as_ref()
+            .map(|g| g.bbox)
+            .unwrap_or_else(|| bbox(point2(0, 0), point2(0, 0)))
     }
 }
 

@@ -3,12 +3,13 @@
 use crate::classdef::ClassDef;
 use crate::coverage::Coverage;
 use crate::error::*;
+use crate::lookuplist::GlyphData;
 use crate::types::get_u16;
 
 #[derive(Debug)]
 pub(crate) struct SequenceLookupRecord {
-    sequence_index: u16,
-    lookup_list_index: u16,
+    pub(crate) sequence_index: u16,
+    pub(crate) lookup_list_index: u16,
 }
 
 impl SequenceLookupRecord {
@@ -24,7 +25,7 @@ impl SequenceLookupRecord {
 
 #[derive(Debug)]
 pub(crate) struct SequenceRuleTable {
-    input_glyph_seq: Vec<u16>,
+    input_seq: Vec<u16>,
     lookup_records: Vec<SequenceLookupRecord>,
 }
 
@@ -32,9 +33,9 @@ impl SequenceRuleTable {
     fn load(data: &[u8]) -> Result<SequenceRuleTable> {
         let glyph_count = get_u16(data, 0)? as usize - 1;
         let seq_count = get_u16(data, 2)? as usize;
-        let mut input_glyph_seq = Vec::new();
+        let mut input_seq = Vec::new();
         for off in (4..4 + glyph_count * 2).step_by(2) {
-            input_glyph_seq.push(get_u16(data, off)?);
+            input_seq.push(get_u16(data, off)?);
         }
         let start = 4 + glyph_count * 2;
         let mut lookup_records = Vec::new();
@@ -42,7 +43,7 @@ impl SequenceRuleTable {
             lookup_records.push(SequenceLookupRecord::load(&data[off..])?);
         }
         Ok(SequenceRuleTable {
-            input_glyph_seq,
+            input_seq,
             lookup_records,
         })
     }
@@ -140,6 +141,77 @@ impl SequenceContextFormat {
                 })
             }
             _ => Err(Error::Invalid),
+        }
+    }
+
+    pub(crate) fn apply<T: GlyphData>(
+        &self,
+        glyph_seq: &[T],
+        idx: usize,
+    ) -> Option<(&[SequenceLookupRecord], usize)> {
+        let rest = &glyph_seq[idx + 1..];
+        match self {
+            SequenceContextFormat::Format1 {
+                coverage,
+                seq_rules,
+            } => coverage
+                .for_glyph(glyph_seq[idx].glyph())
+                .and_then(|ci| seq_rules[ci].as_ref())
+                .and_then(|options| {
+                    'outer: for opt in options {
+                        if rest.len() < opt.input_seq.len() {
+                            continue;
+                        }
+                        for (glyph, tgt) in rest.iter().map(|x| x.glyph()).zip(&opt.input_seq) {
+                            if glyph.0 != *tgt as u32 {
+                                continue 'outer;
+                            }
+                        }
+                        return Some((opt.lookup_records.as_ref(), opt.input_seq.len()));
+                    }
+                    None
+                }),
+            SequenceContextFormat::Format2 {
+                coverage,
+                classdef,
+                seq_rules,
+            } => coverage
+                .for_glyph(glyph_seq[idx].glyph())
+                .and_then(|_| classdef.glyph_class(glyph_seq[idx].glyph()))
+                .and_then(|class| seq_rules[class as usize].as_ref())
+                .and_then(|options| {
+                    'outer: for opt in options {
+                        if rest.len() < opt.input_seq.len() {
+                            continue;
+                        }
+                        for (optcls, tgt) in rest
+                            .iter()
+                            .map(|x| classdef.glyph_class(x.glyph()))
+                            .zip(&opt.input_seq)
+                        {
+                            if optcls != Some(*tgt as u32) {
+                                continue 'outer;
+                            }
+                        }
+                        return Some((opt.lookup_records.as_ref(), opt.input_seq.len()));
+                    }
+                    None
+                }),
+            SequenceContextFormat::Format3 {
+                coverages,
+                lookup_records,
+            } => {
+                if coverages.len() > rest.len() + 1 {
+                    None
+                } else {
+                    for (g, c) in glyph_seq[idx..].iter().zip(coverages) {
+                        if c.for_glyph(g.glyph()).is_none() {
+                            return None;
+                        }
+                    }
+                    Some((lookup_records.as_ref(), coverages.len()))
+                }
+            }
         }
     }
 }
@@ -309,6 +381,119 @@ impl ChainedSequenceContextFormat {
                 })
             }
             _ => Err(Error::Invalid),
+        }
+    }
+
+    pub(crate) fn apply<T: GlyphData>(
+        &self,
+        glyph_seq: &[T],
+        idx: usize,
+    ) -> Option<(&[SequenceLookupRecord], usize)> {
+        let rest = &glyph_seq[idx + 1..];
+        match self {
+            ChainedSequenceContextFormat::Format1 {
+                coverage,
+                seq_rules,
+            } => coverage
+                .for_glyph(glyph_seq[idx].glyph())
+                .and_then(|ci| seq_rules[ci].as_ref())
+                .and_then(|options| {
+                    'outer: for opt in options {
+                        if opt.backtrack_glyphs.len() > idx {
+                            continue;
+                        }
+                        if opt.input_glyphs.len() + opt.lookahead_glyphs.len() > rest.len() {
+                            continue;
+                        }
+                        for (g, tgt) in glyph_seq[..idx].iter().rev().zip(&opt.backtrack_glyphs) {
+                            if g.glyph().0 != *tgt as u32 {
+                                continue 'outer;
+                            }
+                        }
+                        let ilen = opt.input_glyphs.len();
+                        for (g, tgt) in rest[..ilen].iter().zip(&opt.input_glyphs) {
+                            if g.glyph().0 != *tgt as u32 {
+                                continue 'outer;
+                            }
+                        }
+                        for (g, tgt) in rest[ilen..].iter().zip(&opt.lookahead_glyphs) {
+                            if g.glyph().0 != *tgt as u32 {
+                                continue 'outer;
+                            }
+                        }
+                        return Some((opt.lookup_records.as_ref(), opt.input_glyphs.len()));
+                    }
+                    None
+                }),
+            ChainedSequenceContextFormat::Format2 {
+                coverage,
+                backtrack_classdef,
+                input_classdef,
+                lookahead_classdef,
+                class_seq_rules,
+            } => coverage
+                .for_glyph(glyph_seq[idx].glyph())
+                .and_then(|_| input_classdef.glyph_class(glyph_seq[idx].glyph()))
+                .and_then(|class| class_seq_rules[class as usize].as_ref())
+                .and_then(|options| {
+                    'outer: for opt in options {
+                        if opt.backtrack_glyphs.len() > idx {
+                            continue;
+                        }
+                        if opt.input_glyphs.len() + opt.lookahead_glyphs.len() > rest.len() {
+                            continue;
+                        }
+                        for (g, tgt) in glyph_seq[..idx].iter().rev().zip(&opt.backtrack_glyphs) {
+                            if backtrack_classdef.glyph_class(g.glyph()) != Some(*tgt as u32) {
+                                continue 'outer;
+                            }
+                        }
+                        let ilen = opt.input_glyphs.len();
+                        for (g, tgt) in rest[..ilen].iter().zip(&opt.input_glyphs) {
+                            if input_classdef.glyph_class(g.glyph()) != Some(*tgt as u32) {
+                                continue 'outer;
+                            }
+                        }
+                        for (g, tgt) in rest[ilen..].iter().zip(&opt.lookahead_glyphs) {
+                            if lookahead_classdef.glyph_class(g.glyph()) != Some(*tgt as u32) {
+                                continue 'outer;
+                            }
+                        }
+                        return Some((opt.lookup_records.as_ref(), opt.input_glyphs.len()));
+                    }
+                    None
+                }),
+            ChainedSequenceContextFormat::Format3 {
+                backtrack_coverages,
+                input_coverages,
+                lookahead_coverages,
+                lookup_records,
+            } => {
+                if backtrack_coverages.len() > idx {
+                    None
+                } else if input_coverages.len() + lookahead_coverages.len() > rest.len() + 1 {
+                    None
+                } else {
+                    for (g, c) in glyph_seq[..idx].iter().rev().zip(backtrack_coverages) {
+                        if c.for_glyph(g.glyph()).is_none() {
+                            return None;
+                        }
+                    }
+                    let ilen = input_coverages.len();
+                    let slice = &glyph_seq[idx..];
+                    for (g, c) in slice[..ilen].iter().zip(input_coverages) {
+                        if c.for_glyph(g.glyph()).is_none() {
+                            return None;
+                        }
+                    }
+                    for (g, c) in slice[ilen..].iter().zip(lookahead_coverages) {
+                        if c.for_glyph(g.glyph()).is_none() {
+                            return None;
+                        }
+                    }
+                    Some((lookup_records.as_ref(), input_coverages.len()))
+                }
+            }
         }
     }
 }

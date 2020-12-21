@@ -1,12 +1,21 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::rc::Rc;
+
+use fnv::FnvHashSet;
+
+use crate::common::GlyphID;
 use crate::coverage::Coverage;
-use crate::ctx_lookup::{ChainedSequenceContextFormat, SequenceContextFormat};
+use crate::ctx_lookup::{
+    ChainedSequenceContextFormat, SequenceContextFormat, SequenceLookupRecord,
+};
 use crate::error::*;
 use crate::featurelist::FeatureList;
-use crate::lookuplist::{LookupList, LookupSubtable};
+use crate::gdef::Gdef;
+use crate::lookuplist::{GlyphData, LookupList, LookupSubtable};
 use crate::scriptlist::ScriptList;
-use crate::types::{get_i16, get_u16, get_u32};
+use crate::types::{get_i16, get_u16, get_u32, Tag};
+use crate::Script;
 
 /// Wrapper around glyph substitution table
 #[derive(Debug)]
@@ -14,10 +23,11 @@ pub(crate) struct Gsub {
     scriptlist: ScriptList,
     featurelist: FeatureList,
     lookuplist: LookupList<Subtable>,
+    gdef: Option<Rc<Gdef>>,
 }
 
 impl Gsub {
-    pub(crate) fn load(data: &[u8]) -> Result<Gsub> {
+    pub(crate) fn load(data: &[u8], gdef: Option<Rc<Gdef>>) -> Result<Gsub> {
         //let minor_version = get_u16(slice, 2)?;
         let scriptlist_off = get_u16(data, 4)? as usize;
         let featurelist_off = get_u16(data, 6)? as usize;
@@ -29,7 +39,34 @@ impl Gsub {
             scriptlist,
             featurelist,
             lookuplist,
+            gdef,
         })
+    }
+
+    pub(crate) fn substitute(
+        &self,
+        mut glyphs: Vec<GlyphID>,
+        script: Script,
+        enabled_features: &FnvHashSet<Tag>,
+    ) -> Result<Vec<GlyphID>> {
+        // Get feature indices
+        let feature_indices = self.scriptlist.feature_indices(script);
+        let features = feature_indices
+            .iter()
+            .map(|i| &self.featurelist[*i as usize])
+            .filter(|(tag, _)| enabled_features.contains(tag));
+        // Select lookups
+        let mut lookuplist_indices = features.flat_map(|(_, is)| is).collect::<Vec<_>>();
+        lookuplist_indices.sort();
+        lookuplist_indices.dedup();
+
+        let gdef_ref = self.gdef.as_ref().map(|g| g.as_ref());
+        // Apply all lookups
+        for idx in lookuplist_indices {
+            let lookup = &self.lookuplist[*idx as usize];
+            lookup.apply(&mut glyphs, gdef_ref, &self.lookuplist);
+        }
+        Ok(glyphs)
     }
 }
 
@@ -88,7 +125,22 @@ enum Subtable {
     },
 }
 
+impl GlyphData for GlyphID {
+    fn glyph(&self) -> GlyphID {
+        *self
+    }
+}
+
 impl LookupSubtable for Subtable {
+    type GlyphData = GlyphID;
+
+    fn is_recursive(lookup_type: u16) -> bool {
+        match lookup_type {
+            5 | 6 => true,
+            _ => false,
+        }
+    }
+
     fn load(data: &[u8], lookup_type: u16) -> Result<Subtable> {
         match lookup_type {
             1 => Subtable::load_single(data),
@@ -100,6 +152,105 @@ impl LookupSubtable for Subtable {
             7 => Subtable::load_extension_substitution(data),
             8 => Subtable::load_reverse_chained_context_single(data),
             _ => Err(Error::Invalid),
+        }
+    }
+
+    fn apply(&self, glyph_seq: &mut Vec<GlyphID>, idx: usize) -> Option<usize> {
+        let glyph = glyph_seq[idx];
+        let next_idx = idx + 1;
+        let rest = &glyph_seq[next_idx..];
+        match self {
+            Subtable::Single { coverage, format } => {
+                coverage.for_glyph(glyph).map(|ci| match format {
+                    SingleFormat::Format1 { delta } => {
+                        glyph_seq[idx] = GlyphID((glyph.0 as i32 + *delta as i32) as u32);
+                        1
+                    }
+                    SingleFormat::Format2 { subst } => {
+                        glyph_seq[idx] = GlyphID(subst[ci] as u32);
+                        1
+                    }
+                })
+            }
+            Subtable::Multiple {
+                coverage,
+                sequences,
+            } => coverage.for_glyph(glyph).map(|ci| {
+                glyph_seq.splice(idx..=idx, sequences[ci].iter().map(|x| GlyphID(*x as u32)));
+                sequences[ci].len()
+            }),
+            Subtable::Alternate {
+                coverage,
+                alternate_sets,
+            } => {
+                // TODO: Do something here?
+                None
+            }
+            Subtable::Ligature {
+                coverage,
+                ligature_sets,
+            } => {
+                if let Some(ci) = coverage.for_glyph(glyph) {
+                    'outer: for option in &ligature_sets[ci] {
+                        if rest.len() < option.component_glyphs.len() {
+                            continue;
+                        }
+                        for (g, tgt) in rest.iter().zip(&option.component_glyphs) {
+                            if g.0 != *tgt as u32 {
+                                continue 'outer;
+                            }
+                        }
+                        glyph_seq[idx] = GlyphID(option.ligature_glyph as u32);
+                        return Some(1);
+                    }
+                    None
+                } else {
+                    None
+                }
+            }
+            Subtable::Context(_) | Subtable::ChainedContext(_) => None,
+            Subtable::ReverseChainedContextSingle {
+                coverage,
+                backtrack_coverages,
+                lookahead_coverages,
+                subst_glyphs,
+            } => {
+                if backtrack_coverages.len() > idx || lookahead_coverages.len() > rest.len() {
+                    None
+                } else {
+                    if let Some(ci) = coverage.for_glyph(glyph) {
+                        for i in 0..backtrack_coverages.len() {
+                            if backtrack_coverages[i]
+                                .for_glyph(glyph_seq[idx - i - 1])
+                                .is_none()
+                            {
+                                return None;
+                            }
+                        }
+                        for i in 0..lookahead_coverages.len() {
+                            if lookahead_coverages[i].for_glyph(rest[i]).is_none() {
+                                return None;
+                            }
+                        }
+                        glyph_seq[idx] = GlyphID(subst_glyphs[ci] as u32);
+                        Some(1)
+                    } else {
+                        None
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_recursive(
+        &self,
+        glyph_seq: &[Self::GlyphData],
+        cur_idx: usize,
+    ) -> Option<(&[SequenceLookupRecord], usize)> {
+        match self {
+            Subtable::Context(fmt) => fmt.apply(glyph_seq, cur_idx),
+            Subtable::ChainedContext(fmt) => fmt.apply(glyph_seq, cur_idx),
+            _ => None,
         }
     }
 }

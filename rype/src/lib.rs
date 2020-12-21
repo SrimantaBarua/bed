@@ -5,11 +5,14 @@ extern crate bitflags;
 
 mod classdef;
 mod cmap;
+mod common;
 mod coverage;
 mod ctx_lookup;
+mod direction;
 mod error;
 mod face;
 mod featurelist;
+mod features;
 mod gasp;
 mod gdef;
 mod glyf;
@@ -27,6 +30,9 @@ mod script;
 mod scriptlist;
 mod types;
 
+pub use common::GlyphInfo;
+pub use direction::Direction;
 pub use error::*;
 pub use face::Face;
+pub use features::Features;
 pub use script::Script;

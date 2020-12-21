@@ -1,15 +1,20 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::collections::HashMap;
+use std::rc::Rc;
 
+use fnv::FnvHashMap;
 use geom::{point2, Point2D};
 
 use crate::classdef::ClassDef;
+use crate::common::{GlyphID, GlyphInfo};
 use crate::coverage::Coverage;
-use crate::ctx_lookup::{ChainedSequenceContextFormat, SequenceContextFormat};
+use crate::ctx_lookup::{
+    ChainedSequenceContextFormat, SequenceContextFormat, SequenceLookupRecord,
+};
 use crate::error::*;
 use crate::featurelist::FeatureList;
-use crate::lookuplist::{LookupList, LookupSubtable};
+use crate::gdef::Gdef;
+use crate::lookuplist::{GlyphData, LookupList, LookupSubtable};
 use crate::scriptlist::ScriptList;
 use crate::types::{get_i16, get_u16, get_u32};
 
@@ -19,10 +24,11 @@ pub(crate) struct Gpos {
     scriptlist: ScriptList,
     featurelist: FeatureList,
     lookuplist: LookupList<Subtable>,
+    gdef: Option<Rc<Gdef>>,
 }
 
 impl Gpos {
-    pub(crate) fn load(data: &[u8]) -> Result<Gpos> {
+    pub(crate) fn load(data: &[u8], gdef: Option<Rc<Gdef>>) -> Result<Gpos> {
         //let minor_version = get_u16(slice, 2)?;
         let scriptlist_off = get_u16(data, 4)? as usize;
         let featurelist_off = get_u16(data, 6)? as usize;
@@ -34,6 +40,7 @@ impl Gpos {
             scriptlist,
             featurelist,
             lookuplist,
+            gdef,
         })
     }
 }
@@ -46,7 +53,7 @@ enum SingleFormat {
 
 #[derive(Debug)]
 enum PairFormat {
-    Format1(Vec<HashMap<u16, (ValueRecord, ValueRecord)>>),
+    Format1(Vec<FnvHashMap<u16, (ValueRecord, ValueRecord)>>),
     Format2 {
         class1: ClassDef,
         class2: ClassDef,
@@ -146,7 +153,22 @@ enum Subtable {
     ChainedContext(ChainedSequenceContextFormat),
 }
 
+impl GlyphData for GlyphInfo {
+    fn glyph(&self) -> GlyphID {
+        self.glyph
+    }
+}
+
 impl LookupSubtable for Subtable {
+    type GlyphData = GlyphInfo;
+
+    fn is_recursive(lookup_type: u16) -> bool {
+        match lookup_type {
+            7 | 8 => true,
+            _ => false,
+        }
+    }
+
     fn load(data: &[u8], lookup_type: u16) -> Result<Subtable> {
         match lookup_type {
             1 => Subtable::load_single_adjustment(data),
@@ -160,6 +182,18 @@ impl LookupSubtable for Subtable {
             9 => Subtable::load_extension_positioning(data),
             _ => Err(Error::Invalid),
         }
+    }
+
+    fn apply(&self, glyph_seq: &mut Vec<GlyphInfo>, idx: usize) -> Option<usize> {
+        unimplemented!()
+    }
+
+    fn apply_recursive(
+        &self,
+        glyph_seq: &[GlyphInfo],
+        cur_idx: usize,
+    ) -> Option<(&[SequenceLookupRecord], usize)> {
+        unimplemented!()
     }
 }
 
@@ -209,7 +243,7 @@ impl Subtable {
                     let data = &data[pair_set_off..];
                     let pair_val_count = get_u16(data, 0)? as usize;
                     let size = 2 + size1 + size2;
-                    let mut records = HashMap::new();
+                    let mut records = FnvHashMap::default();
                     for off in (2..2 + pair_val_count * size).step_by(size) {
                         let glyph = get_u16(data, off)?;
                         let rec1 = ValueRecord::load(data, off + 2, value_format1)?;

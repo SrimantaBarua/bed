@@ -1,6 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use std::collections::HashMap;
+use fnv::FnvHashMap;
 
 use crate::error::*;
 use crate::types::{get_i16, get_u16};
@@ -8,7 +8,7 @@ use crate::types::{get_i16, get_u16};
 #[derive(Debug)]
 struct Table {
     coverage: Coverage,
-    map: HashMap<(u16, u16), i16>,
+    map: FnvHashMap<(u16, u16), i16>,
 }
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl Kern {
                 continue;
             }
             let npairs = get_u16(data, off + 6)? as usize;
-            let mut map = HashMap::new();
+            let mut map = FnvHashMap::default();
             for rec_off in (off + 14..off + 14 + npairs * 6).step_by(6) {
                 let left = get_u16(data, rec_off)?;
                 let right = get_u16(data, rec_off + 2)?;

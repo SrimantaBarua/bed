@@ -58,9 +58,9 @@ pub(crate) fn get_tag(b: &[u8], offset: usize) -> Result<Tag> {
 pub(crate) struct Tag(pub(crate) u32);
 
 impl Tag {
-    /// Create tag from string representation
-    pub(crate) fn from_str(s: &str) -> Result<Tag> {
-        get_u32(s.as_bytes(), 0).map(|u| Tag(u))
+    /// Create tag from 4 bytes
+    pub(crate) const fn from(b: &[u8; 4]) -> Tag {
+        Tag(((b[0] as u32) << 24) | ((b[1] as u32) << 16) | ((b[2] as u32) << 8) | (b[3] as u32))
     }
 }
 

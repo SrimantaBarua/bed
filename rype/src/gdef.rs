@@ -1,9 +1,18 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use crate::classdef::ClassDef;
+use crate::common::GlyphID;
 use crate::coverage::Coverage;
 use crate::error::*;
 use crate::types::{get_i16, get_u16, get_u32};
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum GlyphClass {
+    Base,
+    Ligature,
+    Mark,
+    Component,
+}
 
 #[derive(Debug)]
 struct GlyphClassDef(ClassDef);
@@ -160,5 +169,32 @@ impl Gdef {
             mark_attachment_class_def,
             mark_glyph_sets,
         })
+    }
+
+    pub(crate) fn glyph_class(&self, glyph: GlyphID) -> Option<GlyphClass> {
+        self.glyph_class_def
+            .as_ref()
+            .and_then(|gcd| gcd.0.glyph_class(glyph))
+            .and_then(|c| match c {
+                1 => Some(GlyphClass::Base),
+                2 => Some(GlyphClass::Ligature),
+                3 => Some(GlyphClass::Mark),
+                4 => Some(GlyphClass::Component),
+                _ => None,
+            })
+    }
+
+    pub(crate) fn mark_attachment_class(&self, glyph: GlyphID) -> Option<u32> {
+        self.mark_attachment_class_def
+            .as_ref()
+            .and_then(|macd| macd.0.glyph_class(glyph))
+    }
+
+    pub(crate) fn glyph_in_mark_set(&self, idx: usize, glyph: GlyphID) -> bool {
+        if let Some(mgs) = &self.mark_glyph_sets {
+            mgs.0[idx].for_glyph(glyph).is_some()
+        } else {
+            panic!("Mark Glyph Set should not be zero here");
+        }
     }
 }
