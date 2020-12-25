@@ -141,7 +141,7 @@ impl InputState {
         match button {
             MouseButton::Left if state == ElementState::Pressed => {
                 self.cursor_click_pos = Some(self.cursor_pos);
-                self.bed_handle.move_cursor_to_point(self.cursor_pos);
+                self.bed_handle.move_cursor_to_point(self.cursor_pos.cast());
             }
             MouseButton::Left if state == ElementState::Released => {
                 self.cursor_click_pos = None;
@@ -156,11 +156,7 @@ impl InputState {
 }
 
 impl BedHandle {
-    fn scroll_views_with_active_acc(
-        &mut self,
-        mut acc: Vector2D<f32, PixelSize>,
-        duration: Duration,
-    ) {
+    fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
         let inner = &mut *self.0.borrow_mut();
         inner.text_tree.scroll_views_with_active_acc(acc, duration)
     }
@@ -185,7 +181,7 @@ impl BedHandle {
         inner.text_tree.active_mut().move_cursor_right(n);
     }
 
-    fn move_cursor_to_point(&mut self, point: Point2D<f32, PixelSize>) {
+    fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         inner.text_tree.move_cursor_to_point(point);
     }

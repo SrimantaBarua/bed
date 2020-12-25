@@ -50,8 +50,8 @@ impl Bed {
         let first_buffer = buffer_mgr.read_file("src/buffer/view.rs").unwrap();
         let first_view_id = buffer_mgr.next_view_id();
         let text_tree = textview::TextTree::new(
-            Rect::new(point2(0.0, 0.0), window.size()),
-            1.0,
+            Rect::new(point2(0, 0), window.size()),
+            1,
             first_buffer,
             first_view_id,
         );
@@ -84,15 +84,15 @@ impl BedHandle {
         inner.window.resize(physical_size);
         let window_size = inner.window.size();
         opengl::gl_viewport(Rect::new(point2(0, 0), window_size.cast()));
-        inner.painter.resize(window_size);
-        inner.font_core.set_window_size(window_size);
+        inner.painter.resize(window_size.cast());
+        inner.font_core.set_window_size(window_size.cast());
         inner
             .text_tree
-            .set_rect(Rect::new(point2(0.0, 0.0), window_size));
+            .set_rect(Rect::new(point2(0, 0), window_size));
         inner.window.request_redraw();
     }
 
-    fn window_size(&self) -> Size2D<f32, PixelSize> {
+    fn window_size(&self) -> Size2D<u32, PixelSize> {
         let inner = &*self.0.borrow();
         inner.window.size()
     }

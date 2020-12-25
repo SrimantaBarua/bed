@@ -13,15 +13,15 @@ use crate::opengl::{ElemArr, GlTexture, Mat4, ShaderProgram, TexRed, TexUnit};
 use crate::shapes::TexColorQuad;
 use crate::style::{Color, TextSize, TextStyle};
 
-#[cfg(target_os = "linux")]
-mod fontconfig;
 #[cfg(target_os = "windows")]
 mod directwrite;
-
 #[cfg(target_os = "linux")]
-use self::fontconfig as font_source;
+mod fontconfig;
+
 #[cfg(target_os = "windows")]
 use self::directwrite as font_source;
+#[cfg(target_os = "linux")]
+use self::fontconfig as font_source;
 
 mod freetype;
 mod harfbuzz;

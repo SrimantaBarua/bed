@@ -31,7 +31,7 @@ impl TextView {
         let dist = dist.round();
         if dist.x != 0.0 || dist.y != 0.0 {
             let view = &mut self.views[self.active];
-            view.buf_handle.scroll_view(&view.view_id, dist);
+            view.buf_handle.scroll_view(&view.view_id, dist.cast());
         } else {
             self.scroll_vel = vec2(0.0, 0.0);
         }
@@ -78,7 +78,7 @@ impl TextView {
     }
 
     pub(super) fn new(
-        rect: Rect<f32, PixelSize>,
+        rect: Rect<u32, PixelSize>,
         mut buf_handle: BufferHandle,
         view_id: BufferViewId,
     ) -> TextView {
@@ -94,7 +94,7 @@ impl TextView {
         }
     }
 
-    pub(super) fn set_rect(&mut self, rect: Rect<f32, PixelSize>) {
+    pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
         let view = &mut self.views[self.active];
         view.buf_handle.set_view_rect(&view.view_id, rect);
     }
@@ -104,7 +104,7 @@ impl TextView {
         view.buf_handle.draw_view(&view.view_id, painter);
     }
 
-    pub(super) fn move_cursor_to_point(&mut self, point: Point2D<f32, PixelSize>) {
+    pub(super) fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
         let view = &mut self.views[self.active];
         view.buf_handle
             .move_view_cursor_to_point(&view.view_id, point);

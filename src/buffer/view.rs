@@ -24,36 +24,37 @@ enum SpanOrSpace {
 
 pub(super) struct View {
     pub(super) cursor: ViewCursor,
-    rect: Rect<f32, PixelSize>,
-    off: Vector2D<f32, PixelSize>,
+    rect: Rect<u32, PixelSize>,
+    off: Vector2D<i32, PixelSize>,
     start_line: usize,
     bed_handle: BufferBedHandle,
 }
 
 impl View {
-    pub(super) fn new(bed_handle: BufferBedHandle, rect: Rect<f32, PixelSize>) -> View {
+    pub(super) fn new(bed_handle: BufferBedHandle, rect: Rect<u32, PixelSize>) -> View {
         View {
             rect,
-            off: vec2(0.0, 0.0),
+            off: vec2(0, 0),
             start_line: 0,
             bed_handle,
             cursor: ViewCursor::default(),
         }
     }
 
-    pub(super) fn set_rect(&mut self, rect: Rect<f32, PixelSize>, data: &Rope, tab_width: usize) {
+    pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>, data: &Rope, tab_width: usize) {
         self.rect = rect;
         self.snap_to_cursor(data, tab_width);
     }
 
     pub(super) fn move_cursor_to_point(
         &mut self,
-        mut point: Point2D<f32, PixelSize>,
+        mut point: Point2D<i32, PixelSize>,
         data: &Rope,
         tab_width: usize,
     ) {
-        assert!(self.rect.contains(point));
-        point -= self.rect.origin.to_vector();
+        let rect = self.rect.cast();
+        assert!(rect.contains(point));
+        point -= rect.origin.to_vector();
         self.sanity_check(data);
 
         // Find line
@@ -61,23 +62,26 @@ impl View {
         let mut height = -self.off.y;
         for line in data.lines_at(self.start_line) {
             let metrics = self.line_metrics(&line, tab_width);
-            height += metrics.height;
+            height += metrics.height as i32;
             if height >= point.y {
-                if height > self.rect.size.height {
-                    self.off.y += height - self.rect.size.height;
+                if height > rect.size.height {
+                    self.off.y += height - rect.size.height;
                 }
                 break;
             }
             self.cursor.line_num += 1;
-            assert!(height < self.rect.size.height);
+            assert!(height < rect.size.height);
+        }
+        if self.cursor.line_num >= data.len_lines() {
+            self.cursor.line_num = data.len_lines() - 1;
         }
         // Trim lines from the top if we need to
         for line in data.lines_at(self.start_line) {
             let metrics = self.line_metrics(&line, tab_width);
-            if self.off.y < metrics.height {
+            if self.off.y < metrics.height as i32 {
                 break;
             }
-            self.off.y -= metrics.height;
+            self.off.y -= metrics.height as i32;
             self.start_line += 1;
         }
 
@@ -88,8 +92,9 @@ impl View {
         let text_style = TextStyle::default();
         let space_metrics = text_font.space_metrics(text_size, text_style);
         let sp_awidth = space_metrics.advance.width.to_f32();
-        let cursor_x = Cell::new(-self.off.x);
+        let cursor_x = Cell::new(-self.off.x as f32);
         let gidx = Cell::new(0);
+        let point = point.cast::<f32>();
 
         split_text(
             &line,
@@ -200,12 +205,12 @@ impl View {
         } else {
             cursor_block_width.get()
         };
-        let cursor_max_x = cursor_x.get() + cursor_width;
-        let cursor_min_x = cursor_x.get();
+        let cursor_max_x = (cursor_x.get() + cursor_width).ceil() as i32;
+        let cursor_min_x = cursor_x.get().floor() as i32;
         if self.off.x > cursor_min_x {
             self.off.x = cursor_min_x;
-        } else if self.off.x + self.rect.size.width < cursor_max_x {
-            self.off.x = cursor_max_x - self.rect.size.width;
+        } else if self.off.x + (self.rect.size.width as i32) < cursor_max_x {
+            self.off.x = cursor_max_x - (self.rect.size.width as i32);
         }
 
         self.bed_handle.request_redraw();
@@ -215,18 +220,18 @@ impl View {
         self.sanity_check(data);
         if linum <= self.start_line {
             self.start_line = linum;
-            self.off.y = 0.0;
+            self.off.y = 0;
         } else {
             let mut iter = data.lines_at(linum + 1);
             let mut start_line = linum + 1;
-            let mut height = 0.0;
+            let mut height = 0;
             while let Some(line) = iter.prev() {
                 start_line -= 1;
                 let metrics = self.line_metrics(&line, tab_width);
                 height += metrics.height;
                 if height >= self.rect.size.height {
                     self.start_line = start_line;
-                    self.off.y = height - self.rect.size.height;
+                    self.off.y = height as i32 - self.rect.size.height as i32;
                     return;
                 }
                 if start_line == self.start_line {
@@ -234,13 +239,13 @@ impl View {
                 }
             }
             self.start_line = 0;
-            self.off.y = 0.0;
+            self.off.y = 0;
         }
     }
 
     pub(super) fn scroll(
         &mut self,
-        scroll: Vector2D<f32, PixelSize>,
+        scroll: Vector2D<i32, PixelSize>,
         data: &Rope,
         tab_width: usize,
     ) {
@@ -248,46 +253,46 @@ impl View {
         self.off += scroll;
 
         // Scroll y
-        while self.off.y < 0.0 && self.start_line > 0 {
+        while self.off.y < 0 && self.start_line > 0 {
             self.start_line -= 1;
             let metrics = self.line_metrics(&data.line(self.start_line), tab_width);
-            self.off.y += metrics.height;
+            self.off.y += metrics.height as i32;
         }
-        if self.off.y < 0.0 {
-            self.off.y = 0.0;
+        if self.off.y < 0 {
+            self.off.y = 0;
         }
-        while self.off.y > 0.0 {
+        while self.off.y > 0 {
             let metrics = self.line_metrics(&data.line(self.start_line), tab_width);
-            if metrics.height > self.off.y {
+            if metrics.height as i32 > self.off.y {
                 break;
             }
             if self.start_line == data.len_lines() - 1 {
-                self.off.y = 0.0;
+                self.off.y = 0;
                 break;
             }
-            self.off.y -= metrics.height;
+            self.off.y -= metrics.height as i32;
             self.start_line += 1;
         }
 
         // Scroll X
-        if self.off.x <= 0.0 {
-            self.off.x = 0.0;
+        if self.off.x <= 0 {
+            self.off.x = 0;
         } else {
             let mut height = -self.off.y;
-            let mut max_xoff = 0.0;
+            let mut max_xoff = 0i32;
             for line in data.lines_at(self.start_line) {
                 let metrics = self.line_metrics(&line, tab_width);
-                if metrics.width > max_xoff {
-                    max_xoff = metrics.width;
+                if metrics.width as i32 > max_xoff {
+                    max_xoff = metrics.width as i32;
                 }
-                height += metrics.height;
-                if height >= self.rect.size.height {
+                height += metrics.height as i32;
+                if height >= self.rect.size.height as i32 {
                     break;
                 }
             }
-            max_xoff -= self.rect.size.width;
-            if max_xoff < 0.0 {
-                max_xoff = 0.0;
+            max_xoff -= self.rect.size.width as i32;
+            if max_xoff < 0 {
+                max_xoff = 0;
             }
             if self.off.x > max_xoff {
                 self.off.x = max_xoff;
@@ -300,20 +305,20 @@ impl View {
     pub(super) fn draw(&mut self, data: &Rope, painter: &mut Painter, tab_width: usize) {
         self.sanity_check(data);
         let mut paint_ctx =
-            painter.widget_ctx(self.rect, Color::new(0xff, 0xff, 0xff, 0xff), false);
+            painter.widget_ctx(self.rect.cast(), Color::new(0xff, 0xff, 0xff, 0xff), false);
 
         let mut text_font = self.bed_handle.text_font();
         let text_size = self.bed_handle.text_size();
         let text_style = TextStyle::default();
         let space_metrics = text_font.space_metrics(text_size, text_style);
         let sp_awidth = space_metrics.advance.width.to_f32();
-        let mut origin = point2(0.0, 0.0) - self.off;
+        let mut origin = point2(0.0f32, 0.0f32) - self.off.cast();
         let spans = RefCell::new(Vec::new());
         let mut linum = self.start_line;
-        let rect_width = self.rect.size.width;
+        let rect_width = self.rect.size.width as f32;
 
         for rope_line in data.lines_at(self.start_line) {
-            if origin.y >= self.rect.size.height {
+            if origin.y >= self.rect.size.height as f32 {
                 break;
             }
             let mut ascender = space_metrics.ascender;
@@ -415,7 +420,7 @@ impl View {
             origin.y += ascender.to_f32();
             let mut pos = origin;
             for span_or_space in spans.iter() {
-                if pos.x >= self.rect.size.width {
+                if pos.x >= rect_width {
                     break;
                 }
                 match span_or_space {
@@ -438,7 +443,7 @@ impl View {
 
     pub(super) fn scroll_to_top(&mut self) {
         self.start_line = 0;
-        self.off = vec2(0.0, 0.0);
+        self.off = vec2(0, 0);
         self.bed_handle.request_redraw();
     }
 
@@ -471,23 +476,23 @@ impl View {
         );
         let state = &*state.borrow();
         LineMetrics {
-            height: (state.0 - state.1).to_f32(),
-            width: state.2,
+            height: (state.0 - state.1).to_f32().ceil() as u32,
+            width: state.2.ceil() as u32,
         }
     }
 
     fn sanity_check(&mut self, data: &Rope) {
         if self.start_line >= data.len_lines() {
             self.start_line = data.len_lines() - 1;
-            self.off = vec2(0.0, 0.0);
+            self.off = vec2(0, 0);
             self.bed_handle.request_redraw();
         }
     }
 }
 
 struct LineMetrics {
-    height: f32,
-    width: f32,
+    height: u32,
+    width: u32,
 }
 
 #[derive(Eq, PartialEq)]

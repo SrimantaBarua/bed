@@ -28,13 +28,13 @@ impl Eq for BufferHandle {}
 
 impl BufferHandle {
     // -------- View manipulation --------
-    pub(crate) fn new_view(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
+    pub(crate) fn new_view(&mut self, view_id: &BufferViewId, rect: Rect<u32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         let view = View::new(inner.bed_handle.clone(), rect);
         inner.views.insert(view_id.clone(), view);
     }
 
-    pub(crate) fn set_view_rect(&mut self, view_id: &BufferViewId, rect: Rect<f32, PixelSize>) {
+    pub(crate) fn set_view_rect(&mut self, view_id: &BufferViewId, rect: Rect<u32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
         view.set_rect(rect, &inner.rope, inner.tab_width);
@@ -46,7 +46,7 @@ impl BufferHandle {
         view.draw(&inner.rope, painter, inner.tab_width);
     }
 
-    pub(crate) fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<f32, PixelSize>) {
+    pub(crate) fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<i32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
         view.scroll(scroll, &inner.rope, inner.tab_width);
@@ -123,7 +123,7 @@ impl BufferHandle {
     pub(crate) fn move_view_cursor_to_point(
         &mut self,
         view_id: &BufferViewId,
-        point: Point2D<f32, PixelSize>,
+        point: Point2D<i32, PixelSize>,
     ) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();

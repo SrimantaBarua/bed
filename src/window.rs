@@ -47,8 +47,8 @@ impl Window {
         self.context.window().request_redraw()
     }
 
-    pub(crate) fn size(&self) -> Size2D<f32, PixelSize> {
+    pub(crate) fn size(&self) -> Size2D<u32, PixelSize> {
         let size = self.context.window().inner_size();
-        size2(size.width, size.height).cast()
+        size2(size.width, size.height)
     }
 }
