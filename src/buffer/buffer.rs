@@ -172,6 +172,22 @@ impl Buffer {
         self.bed_handle.request_redraw();
     }
 
+    pub(crate) fn move_view_cursor_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
+        let view = self.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        cursor.line_num = linum;
+        if linum >= self.rope.len_lines() {
+            cursor.line_num = self.rope.len_lines() - 1;
+        }
+        cursor.line_cidx = 0;
+        cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_last_line(&mut self, view_id: &BufferViewId) {
+        self.move_view_cursor_to_line(view_id, self.rope.len_lines() - 1);
+    }
+
     pub(crate) fn set_view_cursor_style(&mut self, view_id: &BufferViewId, style: CursorStyle) {
         let view = self.views.get_mut(view_id).unwrap();
         view.cursor.style = style;

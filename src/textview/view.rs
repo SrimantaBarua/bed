@@ -45,6 +45,14 @@ impl<'a> TextViewEditCtx<'a> {
         self.buffer.move_view_cursor_to_line_end(self.view_id, n);
     }
 
+    pub(crate) fn move_cursor_to_line(&mut self, linum: usize) {
+        self.buffer.move_view_cursor_to_line(self.view_id, linum);
+    }
+
+    pub(crate) fn move_cursor_to_last_line(&mut self) {
+        self.buffer.move_view_cursor_to_last_line(self.view_id);
+    }
+
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
         self.buffer.set_view_cursor_style(self.view_id, style);
     }

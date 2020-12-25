@@ -15,9 +15,9 @@ use crate::common::PixelSize;
 use crate::textview::TextViewEditCtx;
 use crate::{Bed, BedHandle};
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 enum Mode {
-    Normal,
+    Normal { action_mul: Option<usize> },
     Insert,
 }
 
@@ -34,7 +34,7 @@ pub(crate) struct InputState {
 impl InputState {
     pub(crate) fn new(bed_handle: BedHandle) -> InputState {
         InputState {
-            mode: Mode::Normal,
+            mode: Mode::Normal { action_mul: None },
             scroll_amount: vec2(0.0, 0.0),
             bed_handle,
             modifiers: ModifiersState::empty(),
@@ -83,42 +83,80 @@ impl InputState {
 
     pub(crate) fn handle_char(&mut self, c: char) {
         let mut bed = self.bed_handle.edit();
-        match self.mode {
-            Mode::Normal => match c {
-                // Basic movement
-                'h' => bed.edit_view().move_cursor_left(1),
-                'j' => bed.edit_view().move_cursor_down(1),
-                'k' => bed.edit_view().move_cursor_up(1),
-                'l' => bed.edit_view().move_cursor_right(1),
-                '0' => bed.edit_view().move_cursor_to_line_start(1),
-                '$' => bed.edit_view().move_cursor_to_line_end(1),
-                // Entering insert mode
-                'i' => {
-                    self.mode = Mode::Insert;
-                    bed.edit_view().set_cursor_style(CursorStyle::Line)
+        match &mut self.mode {
+            Mode::Normal { action_mul } => {
+                let act_rep = action_mul.unwrap_or(1);
+                let mut is_num = false;
+                let mut next_mode = None;
+                match c {
+                    // Numbers
+                    '1'..='9' => {
+                        let num = (c as u32) - ('0' as u32);
+                        *action_mul = match action_mul {
+                            Some(x) => Some((*x * 10) + num as usize),
+                            None => Some(num as usize),
+                        };
+                        is_num = true;
+                    }
+                    // Basic movement
+                    'h' => bed.edit_view().move_cursor_left(act_rep),
+                    'j' => bed.edit_view().move_cursor_down(act_rep),
+                    'k' => bed.edit_view().move_cursor_up(act_rep),
+                    'l' => bed.edit_view().move_cursor_right(act_rep),
+                    // Move to line
+                    'g' => {
+                        let linum = action_mul.unwrap_or(1);
+                        bed.edit_view().move_cursor_to_line(linum);
+                    }
+                    'G' => bed.edit_view().move_cursor_to_last_line(),
+                    // Move to start/end of line
+                    '0' => {
+                        *action_mul = match action_mul {
+                            Some(x) => {
+                                is_num = true;
+                                Some(*x * 10)
+                            }
+                            None => {
+                                bed.edit_view().move_cursor_to_line_start(1);
+                                None
+                            }
+                        };
+                    }
+                    '$' => bed.edit_view().move_cursor_to_line_end(act_rep),
+                    // Entering insert mode
+                    'i' => {
+                        next_mode = Some(Mode::Insert);
+                        bed.edit_view().set_cursor_style(CursorStyle::Line)
+                    }
+                    'I' => {
+                        next_mode = Some(Mode::Insert);
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.move_cursor_to_line_start(1);
+                    }
+                    'a' => {
+                        next_mode = Some(Mode::Insert);
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.move_cursor_right(1);
+                    }
+                    'A' => {
+                        next_mode = Some(Mode::Insert);
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.move_cursor_to_line_end(1);
+                    }
+                    // Delete
+                    'x' => bed.edit_view().delete_right(act_rep),
+                    // Keep num chains continuing
+                    _ => is_num = true,
                 }
-                'I' => {
-                    self.mode = Mode::Insert;
-                    let mut ctx = bed.edit_view();
-                    ctx.set_cursor_style(CursorStyle::Line);
-                    ctx.move_cursor_to_line_start(1);
+                if let Some(next) = next_mode {
+                    self.mode = next;
+                } else if !is_num {
+                    *action_mul = None;
                 }
-                'a' => {
-                    self.mode = Mode::Insert;
-                    let mut ctx = bed.edit_view();
-                    ctx.set_cursor_style(CursorStyle::Line);
-                    ctx.move_cursor_right(1);
-                }
-                'A' => {
-                    self.mode = Mode::Insert;
-                    let mut ctx = bed.edit_view();
-                    ctx.set_cursor_style(CursorStyle::Line);
-                    ctx.move_cursor_to_line_end(1);
-                }
-                // Delete
-                'x' => bed.edit_view().delete_right(1),
-                _ => {}
-            },
+            }
             Mode::Insert => match c as u32 {
                 8 /* backspace */ => bed.edit_view().delete_left(1),
                 127 /* delete */  => bed.edit_view().delete_right(1),
@@ -133,15 +171,22 @@ impl InputState {
             return;
         }
         if let Some(vkey) = input.virtual_keycode {
-            match self.mode {
-                Mode::Normal => match vkey {
-                    // Basic movement
-                    VirtualKeyCode::Up => bed.edit_view().move_cursor_up(1),
-                    VirtualKeyCode::Down => bed.edit_view().move_cursor_down(1),
-                    VirtualKeyCode::Left => bed.edit_view().move_cursor_left(1),
-                    VirtualKeyCode::Right => bed.edit_view().move_cursor_right(1),
-                    _ => {}
-                },
+            match &mut self.mode {
+                Mode::Normal { action_mul } => {
+                    let act_rep = action_mul.unwrap_or(1);
+                    let mut reset_count = true;
+                    match vkey {
+                        // Basic movement
+                        VirtualKeyCode::Up => bed.edit_view().move_cursor_up(act_rep),
+                        VirtualKeyCode::Down => bed.edit_view().move_cursor_down(act_rep),
+                        VirtualKeyCode::Left => bed.edit_view().move_cursor_left(act_rep),
+                        VirtualKeyCode::Right => bed.edit_view().move_cursor_right(act_rep),
+                        _ => reset_count = false,
+                    }
+                    if reset_count {
+                        *action_mul = None;
+                    }
+                }
                 Mode::Insert => match vkey {
                     // Basic movement
                     VirtualKeyCode::Up => bed.edit_view().move_cursor_up(1),
@@ -150,7 +195,7 @@ impl InputState {
                     VirtualKeyCode::Right => bed.edit_view().move_cursor_right(1),
                     // Exiting insert mode
                     VirtualKeyCode::Escape => {
-                        self.mode = Mode::Normal;
+                        self.mode = Mode::Normal { action_mul: None };
                         let mut ctx = bed.edit_view();
                         ctx.move_cursor_left(1);
                         ctx.set_cursor_style(CursorStyle::Block);
@@ -213,6 +258,14 @@ impl<'a> ViewEditCtx<'a> {
 
     fn move_cursor_to_line_end(&mut self, n: usize) {
         self.view.move_cursor_to_line_end(n);
+    }
+
+    fn move_cursor_to_line(&mut self, linum: usize) {
+        self.view.move_cursor_to_line(linum);
+    }
+
+    fn move_cursor_to_last_line(&mut self) {
+        self.view.move_cursor_to_last_line();
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {
