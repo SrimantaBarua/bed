@@ -4,3 +4,4 @@ mod tree;
 mod view;
 
 pub(crate) use tree::TextTree;
+pub(crate) use view::TextViewEditCtx;

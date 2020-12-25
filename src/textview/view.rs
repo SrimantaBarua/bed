@@ -1,10 +1,11 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cell::RefMut;
 use std::time::Duration;
 
 use euclid::{vec2, Point2D, Rect, Vector2D};
 
-use crate::buffer::{BufferHandle, BufferViewId, CursorStyle};
+use crate::buffer::{Buffer, BufferHandle, BufferViewId, CursorStyle};
 use crate::common::PixelSize;
 use crate::painter::Painter;
 use crate::TARGET_DELTA;
@@ -12,6 +13,57 @@ use crate::TARGET_DELTA;
 struct ViewInner {
     buf_handle: BufferHandle,
     view_id: BufferViewId,
+}
+
+pub(crate) struct TextViewEditCtx<'a> {
+    buffer: RefMut<'a, Buffer>,
+    view_id: &'a BufferViewId,
+}
+
+impl<'a> TextViewEditCtx<'a> {
+    pub(crate) fn move_cursor_up(&mut self, n: usize) {
+        self.buffer.move_view_cursor_up(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_down(&mut self, n: usize) {
+        self.buffer.move_view_cursor_down(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_left(&mut self, n: usize) {
+        self.buffer.move_view_cursor_left(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_right(&mut self, n: usize) {
+        self.buffer.move_view_cursor_right(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_to_line_start(&mut self, n: usize) {
+        self.buffer.move_view_cursor_to_line_start(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_to_line_end(&mut self, n: usize) {
+        self.buffer.move_view_cursor_to_line_end(self.view_id, n);
+    }
+
+    pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
+        self.buffer.set_view_cursor_style(self.view_id, style);
+    }
+
+    pub(crate) fn insert_char(&mut self, c: char) {
+        self.buffer.insert_char(self.view_id, c);
+    }
+
+    pub(crate) fn delete_left(&mut self, n: usize) {
+        self.buffer.delete_left(self.view_id, n);
+    }
+
+    pub(crate) fn delete_right(&mut self, n: usize) {
+        self.buffer.delete_right(self.view_id, n);
+    }
+
+    pub(crate) fn snap_to_cursor(&mut self) {
+        self.buffer.snap_to_cursor(self.view_id);
+    }
 }
 
 pub(crate) struct TextView {
@@ -37,56 +89,11 @@ impl TextView {
         }
     }
 
-    pub(crate) fn move_cursor_up(&mut self, n: usize) {
+    pub(crate) fn edit_ctx(&mut self) -> TextViewEditCtx {
         let view = &mut self.views[self.active];
-        view.buf_handle.move_view_cursor_up(&view.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_down(&mut self, n: usize) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.move_view_cursor_down(&view.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_left(&mut self, n: usize) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.move_view_cursor_left(&view.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_right(&mut self, n: usize) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.move_view_cursor_right(&view.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_to_line_start(&mut self, n: usize) {
-        let view = &mut self.views[self.active];
-        view.buf_handle
-            .move_view_cursor_to_line_start(&view.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_to_line_end(&mut self, n: usize) {
-        let view = &mut self.views[self.active];
-        view.buf_handle
-            .move_view_cursor_to_line_end(&view.view_id, n);
-    }
-
-    pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.set_view_cursor_style(&view.view_id, style);
-    }
-
-    pub(crate) fn insert_char(&mut self, c: char) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.insert_char(&view.view_id, c);
-    }
-
-    pub(crate) fn delete_left(&mut self, n: usize) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.delete_left(&view.view_id, n);
-    }
-
-    pub(crate) fn delete_right(&mut self, n: usize) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.delete_right(&view.view_id, n);
+        let buffer = view.buf_handle.buffer();
+        let view_id = &view.view_id;
+        TextViewEditCtx { buffer, view_id }
     }
 
     pub(super) fn new(

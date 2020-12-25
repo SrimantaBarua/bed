@@ -1,5 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cell::RefMut;
+use std::ops::Drop;
 use std::time::Duration;
 
 use euclid::{point2, vec2, Point2D, Vector2D};
@@ -10,8 +12,8 @@ use glutin::event::{
 
 use crate::buffer::CursorStyle;
 use crate::common::PixelSize;
-
-use super::BedHandle;
+use crate::textview::TextViewEditCtx;
+use crate::{Bed, BedHandle};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Mode {
@@ -73,53 +75,60 @@ impl InputState {
         if acc.y != 0.0 {
             acc.y *= acc.y.abs().sqrt()
         }
-        self.bed_handle.scroll_views_with_active_acc(acc, duration);
+        self.bed_handle
+            .edit()
+            .scroll_views_with_active_acc(acc, duration);
         self.scroll_amount = vec2(0.0, 0.0);
     }
 
     pub(crate) fn handle_char(&mut self, c: char) {
+        let mut bed = self.bed_handle.edit();
         match self.mode {
             Mode::Normal => match c {
                 // Basic movement
-                'h' => self.bed_handle.move_cursor_left(1),
-                'j' => self.bed_handle.move_cursor_down(1),
-                'k' => self.bed_handle.move_cursor_up(1),
-                'l' => self.bed_handle.move_cursor_right(1),
-                '0' => self.bed_handle.move_cursor_to_line_start(1),
-                '$' => self.bed_handle.move_cursor_to_line_end(1),
+                'h' => bed.edit_view().move_cursor_left(1),
+                'j' => bed.edit_view().move_cursor_down(1),
+                'k' => bed.edit_view().move_cursor_up(1),
+                'l' => bed.edit_view().move_cursor_right(1),
+                '0' => bed.edit_view().move_cursor_to_line_start(1),
+                '$' => bed.edit_view().move_cursor_to_line_end(1),
                 // Entering insert mode
                 'i' => {
                     self.mode = Mode::Insert;
-                    self.bed_handle.set_cursor_style(CursorStyle::Line);
+                    bed.edit_view().set_cursor_style(CursorStyle::Line)
                 }
                 'I' => {
                     self.mode = Mode::Insert;
-                    self.bed_handle.set_cursor_style(CursorStyle::Line);
-                    self.bed_handle.move_cursor_to_line_start(1);
+                    let mut ctx = bed.edit_view();
+                    ctx.set_cursor_style(CursorStyle::Line);
+                    ctx.move_cursor_to_line_start(1);
                 }
                 'a' => {
                     self.mode = Mode::Insert;
-                    self.bed_handle.set_cursor_style(CursorStyle::Line);
-                    self.bed_handle.move_cursor_right(1);
+                    let mut ctx = bed.edit_view();
+                    ctx.set_cursor_style(CursorStyle::Line);
+                    ctx.move_cursor_right(1);
                 }
                 'A' => {
                     self.mode = Mode::Insert;
-                    self.bed_handle.set_cursor_style(CursorStyle::Line);
-                    self.bed_handle.move_cursor_to_line_end(1);
+                    let mut ctx = bed.edit_view();
+                    ctx.set_cursor_style(CursorStyle::Line);
+                    ctx.move_cursor_to_line_end(1);
                 }
                 // Delete
-                'x' => self.bed_handle.delete_right(1),
+                'x' => bed.edit_view().delete_right(1),
                 _ => {}
             },
             Mode::Insert => match c as u32 {
-                8 /* backspace */ => self.bed_handle.delete_left(1),
-                127 /* delete */  => self.bed_handle.delete_right(1),
-                _ => self.bed_handle.insert_char(c),
+                8 /* backspace */ => bed.edit_view().delete_left(1),
+                127 /* delete */  => bed.edit_view().delete_right(1),
+                _ => bed.edit_view().insert_char(c),
             },
         }
     }
 
     pub(crate) fn handle_keypress(&mut self, input: KeyboardInput) {
+        let mut bed = self.bed_handle.edit();
         if input.state != ElementState::Pressed {
             return;
         }
@@ -127,23 +136,24 @@ impl InputState {
             match self.mode {
                 Mode::Normal => match vkey {
                     // Basic movement
-                    VirtualKeyCode::Up => self.bed_handle.move_cursor_up(1),
-                    VirtualKeyCode::Down => self.bed_handle.move_cursor_down(1),
-                    VirtualKeyCode::Left => self.bed_handle.move_cursor_left(1),
-                    VirtualKeyCode::Right => self.bed_handle.move_cursor_right(1),
+                    VirtualKeyCode::Up => bed.edit_view().move_cursor_up(1),
+                    VirtualKeyCode::Down => bed.edit_view().move_cursor_down(1),
+                    VirtualKeyCode::Left => bed.edit_view().move_cursor_left(1),
+                    VirtualKeyCode::Right => bed.edit_view().move_cursor_right(1),
                     _ => {}
                 },
                 Mode::Insert => match vkey {
                     // Basic movement
-                    VirtualKeyCode::Up => self.bed_handle.move_cursor_up(1),
-                    VirtualKeyCode::Down => self.bed_handle.move_cursor_down(1),
-                    VirtualKeyCode::Left => self.bed_handle.move_cursor_left(1),
-                    VirtualKeyCode::Right => self.bed_handle.move_cursor_right(1),
+                    VirtualKeyCode::Up => bed.edit_view().move_cursor_up(1),
+                    VirtualKeyCode::Down => bed.edit_view().move_cursor_down(1),
+                    VirtualKeyCode::Left => bed.edit_view().move_cursor_left(1),
+                    VirtualKeyCode::Right => bed.edit_view().move_cursor_right(1),
                     // Exiting insert mode
                     VirtualKeyCode::Escape => {
                         self.mode = Mode::Normal;
-                        self.bed_handle.move_cursor_left(1);
-                        self.bed_handle.set_cursor_style(CursorStyle::Block);
+                        let mut ctx = bed.edit_view();
+                        ctx.move_cursor_left(1);
+                        ctx.set_cursor_style(CursorStyle::Block);
                     }
                     _ => {}
                 },
@@ -152,10 +162,11 @@ impl InputState {
     }
 
     pub(crate) fn handle_mouse_input(&mut self, button: MouseButton, state: ElementState) {
+        let mut bed = self.bed_handle.edit();
         match button {
             MouseButton::Left if state == ElementState::Pressed => {
                 self.cursor_click_pos = Some(self.cursor_pos);
-                self.bed_handle.move_cursor_to_point(self.cursor_pos.cast());
+                bed.move_cursor_to_point(self.cursor_pos.cast());
             }
             MouseButton::Left if state == ElementState::Released => {
                 self.cursor_click_pos = None;
@@ -169,64 +180,84 @@ impl InputState {
     }
 }
 
-impl BedHandle {
-    fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.scroll_views_with_active_acc(acc, duration)
-    }
+struct ViewEditCtx<'a> {
+    view: TextViewEditCtx<'a>,
+}
 
+impl<'a> Drop for ViewEditCtx<'a> {
+    fn drop(&mut self) {
+        self.view.snap_to_cursor();
+    }
+}
+
+impl<'a> ViewEditCtx<'a> {
     fn move_cursor_up(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().move_cursor_up(n);
+        self.view.move_cursor_up(n);
     }
 
     fn move_cursor_down(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().move_cursor_down(n);
+        self.view.move_cursor_down(n);
     }
 
     fn move_cursor_left(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().move_cursor_left(n);
+        self.view.move_cursor_left(n);
     }
 
     fn move_cursor_right(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().move_cursor_right(n);
+        self.view.move_cursor_right(n);
     }
 
     fn move_cursor_to_line_start(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().move_cursor_to_line_start(n);
+        self.view.move_cursor_to_line_start(n);
     }
 
     fn move_cursor_to_line_end(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().move_cursor_to_line_end(n);
-    }
-
-    fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.move_cursor_to_point(point);
+        self.view.move_cursor_to_line_end(n);
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().set_cursor_style(style);
+        self.view.set_cursor_style(style);
     }
 
     fn insert_char(&mut self, c: char) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().insert_char(c);
+        self.view.insert_char(c);
     }
 
     fn delete_left(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().delete_left(n);
+        self.view.delete_left(n);
     }
 
     fn delete_right(&mut self, n: usize) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_tree.active_mut().delete_right(n);
+        self.view.delete_right(n);
+    }
+}
+
+struct BedEditCtx<'a> {
+    bed: RefMut<'a, Bed>,
+}
+
+impl<'a> BedEditCtx<'a> {
+    fn edit_view(&mut self) -> ViewEditCtx {
+        ViewEditCtx {
+            view: self.bed.text_tree.active_mut().edit_ctx(),
+        }
+    }
+
+    fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
+        self.bed
+            .text_tree
+            .scroll_views_with_active_acc(acc, duration)
+    }
+
+    fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
+        self.bed.text_tree.move_cursor_to_point(point);
+    }
+}
+
+impl BedHandle {
+    fn edit(&mut self) -> BedEditCtx {
+        BedEditCtx {
+            bed: self.0.borrow_mut(),
+        }
     }
 }

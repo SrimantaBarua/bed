@@ -10,7 +10,7 @@ mod buffer;
 mod mgr;
 mod view;
 
-pub(crate) use buffer::BufferHandle;
+pub(crate) use buffer::{Buffer, BufferHandle};
 pub(crate) use mgr::BufferMgr;
 pub(crate) use view::CursorStyle;
 
