@@ -57,6 +57,18 @@ impl TextView {
         view.buf_handle.move_view_cursor_right(&view.view_id, n);
     }
 
+    pub(crate) fn move_cursor_to_line_start(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle
+            .move_view_cursor_to_line_start(&view.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_to_line_end(&mut self, n: usize) {
+        let view = &mut self.views[self.active];
+        view.buf_handle
+            .move_view_cursor_to_line_end(&view.view_id, n);
+    }
+
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
         let view = &mut self.views[self.active];
         view.buf_handle.set_view_cursor_style(&view.view_id, style);

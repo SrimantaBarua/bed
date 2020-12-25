@@ -85,22 +85,35 @@ impl InputState {
                 'j' => self.bed_handle.move_cursor_down(1),
                 'k' => self.bed_handle.move_cursor_up(1),
                 'l' => self.bed_handle.move_cursor_right(1),
+                '0' => self.bed_handle.move_cursor_to_line_start(1),
+                '$' => self.bed_handle.move_cursor_to_line_end(1),
                 // Entering insert mode
                 'i' => {
                     self.mode = Mode::Insert;
                     self.bed_handle.set_cursor_style(CursorStyle::Line);
                 }
+                'I' => {
+                    self.mode = Mode::Insert;
+                    self.bed_handle.set_cursor_style(CursorStyle::Line);
+                    self.bed_handle.move_cursor_to_line_start(1);
+                }
+                'a' => {
+                    self.mode = Mode::Insert;
+                    self.bed_handle.set_cursor_style(CursorStyle::Line);
+                    self.bed_handle.move_cursor_right(1);
+                }
+                'A' => {
+                    self.mode = Mode::Insert;
+                    self.bed_handle.set_cursor_style(CursorStyle::Line);
+                    self.bed_handle.move_cursor_to_line_end(1);
+                }
+                // Delete
+                'x' => self.bed_handle.delete_right(1),
                 _ => {}
             },
             Mode::Insert => match c as u32 {
-                8 => {
-                    // Backspace
-                    self.bed_handle.delete_left(1)
-                }
-                127 => {
-                    // Delete
-                    self.bed_handle.delete_right(1)
-                }
+                8 /* backspace */ => self.bed_handle.delete_left(1),
+                127 /* delete */  => self.bed_handle.delete_right(1),
                 _ => self.bed_handle.insert_char(c),
             },
         }
@@ -129,6 +142,7 @@ impl InputState {
                     // Exiting insert mode
                     VirtualKeyCode::Escape => {
                         self.mode = Mode::Normal;
+                        self.bed_handle.move_cursor_left(1);
                         self.bed_handle.set_cursor_style(CursorStyle::Block);
                     }
                     _ => {}
@@ -179,6 +193,16 @@ impl BedHandle {
     fn move_cursor_right(&mut self, n: usize) {
         let inner = &mut *self.0.borrow_mut();
         inner.text_tree.active_mut().move_cursor_right(n);
+    }
+
+    fn move_cursor_to_line_start(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().move_cursor_to_line_start(n);
+    }
+
+    fn move_cursor_to_line_end(&mut self, n: usize) {
+        let inner = &mut *self.0.borrow_mut();
+        inner.text_tree.active_mut().move_cursor_to_line_end(n);
     }
 
     fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {

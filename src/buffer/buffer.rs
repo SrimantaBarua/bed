@@ -110,6 +110,39 @@ impl BufferHandle {
         inner.bed_handle.request_redraw();
     }
 
+    pub(crate) fn move_view_cursor_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {
+        assert!(n > 0);
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        cursor.line_cidx = 0;
+        if cursor.line_num <= n - 1 {
+            cursor.line_num = 0;
+        } else {
+            cursor.line_num -= n - 1;
+        }
+        cursor.sync_line_cidx_gidx_left(&inner.rope, inner.tab_width);
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
+        assert!(n > 0);
+        let inner = &mut *self.0.borrow_mut();
+        let view = inner.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        cursor.line_num += n - 1;
+        if cursor.line_num >= inner.rope.len_lines() {
+            cursor.cidx = inner.rope.len_chars();
+            cursor.sync_and_update_char_idx_left(&inner.rope, inner.tab_width);
+        } else {
+            cursor.line_cidx = inner.rope.line(cursor.line_num).len_chars();
+            cursor.sync_line_cidx_gidx_right(&inner.rope, inner.tab_width);
+        }
+        view.snap_to_cursor(&inner.rope, inner.tab_width);
+        inner.bed_handle.request_redraw();
+    }
+
     pub(crate) fn set_view_cursor_style(&mut self, view_id: &BufferViewId, style: CursorStyle) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
