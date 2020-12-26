@@ -106,9 +106,16 @@ impl InputState {
                     // Move to line
                     'g' => {
                         let linum = action_mul.unwrap_or(1);
-                        bed.edit_view().move_cursor_to_line(linum);
+                        bed.edit_view().move_cursor_to_line(linum - 1);
                     }
                     'G' => bed.edit_view().move_cursor_to_last_line(),
+                    // Object movement
+                    'w' => bed.edit_view().move_word(act_rep),
+                    'W' => bed.edit_view().move_word_extended(act_rep),
+                    'e' => bed.edit_view().move_word_end(act_rep),
+                    'E' => bed.edit_view().move_word_end_extended(act_rep),
+                    'b' => bed.edit_view().move_back(act_rep),
+                    'B' => bed.edit_view().move_back_extended(act_rep),
                     // Move to start/end of line
                     '0' => {
                         *action_mul = match action_mul {
@@ -266,6 +273,30 @@ impl<'a> ViewEditCtx<'a> {
 
     fn move_cursor_to_last_line(&mut self) {
         self.view.move_cursor_to_last_line();
+    }
+
+    fn move_word(&mut self, n: usize) {
+        self.view.move_cursor_word(n);
+    }
+
+    fn move_word_extended(&mut self, n: usize) {
+        self.view.move_cursor_word_extended(n);
+    }
+
+    fn move_word_end(&mut self, n: usize) {
+        self.view.move_cursor_word_end(n);
+    }
+
+    fn move_word_end_extended(&mut self, n: usize) {
+        self.view.move_cursor_word_end_extended(n);
+    }
+
+    fn move_back(&mut self, n: usize) {
+        self.view.move_cursor_back(n);
+    }
+
+    fn move_back_extended(&mut self, n: usize) {
+        self.view.move_cursor_back_extended(n);
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {

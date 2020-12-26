@@ -8,6 +8,7 @@ use crate::text::FontCollectionHandle;
 
 mod buffer;
 mod mgr;
+mod rope_stuff;
 mod view;
 
 pub(crate) use buffer::{Buffer, BufferHandle};

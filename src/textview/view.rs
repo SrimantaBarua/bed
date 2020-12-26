@@ -53,6 +53,31 @@ impl<'a> TextViewEditCtx<'a> {
         self.buffer.move_view_cursor_to_last_line(self.view_id);
     }
 
+    pub(crate) fn move_cursor_word(&mut self, n: usize) {
+        self.buffer.move_view_cursor_word(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_word_extended(&mut self, n: usize) {
+        self.buffer.move_view_cursor_word_extended(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_word_end(&mut self, n: usize) {
+        self.buffer.move_view_cursor_word_end(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_word_end_extended(&mut self, n: usize) {
+        self.buffer
+            .move_view_cursor_word_end_extended(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_back(&mut self, n: usize) {
+        self.buffer.move_view_cursor_back(self.view_id, n);
+    }
+
+    pub(crate) fn move_cursor_back_extended(&mut self, n: usize) {
+        self.buffer.move_view_cursor_back_extended(self.view_id, n);
+    }
+
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
         self.buffer.set_view_cursor_style(self.view_id, style);
     }

@@ -12,6 +12,7 @@ use ropey::Rope;
 use crate::common::PixelSize;
 use crate::painter::Painter;
 
+use super::rope_stuff::{space_containing, word_containing};
 use super::view::{CursorStyle, View};
 use super::{BufferBedHandle, BufferViewId};
 
@@ -186,6 +187,73 @@ impl Buffer {
 
     pub(crate) fn move_view_cursor_to_last_line(&mut self, view_id: &BufferViewId) {
         self.move_view_cursor_to_line(view_id, self.rope.len_lines() - 1);
+    }
+
+    fn move_view_cursor_word_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
+        assert!(n > 0);
+        let view = self.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        while n > 0 && cursor.cidx <= self.rope.len_chars() {
+            if let Some(range) = word_containing(&self.rope, cursor.cidx, ext) {
+                cursor.cidx = range.end;
+            }
+            if let Some(range) = space_containing(&self.rope, cursor.cidx) {
+                cursor.cidx = range.end;
+            }
+            n -= 1;
+        }
+        cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_word(&mut self, view_id: &BufferViewId, n: usize) {
+        self.move_view_cursor_word_inner(view_id, n, false);
+    }
+
+    pub(crate) fn move_view_cursor_word_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        self.move_view_cursor_word_inner(view_id, n, true);
+    }
+
+    fn move_view_cursor_word_end_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
+        assert!(n > 0);
+        let view = self.views.get_mut(view_id).unwrap();
+        let cursor = &mut view.cursor;
+        if let Some(range) = word_containing(&self.rope, cursor.cidx, ext) {
+            if cursor.cidx + 1 < range.end {
+                n -= 1;
+            }
+            cursor.cidx = range.end;
+        }
+        while n > 0 && cursor.cidx <= self.rope.len_chars() {
+            if let Some(range) = space_containing(&self.rope, cursor.cidx) {
+                cursor.cidx = range.end;
+            }
+            if let Some(range) = word_containing(&self.rope, cursor.cidx, ext) {
+                cursor.cidx = range.end;
+            }
+            n -= 1;
+        }
+        if cursor.cidx > 0 {
+            cursor.cidx -= 1;
+        }
+        cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_word_end(&mut self, view_id: &BufferViewId, n: usize) {
+        self.move_view_cursor_word_end_inner(view_id, n, false);
+    }
+
+    pub(crate) fn move_view_cursor_word_end_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        self.move_view_cursor_word_end_inner(view_id, n, true);
+    }
+
+    pub(crate) fn move_view_cursor_back(&mut self, view_id: &BufferViewId, n: usize) {
+        assert!(n > 0);
+    }
+
+    pub(crate) fn move_view_cursor_back_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        assert!(n > 0);
     }
 
     pub(crate) fn set_view_cursor_style(&mut self, view_id: &BufferViewId, style: CursorStyle) {
