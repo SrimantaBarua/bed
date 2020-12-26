@@ -362,11 +362,29 @@ impl Buffer {
     }
 
     pub(crate) fn delete_up(&mut self, view_id: &BufferViewId, mut n: usize) {
-        unimplemented!();
+        let view = self.views.get_mut(view_id).unwrap();
+        if view.cursor.line_num < n {
+            n = view.cursor.line_num;
+        }
+        self.move_view_cursor_up(view_id, n);
+        self.delete_down(view_id, n);
     }
 
     pub(crate) fn delete_down(&mut self, view_id: &BufferViewId, mut n: usize) {
-        unimplemented!();
+        let view = self.views.get_mut(view_id).unwrap();
+        if view.cursor.line_num + n > self.rope.len_lines() {
+            n = self.rope.len_lines() - view.cursor.line_num;
+        }
+        let start_cidx = self.rope.line_to_char(view.cursor.line_num);
+        let end_cidx = if view.cursor.line_num + n == self.rope.len_lines() {
+            self.rope.len_chars()
+        } else {
+            self.rope.line_to_char(view.cursor.line_num + n + 1)
+        };
+        self.rope.remove(start_cidx..end_cidx);
+        view.cursor.cidx = start_cidx;
+        view.cursor
+            .sync_and_update_char_idx_left(&self.rope, self.tab_width);
     }
 
     pub(crate) fn delete_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {

@@ -221,7 +221,7 @@ impl InputState {
                             ctx.delete_right(move_rep)
                         }
                     }
-                    // Move to line
+                    // Delete to line
                     'g' => {
                         let linum = action_mul.unwrap_or(1);
                         ctx.delete_to_line(linum - 1);
@@ -229,6 +229,12 @@ impl InputState {
                     'G' => {
                         for _ in 0..act_rep {
                             ctx.delete_to_last_line()
+                        }
+                    }
+                    // Object
+                    'd' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_down(move_rep - 1)
                         }
                     }
                     // Object movement
@@ -262,7 +268,7 @@ impl InputState {
                             ctx.delete_back_extended(move_rep)
                         }
                     }
-                    // Move to start/end of line
+                    // Delete to start/end of line
                     '0' => {
                         *move_mul = match move_mul {
                             Some(x) => {
