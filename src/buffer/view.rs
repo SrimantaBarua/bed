@@ -399,8 +399,8 @@ impl View {
                 CursorStyle::Block => (cursor_block_width.get(), height.to_f32(), origin.y),
                 CursorStyle::Underline => (
                     cursor_block_width.get(),
-                    cursor_underline_height.get(),
-                    origin.y + ascender.to_f32() + cursor_underline_pos.get(),
+                    cursor_underline_height.get() * 2.0,
+                    origin.y + ascender.to_f32() - cursor_underline_pos.get(),
                 ),
             };
 

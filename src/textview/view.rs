@@ -94,6 +94,54 @@ impl<'a> TextViewEditCtx<'a> {
         self.buffer.delete_right(self.view_id, n);
     }
 
+    pub(crate) fn delete_up(&mut self, n: usize) {
+        self.buffer.delete_up(self.view_id, n);
+    }
+
+    pub(crate) fn delete_down(&mut self, n: usize) {
+        self.buffer.delete_down(self.view_id, n);
+    }
+
+    pub(crate) fn delete_to_line(&mut self, n: usize) {
+        self.buffer.delete_to_line(self.view_id, n);
+    }
+
+    pub(crate) fn delete_to_last_line(&mut self) {
+        self.buffer.delete_to_last_line(self.view_id);
+    }
+
+    pub(crate) fn delete_word(&mut self, n: usize) {
+        self.buffer.delete_word(self.view_id, n);
+    }
+
+    pub(crate) fn delete_word_extended(&mut self, n: usize) {
+        self.buffer.delete_word_extended(self.view_id, n);
+    }
+
+    pub(crate) fn delete_word_end(&mut self, n: usize) {
+        self.buffer.delete_word_end(self.view_id, n);
+    }
+
+    pub(crate) fn delete_word_end_extended(&mut self, n: usize) {
+        self.buffer.delete_word_end_extended(self.view_id, n);
+    }
+
+    pub(crate) fn delete_back(&mut self, n: usize) {
+        self.buffer.delete_back(self.view_id, n);
+    }
+
+    pub(crate) fn delete_back_extended(&mut self, n: usize) {
+        self.buffer.delete_back_extended(self.view_id, n);
+    }
+
+    pub(crate) fn delete_to_line_start(&mut self, n: usize) {
+        self.buffer.delete_to_line_start(self.view_id, n);
+    }
+
+    pub(crate) fn delete_to_line_end(&mut self, n: usize) {
+        self.buffer.delete_to_line_end(self.view_id, n);
+    }
+
     pub(crate) fn snap_to_cursor(&mut self) {
         self.buffer.snap_to_cursor(self.view_id);
     }

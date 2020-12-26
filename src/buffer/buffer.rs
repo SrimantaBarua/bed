@@ -361,6 +361,66 @@ impl Buffer {
         self.bed_handle.request_redraw();
     }
 
+    pub(crate) fn delete_up(&mut self, view_id: &BufferViewId, mut n: usize) {
+        unimplemented!();
+    }
+
+    pub(crate) fn delete_down(&mut self, view_id: &BufferViewId, mut n: usize) {
+        unimplemented!();
+    }
+
+    pub(crate) fn delete_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!();
+    }
+
+    pub(crate) fn delete_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!();
+    }
+
+    pub(crate) fn delete_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_to_last_line(&mut self, view_id: &BufferViewId) {
+        unimplemented!()
+    }
+
+    fn delete_word_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_word(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_word_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!()
+    }
+
+    fn delete_word_end_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_word_end(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_word_end_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!()
+    }
+
+    fn delete_back_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_back(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!()
+    }
+
+    pub(crate) fn delete_back_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        unimplemented!()
+    }
+
     // -------- Internal stuff --------
     fn empty(bed_handle: BufferBedHandle) -> Buffer {
         Buffer {

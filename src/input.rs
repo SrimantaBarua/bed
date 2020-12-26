@@ -17,7 +17,13 @@ use crate::{Bed, BedHandle};
 
 #[derive(Debug, Eq, PartialEq)]
 enum Mode {
-    Normal { action_mul: Option<usize> },
+    Delete {
+        action_mul: Option<usize>,
+        move_mul: Option<usize>,
+    },
+    Normal {
+        action_mul: Option<usize>,
+    },
     Insert,
 }
 
@@ -84,6 +90,11 @@ impl InputState {
     pub(crate) fn handle_char(&mut self, c: char) {
         let mut bed = self.bed_handle.edit();
         match &mut self.mode {
+            Mode::Insert => match c as u32 {
+                8 /* backspace */ => bed.edit_view().delete_left(1),
+                127 /* delete */  => bed.edit_view().delete_right(1),
+                _ => bed.edit_view().insert_char(c),
+            },
             Mode::Normal { action_mul } => {
                 let act_rep = action_mul.unwrap_or(1);
                 let mut is_num = false;
@@ -153,10 +164,17 @@ impl InputState {
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.move_cursor_to_line_end(1);
                     }
+                    // Entering delete mode
+                    'd' => {
+                        next_mode = Some(Mode::Delete {
+                            action_mul: *action_mul,
+                            move_mul: None,
+                        });
+                        bed.edit_view().set_cursor_style(CursorStyle::Underline);
+                    }
                     // Delete
                     'x' => bed.edit_view().delete_right(act_rep),
-                    // Keep num chains continuing
-                    _ => is_num = true,
+                    _ => {}
                 }
                 if let Some(next) = next_mode {
                     self.mode = next;
@@ -164,11 +182,111 @@ impl InputState {
                     *action_mul = None;
                 }
             }
-            Mode::Insert => match c as u32 {
-                8 /* backspace */ => bed.edit_view().delete_left(1),
-                127 /* delete */  => bed.edit_view().delete_right(1),
-                _ => bed.edit_view().insert_char(c),
-            },
+            Mode::Delete {
+                action_mul,
+                move_mul,
+            } => {
+                let act_rep = action_mul.unwrap_or(1);
+                let move_rep = move_mul.unwrap_or(1);
+                let mut is_num = false;
+                let mut ctx = bed.edit_view();
+                match c {
+                    // Numbers
+                    '1'..='9' => {
+                        let num = (c as u32) - ('0' as u32);
+                        *move_mul = match move_mul {
+                            Some(x) => Some((*x * 10) + num as usize),
+                            None => Some(num as usize),
+                        };
+                        is_num = true;
+                    }
+                    // Basic movement
+                    'h' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_left(move_rep)
+                        }
+                    }
+                    'j' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_down(move_rep)
+                        }
+                    }
+                    'k' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_up(move_rep)
+                        }
+                    }
+                    'l' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_right(move_rep)
+                        }
+                    }
+                    // Move to line
+                    'g' => {
+                        let linum = action_mul.unwrap_or(1);
+                        ctx.delete_to_line(linum - 1);
+                    }
+                    'G' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_to_last_line()
+                        }
+                    }
+                    // Object movement
+                    'w' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_word(move_rep)
+                        }
+                    }
+                    'W' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_word_extended(move_rep)
+                        }
+                    }
+                    'e' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_word_end(move_rep)
+                        }
+                    }
+                    'E' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_word_end_extended(move_rep)
+                        }
+                    }
+                    'b' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_back(move_rep)
+                        }
+                    }
+                    'B' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_back_extended(move_rep)
+                        }
+                    }
+                    // Move to start/end of line
+                    '0' => {
+                        *move_mul = match move_mul {
+                            Some(x) => {
+                                is_num = true;
+                                Some(*x * 10)
+                            }
+                            None => {
+                                ctx.delete_to_line_start(1);
+                                None
+                            }
+                        };
+                    }
+                    '$' => {
+                        for _ in 0..act_rep {
+                            ctx.delete_to_line_end(move_rep)
+                        }
+                    }
+                    _ => {}
+                }
+                if !is_num {
+                    self.mode = Mode::Normal { action_mul: None };
+                    ctx.set_cursor_style(CursorStyle::Block);
+                }
+            }
         }
     }
 
@@ -179,21 +297,6 @@ impl InputState {
         }
         if let Some(vkey) = input.virtual_keycode {
             match &mut self.mode {
-                Mode::Normal { action_mul } => {
-                    let act_rep = action_mul.unwrap_or(1);
-                    let mut reset_count = true;
-                    match vkey {
-                        // Basic movement
-                        VirtualKeyCode::Up => bed.edit_view().move_cursor_up(act_rep),
-                        VirtualKeyCode::Down => bed.edit_view().move_cursor_down(act_rep),
-                        VirtualKeyCode::Left => bed.edit_view().move_cursor_left(act_rep),
-                        VirtualKeyCode::Right => bed.edit_view().move_cursor_right(act_rep),
-                        _ => reset_count = false,
-                    }
-                    if reset_count {
-                        *action_mul = None;
-                    }
-                }
                 Mode::Insert => match vkey {
                     // Basic movement
                     VirtualKeyCode::Up => bed.edit_view().move_cursor_up(1),
@@ -209,6 +312,44 @@ impl InputState {
                     }
                     _ => {}
                 },
+                Mode::Normal { action_mul } => {
+                    let act_rep = action_mul.unwrap_or(1);
+                    let mut reset_count = true;
+                    match vkey {
+                        // Basic movement
+                        VirtualKeyCode::Up => bed.edit_view().move_cursor_up(act_rep),
+                        VirtualKeyCode::Down => bed.edit_view().move_cursor_down(act_rep),
+                        VirtualKeyCode::Left => bed.edit_view().move_cursor_left(act_rep),
+                        VirtualKeyCode::Right => bed.edit_view().move_cursor_right(act_rep),
+                        _ => reset_count = false,
+                    }
+                    if reset_count {
+                        *action_mul = None;
+                    }
+                }
+                Mode::Delete {
+                    action_mul,
+                    move_mul,
+                } => {
+                    let act_rep = action_mul.unwrap_or(1);
+                    let move_rep = move_mul.unwrap_or(1);
+                    let mut reset_mode = true;
+                    let mut ctx = bed.edit_view();
+                    for _ in 0..act_rep {
+                        match vkey {
+                            // Basic movement
+                            VirtualKeyCode::Up => ctx.delete_up(move_rep),
+                            VirtualKeyCode::Down => ctx.delete_down(move_rep),
+                            VirtualKeyCode::Left => ctx.delete_left(move_rep),
+                            VirtualKeyCode::Right => ctx.delete_right(move_rep),
+                            _ => reset_mode = false,
+                        }
+                    }
+                    if reset_mode {
+                        self.mode = Mode::Normal { action_mul: None };
+                        ctx.set_cursor_style(CursorStyle::Block);
+                    }
+                }
             }
         }
     }
@@ -225,6 +366,7 @@ impl InputState {
             }
             _ => {}
         }
+        self.mode = Mode::Normal { action_mul: None };
     }
 
     pub(crate) fn handle_cursor_moved(&mut self, phys_pos: PhysicalPosition<f64>) {
@@ -313,6 +455,54 @@ impl<'a> ViewEditCtx<'a> {
 
     fn delete_right(&mut self, n: usize) {
         self.view.delete_right(n);
+    }
+
+    fn delete_up(&mut self, n: usize) {
+        self.view.delete_up(n);
+    }
+
+    fn delete_down(&mut self, n: usize) {
+        self.view.delete_down(n);
+    }
+
+    fn delete_to_line(&mut self, n: usize) {
+        self.view.delete_to_line(n);
+    }
+
+    fn delete_to_last_line(&mut self) {
+        self.view.delete_to_last_line();
+    }
+
+    fn delete_word(&mut self, n: usize) {
+        self.view.delete_word(n);
+    }
+
+    fn delete_word_extended(&mut self, n: usize) {
+        self.view.delete_word_extended(n);
+    }
+
+    fn delete_word_end(&mut self, n: usize) {
+        self.view.delete_word_end(n);
+    }
+
+    fn delete_word_end_extended(&mut self, n: usize) {
+        self.view.delete_word_end_extended(n);
+    }
+
+    fn delete_back(&mut self, n: usize) {
+        self.view.delete_back(n);
+    }
+
+    fn delete_back_extended(&mut self, n: usize) {
+        self.view.delete_back_extended(n);
+    }
+
+    fn delete_to_line_start(&mut self, n: usize) {
+        self.view.delete_to_line_start(n);
+    }
+
+    fn delete_to_line_end(&mut self, n: usize) {
+        self.view.delete_to_line_end(n);
     }
 }
 
