@@ -5,8 +5,9 @@ use std::ffi::{CStr, CString};
 use std::rc::Rc;
 
 use euclid::{point2, size2, Point2D, Rect, Size2D};
-use fnv::FnvHashMap;
+use fnv::{FnvBuildHasher, FnvHashMap};
 use guillotiere::{AllocatorOptions, AtlasAllocator};
+use lru_cache::LruCache;
 
 use crate::common::{PixelSize, TextureSize};
 use crate::opengl::{ElemArr, GlTexture, Mat4, ShaderProgram, TexRed, TexUnit};
@@ -26,6 +27,8 @@ use self::fontconfig as font_source;
 mod freetype;
 mod harfbuzz;
 mod types;
+
+const SHAPED_SPAN_CAPACITY: usize = 4096;
 
 use self::font_source::{Charset, FontSource, Pattern};
 use self::freetype::{GlyphMetrics, RasterCore, RasterFont};
@@ -184,6 +187,7 @@ impl FontCollectionHandle {
 struct FontCollection {
     families: Vec<Rc<RefCell<FontFamily>>>, // families[0] is the default family
     core: Rc<RefCell<FontCoreInner>>,
+    cache: LruCache<(String, TextSize, TextStyle), ShapedSpan, FnvBuildHasher>,
 }
 
 impl FontCollection {
@@ -217,6 +221,11 @@ impl FontCollection {
 
     fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
         assert!(text.len() > 0);
+        // Check cache
+        if let Some(shaped) = self.cache.get_mut(&(text.to_owned(), size, style)) {
+            return shaped.clone();
+        }
+        // Otherwise, go the normal route
         let ret_core = self.core.clone();
         let core = &mut *self.core.borrow_mut();
         let first_char = text.chars().next().unwrap();
@@ -285,7 +294,7 @@ impl FontCollection {
         let width = glyph_infos
             .iter()
             .fold(f26_6::from(0.0), |width, gi| width + gi.advance.width);
-        ShapedSpan {
+        let ret = ShapedSpan {
             glyph_infos,
             size,
             font_key: font.num,
@@ -295,7 +304,10 @@ impl FontCollection {
             underline_thickness: font_metrics.underline_thickness,
             width,
             core: ret_core,
-        }
+        };
+        self.cache
+            .insert((text.to_owned(), size, style), ret.clone());
+        ret
     }
 
     fn flush_glyphs(&mut self) {
@@ -307,6 +319,7 @@ impl FontCollection {
         FontCollection {
             families: vec![family],
             core,
+            cache: LruCache::with_hasher(SHAPED_SPAN_CAPACITY, FnvBuildHasher::default()),
         }
     }
 }
@@ -350,6 +363,7 @@ impl Font {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct ShapedSpan {
     pub(crate) ascender: f26_6,
     pub(crate) descender: f26_6,
