@@ -164,6 +164,21 @@ impl InputState {
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.move_cursor_to_line_end(1);
                     }
+                    'o' => {
+                        next_mode = Some(Mode::Insert);
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.move_cursor_to_line_end(1);
+                        ctx.insert_char('\n');
+                    }
+                    'O' => {
+                        next_mode = Some(Mode::Insert);
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.move_cursor_to_line_start(1);
+                        ctx.insert_char('\n');
+                        ctx.move_cursor_up(1);
+                    }
                     // Entering delete mode
                     'd' => {
                         next_mode = Some(Mode::Delete {
