@@ -495,7 +495,7 @@ struct LineMetrics {
     width: u32,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub(crate) enum CursorStyle {
     Line,
     Block,
@@ -508,7 +508,7 @@ impl Default for CursorStyle {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct ViewCursor {
     pub(super) cidx: usize,
     pub(super) line_num: usize,

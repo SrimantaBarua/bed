@@ -1,8 +1,10 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::{RefCell, RefMut};
+use std::cmp::min;
 use std::fs::File;
 use std::io::Result as IOResult;
+use std::ops::Range;
 use std::rc::Rc;
 
 use euclid::{Point2D, Rect, Vector2D};
@@ -13,7 +15,7 @@ use crate::common::PixelSize;
 use crate::painter::Painter;
 
 use super::rope_stuff::{space_containing, word_containing};
-use super::view::{CursorStyle, View};
+use super::view::{CursorStyle, View, ViewCursor};
 use super::{BufferBedHandle, BufferViewId};
 
 #[derive(Clone)]
@@ -94,10 +96,9 @@ pub(crate) struct Buffer {
 }
 
 impl Buffer {
-    // -------- Cursor movement --------
-    pub(crate) fn move_view_cursor_up(&mut self, view_id: &BufferViewId, n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+    // -------- Get next cursor position ---------
+    fn cursor_up(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
+        let mut cursor = cursor.clone();
         if cursor.line_num == 0 {
             cursor.reset();
         } else {
@@ -108,12 +109,11 @@ impl Buffer {
             }
             cursor.sync_global_x(&self.rope, self.tab_width);
         }
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_down(&mut self, view_id: &BufferViewId, n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+    fn cursor_down(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
+        let mut cursor = cursor.clone();
         cursor.line_num += n;
         if cursor.line_num >= self.rope.len_lines() {
             cursor.cidx = self.rope.len_chars();
@@ -121,33 +121,30 @@ impl Buffer {
         } else {
             cursor.sync_global_x(&self.rope, self.tab_width);
         }
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_left(&mut self, view_id: &BufferViewId, n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+    fn cursor_left(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
+        let mut cursor = cursor.clone();
         if cursor.line_cidx < n {
             cursor.line_cidx = 0;
         } else {
             cursor.line_cidx -= n;
         }
         cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_right(&mut self, view_id: &BufferViewId, n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+    fn cursor_right(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
+        let mut cursor = cursor.clone();
         cursor.line_cidx += n;
         cursor.sync_line_cidx_gidx_right(&self.rope, self.tab_width);
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {
+    fn cursor_line_start(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
         assert!(n > 0);
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+        let mut cursor = cursor.clone();
         cursor.line_cidx = 0;
         if cursor.line_num <= n - 1 {
             cursor.line_num = 0;
@@ -155,13 +152,12 @@ impl Buffer {
             cursor.line_num -= n - 1;
         }
         cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
+    fn cursor_line_end(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
         assert!(n > 0);
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+        let mut cursor = cursor.clone();
         cursor.line_num += n - 1;
         if cursor.line_num >= self.rope.len_lines() {
             cursor.cidx = self.rope.len_chars();
@@ -170,28 +166,22 @@ impl Buffer {
             cursor.line_cidx = self.rope.line(cursor.line_num).len_chars();
             cursor.sync_line_cidx_gidx_right(&self.rope, self.tab_width);
         }
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+    fn cursor_line(&self, cursor: &ViewCursor, linum: usize) -> ViewCursor {
+        let mut cursor = cursor.clone();
         cursor.line_num = linum;
         if linum >= self.rope.len_lines() {
             cursor.line_num = self.rope.len_lines() - 1;
         }
         cursor.line_cidx = 0;
         cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_to_last_line(&mut self, view_id: &BufferViewId) {
-        self.move_view_cursor_to_line(view_id, self.rope.len_lines() - 1);
-    }
-
-    fn move_view_cursor_word_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+    fn cursor_word(&self, cursor: &ViewCursor, mut n: usize, ext: bool) -> ViewCursor {
+        let mut cursor = cursor.clone();
         while n > 0 && cursor.cidx <= self.rope.len_chars() {
             if let Some(range) = word_containing(&self.rope, cursor.cidx, ext) {
                 cursor.cidx = range.end;
@@ -202,21 +192,12 @@ impl Buffer {
             n -= 1;
         }
         cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_word(&mut self, view_id: &BufferViewId, n: usize) {
-        self.move_view_cursor_word_inner(view_id, n, false);
-    }
-
-    pub(crate) fn move_view_cursor_word_extended(&mut self, view_id: &BufferViewId, n: usize) {
-        self.move_view_cursor_word_inner(view_id, n, true);
-    }
-
-    fn move_view_cursor_word_end_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
+    fn cursor_word_end(&self, cursor: &ViewCursor, mut n: usize, ext: bool) -> ViewCursor {
         assert!(n > 0);
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+        let mut cursor = cursor.clone();
         if let Some(range) = word_containing(&self.rope, cursor.cidx, ext) {
             if cursor.cidx + 1 < range.end {
                 n -= 1;
@@ -236,21 +217,12 @@ impl Buffer {
             n -= 1;
         }
         cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
-        self.bed_handle.request_redraw();
+        cursor
     }
 
-    pub(crate) fn move_view_cursor_word_end(&mut self, view_id: &BufferViewId, n: usize) {
-        self.move_view_cursor_word_end_inner(view_id, n, false);
-    }
-
-    pub(crate) fn move_view_cursor_word_end_extended(&mut self, view_id: &BufferViewId, n: usize) {
-        self.move_view_cursor_word_end_inner(view_id, n, true);
-    }
-
-    fn move_view_cursor_back_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
+    fn cursor_back(&self, cursor: &ViewCursor, mut n: usize, ext: bool) -> ViewCursor {
         assert!(n > 0);
-        let view = self.views.get_mut(view_id).unwrap();
-        let cursor = &mut view.cursor;
+        let mut cursor = cursor.clone();
         if let Some(range) = word_containing(&self.rope, cursor.cidx, ext) {
             if cursor.cidx > range.start {
                 n -= 1;
@@ -273,15 +245,77 @@ impl Buffer {
             n -= 1;
         }
         cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
+        cursor
+    }
+
+    // -------- Cursor movement --------
+    pub(crate) fn move_view_cursor_up(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_up(&self.view(view_id).cursor, n);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_down(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_down(&self.view(view_id).cursor, n);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_left(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_left(&self.view(view_id).cursor, n);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_right(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_right(&self.view(view_id).cursor, n);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_line_start(&self.view(view_id).cursor, n);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_line_end(&self.view(view_id).cursor, n);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
+        self.view_mut(view_id).cursor = self.cursor_line(&self.view(view_id).cursor, linum);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_last_line(&mut self, view_id: &BufferViewId) {
+        self.move_view_cursor_to_line(view_id, self.rope.len_lines() - 1);
+    }
+
+    pub(crate) fn move_view_cursor_word(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_word(&self.view(view_id).cursor, n, false);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_word_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_word(&self.view(view_id).cursor, n, true);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_word_end(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_word_end(&self.view(view_id).cursor, n, false);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_word_end_extended(&mut self, view_id: &BufferViewId, n: usize) {
+        self.view_mut(view_id).cursor = self.cursor_word_end(&self.view(view_id).cursor, n, true);
         self.bed_handle.request_redraw();
     }
 
     pub(crate) fn move_view_cursor_back(&mut self, view_id: &BufferViewId, n: usize) {
-        self.move_view_cursor_back_inner(view_id, n, false)
+        self.view_mut(view_id).cursor = self.cursor_back(&self.view(view_id).cursor, n, false);
+        self.bed_handle.request_redraw();
     }
 
     pub(crate) fn move_view_cursor_back_extended(&mut self, view_id: &BufferViewId, n: usize) {
-        self.move_view_cursor_back_inner(view_id, n, true)
+        self.view_mut(view_id).cursor = self.cursor_back(&self.view(view_id).cursor, n, true);
+        self.bed_handle.request_redraw();
     }
 
     pub(crate) fn set_view_cursor_style(&mut self, view_id: &BufferViewId, style: CursorStyle) {
@@ -312,21 +346,15 @@ impl Buffer {
         self.bed_handle.request_redraw();
     }
 
-    pub(crate) fn delete_left(&mut self, view_id: &BufferViewId, mut n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
-        let cidx = view.cursor.cidx;
-        if cidx < n {
-            n = cidx;
-        }
-        let start_cidx = cidx - n;
-        self.rope.remove(start_cidx..cidx);
+    fn delete_range(&mut self, range: Range<usize>) {
+        self.rope.remove(range.clone());
         for view in self.views.values_mut() {
-            if view.cursor.cidx >= cidx {
-                view.cursor.cidx -= n;
-            } else if view.cursor.cidx > start_cidx {
-                view.cursor.cidx = start_cidx;
+            if view.cursor.cidx >= range.end {
+                view.cursor.cidx -= range.len();
+            } else if view.cursor.cidx > range.start {
+                view.cursor.cidx = range.start;
             }
-            if view.cursor.cidx >= start_cidx {
+            if view.cursor.cidx >= range.start {
                 view.cursor
                     .sync_and_update_char_idx_left(&self.rope, self.tab_width);
             }
@@ -334,8 +362,18 @@ impl Buffer {
         self.bed_handle.request_redraw();
     }
 
+    pub(crate) fn delete_left(&mut self, view_id: &BufferViewId, mut n: usize) {
+        let view = self.views.get(view_id).unwrap();
+        let cidx = view.cursor.cidx;
+        if cidx < n {
+            n = cidx;
+        }
+        let start_cidx = cidx - n;
+        self.delete_range(start_cidx..cidx);
+    }
+
     pub(crate) fn delete_right(&mut self, view_id: &BufferViewId, mut n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
+        let view = self.views.get(view_id).unwrap();
         let mut cidx = view.cursor.cidx;
         let pre_len_chars = self.rope.len_chars();
         assert!(cidx <= pre_len_chars);
@@ -346,23 +384,11 @@ impl Buffer {
             n = pre_len_chars - cidx;
         }
         let end_cidx = cidx + n;
-        self.rope.remove(cidx..end_cidx);
-        for view in self.views.values_mut() {
-            if view.cursor.cidx >= end_cidx {
-                view.cursor.cidx -= n;
-            } else if view.cursor.cidx > cidx {
-                view.cursor.cidx = cidx;
-            }
-            if view.cursor.cidx >= cidx {
-                view.cursor
-                    .sync_and_update_char_idx_left(&self.rope, self.tab_width);
-            }
-        }
-        self.bed_handle.request_redraw();
+        self.delete_range(cidx..end_cidx);
     }
 
     pub(crate) fn delete_up(&mut self, view_id: &BufferViewId, mut n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
+        let view = self.views.get(view_id).unwrap();
         if view.cursor.line_num < n {
             n = view.cursor.line_num;
         }
@@ -371,7 +397,7 @@ impl Buffer {
     }
 
     pub(crate) fn delete_down(&mut self, view_id: &BufferViewId, mut n: usize) {
-        let view = self.views.get_mut(view_id).unwrap();
+        let view = self.views.get(view_id).unwrap();
         if view.cursor.line_num + n > self.rope.len_lines() {
             n = self.rope.len_lines() - view.cursor.line_num;
         }
@@ -381,62 +407,97 @@ impl Buffer {
         } else {
             self.rope.line_to_char(view.cursor.line_num + n + 1)
         };
-        self.rope.remove(start_cidx..end_cidx);
-        view.cursor.cidx = start_cidx;
-        view.cursor
-            .sync_and_update_char_idx_left(&self.rope, self.tab_width);
+        self.delete_range(start_cidx..end_cidx);
     }
 
     pub(crate) fn delete_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!();
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_line_start(&view.cursor, n);
+            dest.cidx..view.cursor.cidx
+        };
+        self.delete_range(range);
     }
 
     pub(crate) fn delete_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!();
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_line_end(&view.cursor, n);
+            view.cursor.cidx..min(dest.cidx + 1, self.rope.len_chars())
+        };
+        self.delete_range(range);
     }
 
     pub(crate) fn delete_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
-        unimplemented!()
+        let view = self.view(view_id);
+        if view.cursor.line_num < linum {
+            let diff = linum - view.cursor.line_num;
+            self.delete_down(view_id, diff);
+        } else {
+            let diff = view.cursor.line_num - linum;
+            self.delete_up(view_id, diff);
+        }
     }
 
     pub(crate) fn delete_to_last_line(&mut self, view_id: &BufferViewId) {
-        unimplemented!()
-    }
-
-    fn delete_word_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
-        unimplemented!()
+        self.delete_down(
+            view_id,
+            self.rope.len_lines() - self.view(view_id).cursor.line_num,
+        );
     }
 
     pub(crate) fn delete_word(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!()
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_word(&view.cursor, n, false);
+            view.cursor.cidx..dest.cidx
+        };
+        self.delete_range(range);
     }
 
     pub(crate) fn delete_word_extended(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!()
-    }
-
-    fn delete_word_end_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
-        unimplemented!()
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_word(&view.cursor, n, true);
+            view.cursor.cidx..dest.cidx
+        };
+        self.delete_range(range);
     }
 
     pub(crate) fn delete_word_end(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!()
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_word_end(&view.cursor, n, false);
+            view.cursor.cidx..min(dest.cidx + 1, self.rope.len_chars())
+        };
+        self.delete_range(range);
     }
 
     pub(crate) fn delete_word_end_extended(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!()
-    }
-
-    fn delete_back_inner(&mut self, view_id: &BufferViewId, mut n: usize, ext: bool) {
-        unimplemented!()
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_word_end(&view.cursor, n, true);
+            view.cursor.cidx..min(dest.cidx + 1, self.rope.len_chars())
+        };
+        self.delete_range(range);
     }
 
     pub(crate) fn delete_back(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!()
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_back(&view.cursor, n, false);
+            dest.cidx..view.cursor.cidx
+        };
+        self.delete_range(range);
     }
 
     pub(crate) fn delete_back_extended(&mut self, view_id: &BufferViewId, n: usize) {
-        unimplemented!()
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_back(&view.cursor, n, true);
+            dest.cidx..view.cursor.cidx
+        };
+        self.delete_range(range);
     }
 
     // -------- Internal stuff --------
@@ -469,5 +530,13 @@ impl Buffer {
                     view.scroll_to_top();
                 }
             })
+    }
+
+    fn view(&self, view_id: &BufferViewId) -> &View {
+        self.views.get(view_id).unwrap()
+    }
+
+    fn view_mut(&mut self, view_id: &BufferViewId) -> &mut View {
+        self.views.get_mut(view_id).unwrap()
     }
 }
