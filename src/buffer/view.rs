@@ -145,6 +145,9 @@ impl View {
     }
 
     pub(super) fn snap_to_cursor(&mut self, data: &Rope, tab_width: usize) {
+        // Limit cursor based on cursor style
+        self.cursor.limit_for_style(data, tab_width);
+
         // Snap to Y
         self.snap_to_line(self.cursor.line_num, data, tab_width);
 
@@ -531,8 +534,7 @@ impl ViewCursor {
 
     pub(super) fn sync_gidx(&mut self, data: &Rope, tab_width: usize) {
         let trimmed = rope_trim_newlines(data.line(self.line_num));
-        let (cidx, gidx) =
-            cidx_gidx_from_gidx(&trimmed, self.line_gidx, tab_width, self.past_end());
+        let (cidx, gidx) = cidx_gidx_from_gidx(&trimmed, self.line_gidx, tab_width);
         self.line_cidx = cidx;
         self.line_gidx = gidx;
         self.line_global_x = self.line_gidx;
@@ -541,8 +543,7 @@ impl ViewCursor {
 
     pub(super) fn sync_global_x(&mut self, data: &Rope, tab_width: usize) {
         let trimmed = rope_trim_newlines(data.line(self.line_num));
-        let (cidx, gidx) =
-            cidx_gidx_from_global_x(&trimmed, self.line_global_x, tab_width, self.past_end());
+        let (cidx, gidx) = cidx_gidx_from_global_x(&trimmed, self.line_global_x, tab_width);
         self.line_cidx = cidx;
         self.line_gidx = gidx;
         self.cidx = data.line_to_char(self.line_num) + self.line_cidx;
@@ -553,9 +554,6 @@ impl ViewCursor {
         let len_chars = trimmed.len_chars();
         if self.line_cidx >= len_chars {
             self.line_cidx = len_chars;
-            if !self.past_end() && self.line_cidx > 0 {
-                self.line_cidx -= 1;
-            }
         }
         let (cidx, gidx) = cidx_gidx_from_cidx(&trimmed, self.line_cidx, tab_width);
         self.line_cidx = cidx;
@@ -573,9 +571,6 @@ impl ViewCursor {
         if !rope_is_grapheme_boundary(&trimmed, self.line_cidx) {
             self.line_cidx = rope_next_grapheme_boundary(&trimmed, self.line_cidx);
         }
-        if !self.past_end() && self.line_cidx == len_chars && self.line_cidx > 0 {
-            self.line_cidx -= 1;
-        }
         let (cidx, gidx) = cidx_gidx_from_cidx(&trimmed, self.line_cidx, tab_width);
         self.line_cidx = cidx;
         self.line_gidx = gidx;
@@ -585,6 +580,18 @@ impl ViewCursor {
 
     fn past_end(&self) -> bool {
         self.style == CursorStyle::Line
+    }
+
+    fn limit_for_style(&mut self, data: &Rope, tab_width: usize) {
+        let trimmed = rope_trim_newlines(data.line(self.line_num));
+        let len_chars = trimmed.len_chars();
+        if !self.past_end() && self.line_cidx == len_chars && self.line_cidx > 0 {
+            let (cidx, gidx) = cidx_gidx_from_cidx(&trimmed, self.line_cidx - 1, tab_width);
+            self.line_cidx = cidx;
+            self.line_gidx = gidx;
+            self.line_global_x = self.line_gidx;
+            self.cidx = data.line_to_char(self.line_num) + self.line_cidx;
+        }
     }
 }
 
@@ -609,13 +616,9 @@ pub(super) fn cidx_gidx_from_gidx(
     slice: &RopeSlice,
     gidx: usize,
     tab_width: usize,
-    past_end: bool,
 ) -> (usize, usize) {
     let (mut gcount, mut cidx) = (0, 0);
-    let mut len_chars = slice.len_chars();
-    if !past_end && len_chars > 0 {
-        len_chars -= 1;
-    }
+    let len_chars = slice.len_chars();
     for g in RopeGraphemes::new(slice) {
         let count_here = g.chars().count();
         if gcount >= gidx || cidx + count_here > len_chars {
@@ -631,17 +634,9 @@ pub(super) fn cidx_gidx_from_gidx(
     (cidx, gcount)
 }
 
-fn cidx_gidx_from_global_x(
-    slice: &RopeSlice,
-    global_x: usize,
-    tab_width: usize,
-    past_end: bool,
-) -> (usize, usize) {
+fn cidx_gidx_from_global_x(slice: &RopeSlice, global_x: usize, tab_width: usize) -> (usize, usize) {
     let (mut gidx, mut ccount) = (0, 0);
-    let mut len_chars = slice.len_chars();
-    if !past_end && len_chars > 0 {
-        len_chars -= 1;
-    }
+    let len_chars = slice.len_chars();
     for g in RopeGraphemes::new(slice) {
         let count_here = g.chars().count();
         if gidx >= global_x || ccount + count_here > len_chars {

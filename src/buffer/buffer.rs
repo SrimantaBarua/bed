@@ -11,7 +11,7 @@ use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
 
-use crate::common::PixelSize;
+use crate::common::{rope_trim_newlines, PixelSize};
 use crate::painter::Painter;
 
 use super::rope_stuff::{space_containing, word_containing};
@@ -137,8 +137,9 @@ impl Buffer {
 
     fn cursor_right(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
         let mut cursor = cursor.clone();
-        cursor.line_cidx += n;
-        cursor.sync_line_cidx_gidx_right(&self.rope, self.tab_width);
+        let len_chars = rope_trim_newlines(self.rope.slice(..)).len_chars();
+        cursor.line_cidx = min(len_chars, cursor.line_cidx + n);
+        cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
         cursor
     }
 
@@ -163,8 +164,8 @@ impl Buffer {
             cursor.cidx = self.rope.len_chars();
             cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
         } else {
-            cursor.line_cidx = self.rope.line(cursor.line_num).len_chars();
-            cursor.sync_line_cidx_gidx_right(&self.rope, self.tab_width);
+            cursor.line_cidx = rope_trim_newlines(self.rope.line(cursor.line_num)).len_chars();
+            cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
         }
         cursor
     }
@@ -423,7 +424,7 @@ impl Buffer {
         let range = {
             let view = self.view(view_id);
             let dest = self.cursor_line_end(&view.cursor, n);
-            view.cursor.cidx..min(dest.cidx + 1, self.rope.len_chars())
+            view.cursor.cidx..min(dest.cidx, self.rope.len_chars())
         };
         self.delete_range(range);
     }

@@ -17,6 +17,10 @@ use crate::{Bed, BedHandle};
 
 #[derive(Debug, Eq, PartialEq)]
 enum Mode {
+    Change {
+        action_mul: Option<usize>,
+        move_mul: Option<usize>,
+    },
     Delete {
         action_mul: Option<usize>,
         move_mul: Option<usize>,
@@ -89,6 +93,10 @@ impl InputState {
 
     pub(crate) fn handle_char(&mut self, c: char) {
         let mut bed = self.bed_handle.edit();
+        let is_change_mode = match self.mode {
+            Mode::Change { .. } => true,
+            _ => false,
+        };
         match &mut self.mode {
             Mode::Insert => match c as u32 {
                 8 /* backspace */ => bed.edit_view().delete_left(1),
@@ -179,6 +187,14 @@ impl InputState {
                         ctx.insert_char('\n');
                         ctx.move_cursor_up(1);
                     }
+                    // Entering change mode
+                    'c' => {
+                        next_mode = Some(Mode::Change {
+                            action_mul: *action_mul,
+                            move_mul: None,
+                        });
+                        bed.edit_view().set_cursor_style(CursorStyle::Underline);
+                    }
                     // Entering delete mode
                     'd' => {
                         next_mode = Some(Mode::Delete {
@@ -197,12 +213,17 @@ impl InputState {
                     *action_mul = None;
                 }
             }
-            Mode::Delete {
+            Mode::Change {
+                action_mul,
+                move_mul,
+            }
+            | Mode::Delete {
                 action_mul,
                 move_mul,
             } => {
                 let act_rep = action_mul.unwrap_or(1);
                 let move_rep = move_mul.unwrap_or(1);
+                let mut next_mode = Mode::Insert;
                 let mut is_num = false;
                 let mut ctx = bed.edit_view();
                 match c {
@@ -247,7 +268,12 @@ impl InputState {
                         }
                     }
                     // Object
-                    'd' => {
+                    'c' if is_change_mode => {
+                        for _ in 0..act_rep {
+                            ctx.delete_down(move_rep - 1)
+                        }
+                    }
+                    'd' if !is_change_mode => {
                         for _ in 0..act_rep {
                             ctx.delete_down(move_rep - 1)
                         }
@@ -301,11 +327,18 @@ impl InputState {
                             ctx.delete_to_line_end(move_rep)
                         }
                     }
-                    _ => {}
+                    _ => next_mode = Mode::Normal { action_mul: None },
                 }
                 if !is_num {
-                    self.mode = Mode::Normal { action_mul: None };
-                    ctx.set_cursor_style(CursorStyle::Block);
+                    if !is_change_mode {
+                        next_mode = Mode::Normal { action_mul: None };
+                    }
+                    match next_mode {
+                        Mode::Insert => ctx.set_cursor_style(CursorStyle::Line),
+                        Mode::Normal { .. } => ctx.set_cursor_style(CursorStyle::Block),
+                        _ => unreachable!(),
+                    }
+                    self.mode = next_mode;
                 }
             }
         }
@@ -317,6 +350,10 @@ impl InputState {
             return;
         }
         if let Some(vkey) = input.virtual_keycode {
+            let is_change_mode = match self.mode {
+                Mode::Change { .. } => true,
+                _ => false,
+            };
             match &mut self.mode {
                 Mode::Insert => match vkey {
                     // Basic movement
@@ -351,6 +388,10 @@ impl InputState {
                 Mode::Delete {
                     action_mul,
                     move_mul,
+                }
+                | Mode::Change {
+                    action_mul,
+                    move_mul,
                 } => {
                     let act_rep = action_mul.unwrap_or(1);
                     let move_rep = move_mul.unwrap_or(1);
@@ -367,8 +408,13 @@ impl InputState {
                         }
                     }
                     if reset_mode {
-                        self.mode = Mode::Normal { action_mul: None };
-                        ctx.set_cursor_style(CursorStyle::Block);
+                        if is_change_mode {
+                            self.mode = Mode::Insert;
+                            ctx.set_cursor_style(CursorStyle::Line);
+                        } else {
+                            self.mode = Mode::Normal { action_mul: None };
+                            ctx.set_cursor_style(CursorStyle::Block);
+                        }
                     }
                 }
             }
