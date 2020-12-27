@@ -137,7 +137,7 @@ impl Buffer {
 
     fn cursor_right(&self, cursor: &ViewCursor, n: usize) -> ViewCursor {
         let mut cursor = cursor.clone();
-        let len_chars = rope_trim_newlines(self.rope.slice(..)).len_chars();
+        let len_chars = rope_trim_newlines(self.rope.line(cursor.line_num)).len_chars();
         cursor.line_cidx = min(len_chars, cursor.line_cidx + n);
         cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
         cursor
@@ -499,6 +499,22 @@ impl Buffer {
             dest.cidx..view.cursor.cidx
         };
         self.delete_range(range);
+    }
+
+    pub(crate) fn replace_repeated(&mut self, view_id: &BufferViewId, c: char, n: usize) {
+        assert!(n > 0);
+        let mut cursor = self.view(view_id).cursor.clone();
+        let len_chars = rope_trim_newlines(self.rope.line(cursor.line_num)).len_chars();
+        if cursor.line_cidx + n > len_chars {
+            return;
+        }
+        self.rope.remove(cursor.cidx..cursor.cidx + n);
+        let mut buf = [0; 4];
+        let s = c.encode_utf8(&mut buf);
+        self.rope.insert(cursor.cidx, &s.repeat(n));
+        cursor.cidx += n - 1;
+        cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
+        self.view_mut(view_id).cursor = cursor;
     }
 
     // -------- Internal stuff --------

@@ -142,6 +142,10 @@ impl<'a> TextViewEditCtx<'a> {
         self.buffer.delete_to_line_end(self.view_id, n);
     }
 
+    pub(crate) fn replace_repeated(&mut self, c: char, n: usize) {
+        self.buffer.replace_repeated(self.view_id, c, n);
+    }
+
     pub(crate) fn snap_to_cursor(&mut self) {
         self.buffer.snap_to_cursor(self.view_id);
     }

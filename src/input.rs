@@ -25,6 +25,9 @@ enum Mode {
         action_mul: Option<usize>,
         move_mul: Option<usize>,
     },
+    Replace {
+        action_mul: Option<usize>,
+    },
     Normal {
         action_mul: Option<usize>,
     },
@@ -187,7 +190,20 @@ impl InputState {
                         ctx.insert_char('\n');
                         ctx.move_cursor_up(1);
                     }
-                    // Entering change mode
+                    's' => {
+                        next_mode = Some(Mode::Insert);
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.delete_right(act_rep);
+                    }
+                    'S' => {
+                        next_mode = Some(Mode::Insert);
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.move_cursor_to_line_start(1);
+                        ctx.delete_to_line_end(act_rep);
+                    }
+                    // Entering other modes
                     'c' => {
                         next_mode = Some(Mode::Change {
                             action_mul: *action_mul,
@@ -195,11 +211,16 @@ impl InputState {
                         });
                         bed.edit_view().set_cursor_style(CursorStyle::Underline);
                     }
-                    // Entering delete mode
                     'd' => {
                         next_mode = Some(Mode::Delete {
                             action_mul: *action_mul,
                             move_mul: None,
+                        });
+                        bed.edit_view().set_cursor_style(CursorStyle::Underline);
+                    }
+                    'r' => {
+                        next_mode = Some(Mode::Replace {
+                            action_mul: *action_mul,
                         });
                         bed.edit_view().set_cursor_style(CursorStyle::Underline);
                     }
@@ -341,6 +362,12 @@ impl InputState {
                     self.mode = next_mode;
                 }
             }
+            Mode::Replace { action_mul } => {
+                let mut ctx = bed.edit_view();
+                ctx.replace_repeated(c, action_mul.unwrap_or(1));
+                ctx.set_cursor_style(CursorStyle::Block);
+                self.mode = Mode::Normal { action_mul: None };
+            }
         }
     }
 
@@ -417,6 +444,17 @@ impl InputState {
                         }
                     }
                 }
+                Mode::Replace { .. } => match vkey {
+                    VirtualKeyCode::Up
+                    | VirtualKeyCode::Down
+                    | VirtualKeyCode::Left
+                    | VirtualKeyCode::Right
+                    | VirtualKeyCode::Escape => {
+                        self.mode = Mode::Normal { action_mul: None };
+                        bed.edit_view().set_cursor_style(CursorStyle::Block);
+                    }
+                    _ => {}
+                },
             }
         }
     }
@@ -570,6 +608,10 @@ impl<'a> ViewEditCtx<'a> {
 
     fn delete_to_line_end(&mut self, n: usize) {
         self.view.delete_to_line_end(n);
+    }
+
+    fn replace_repeated(&mut self, c: char, n: usize) {
+        self.view.replace_repeated(c, n);
     }
 }
 
