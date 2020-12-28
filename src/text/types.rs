@@ -1,7 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::fmt;
-use std::ops::{Add, AddAssign, Sub};
+use std::ops::{Add, AddAssign, Mul, Sub};
 
 // Freetype font sizes
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -63,5 +63,13 @@ impl Sub for f26_6 {
 
     fn sub(self, rhs: f26_6) -> Self {
         f26_6(self.0 - rhs.0)
+    }
+}
+
+impl Mul<f32> for f26_6 {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self {
+        f26_6((self.0 as f32 * rhs).round() as i32)
     }
 }

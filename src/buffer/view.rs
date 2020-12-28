@@ -13,7 +13,7 @@ use crate::common::{
 };
 use crate::painter::Painter;
 use crate::style::{TextSize, TextStyle};
-use crate::text::ShapedSpan;
+use crate::text::{f26_6, ShapedSpan};
 
 const CUSROR_WIDTH: f32 = 2.0;
 
@@ -327,10 +327,12 @@ impl View {
         let spans = RefCell::new(Vec::new());
         let mut linum = self.start_line;
         let rect_width = self.rect.size.width as f32;
+        let line_pad = f26_6::from(self.bed_handle.line_pad() as f32);
 
         let mut text_ctx = text_font.render_ctx(&mut paint_ctx);
 
         for rope_line in data.lines_at(self.start_line) {
+            origin.y += line_pad.to_f32();
             if origin.y >= self.rect.size.height as f32 {
                 break;
             }
@@ -405,11 +407,11 @@ impl View {
                     }
                 },
             );
-            let height = ascender - descender;
+            let cursor_height = ascender - descender;
 
             let (cursor_width, cursor_height, cursor_y) = match cursor.style {
-                CursorStyle::Line => (CUSROR_WIDTH, height.to_f32(), origin.y),
-                CursorStyle::Block => (cursor_block_width.get(), height.to_f32(), origin.y),
+                CursorStyle::Line => (CUSROR_WIDTH, cursor_height.to_f32(), origin.y),
+                CursorStyle::Block => (cursor_block_width.get(), cursor_height.to_f32(), origin.y),
                 CursorStyle::Underline => (
                     cursor_block_width.get(),
                     cursor_underline_height.get() * 2.0,
@@ -447,7 +449,7 @@ impl View {
                 }
             }
             spans.clear();
-            origin.y -= descender.to_f32();
+            origin.y += line_pad.to_f32() - descender.to_f32();
             linum += 1;
         }
     }
@@ -463,6 +465,7 @@ impl View {
         let text_style = TextStyle::default();
         let space_metrics = text_font.space_metrics(self.text_size, text_style);
         let state = RefCell::new((space_metrics.ascender, space_metrics.descender, 0.0));
+        let line_pad = f26_6::from(self.bed_handle.line_pad() as f32);
         split_text(
             &line,
             tab_width,
@@ -485,7 +488,7 @@ impl View {
         );
         let state = &*state.borrow();
         LineMetrics {
-            height: (state.0 - state.1).to_f32().ceil() as u32,
+            height: (state.0 - state.1 + line_pad * 2.0).to_f32().ceil() as u32,
             width: state.2.ceil() as u32,
         }
     }

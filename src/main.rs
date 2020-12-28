@@ -29,7 +29,7 @@ static DEFAULT_THEME: &str = "default";
 
 struct Bed {
     buffer_state: buffer::BufferBedHandle,
-    config: Rc<config::Config>,
+    config: Rc<RefCell<config::Config>>,
     theme_set: Rc<theme::ThemeSet>,
     buffer_mgr: buffer::BufferMgr,
     text_tree: textview::TextTree,
@@ -47,7 +47,10 @@ impl Bed {
         let theme_set = Rc::new(theme::ThemeSet::load());
         let scale_factor = window.scale_factor();
         let mut font_core = text::FontCore::new();
-        let config = Rc::new(config::Config::load(&mut font_core, scale_factor));
+        let config = Rc::new(RefCell::new(config::Config::load(
+            &mut font_core,
+            scale_factor,
+        )));
         let painter = painter::Painter::new(window_size.cast());
 
         let buffer_state = buffer::BufferBedHandle::new(config.clone(), theme_set.clone());
@@ -99,18 +102,17 @@ impl BedHandle {
         inner.window.request_redraw();
     }
 
-    fn window_size(&self) -> Size2D<u32, PixelSize> {
-        self.0.borrow().window.size()
-    }
-
-    fn scale_factor(&mut self) -> f64 {
-        self.0.borrow().scale_factor
-    }
-
     fn set_scale_factor(&mut self, scale_factor: f64) {
         let mut inner = self.0.borrow_mut();
         let scale_amt = scale_factor / inner.scale_factor;
-        inner.buffer_state.scale_text(scale_amt);
+        {
+            let mut config = inner.config.borrow_mut();
+            config.completion_font_size = config.completion_font_size.scale(scale_amt);
+            config.gutter_font_size = config.gutter_font_size.scale(scale_amt);
+            config.hover_font_size = config.hover_font_size.scale(scale_amt);
+            config.prompt_font_size = config.prompt_font_size.scale(scale_amt);
+            config.textview_font_size = config.textview_font_size.scale(scale_amt);
+        }
         inner.buffer_mgr.scale_text(scale_amt);
         inner.scale_factor = scale_factor;
         inner.window.request_redraw();

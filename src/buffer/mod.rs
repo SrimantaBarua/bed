@@ -33,23 +33,12 @@ impl BufferViewId {
 pub(crate) struct BufferBedHandle(Rc<RefCell<BufferBedState>>);
 
 impl BufferBedHandle {
-    pub(crate) fn new(config: Rc<Config>, theme_set: Rc<ThemeSet>) -> BufferBedHandle {
+    pub(crate) fn new(config: Rc<RefCell<Config>>, theme_set: Rc<ThemeSet>) -> BufferBedHandle {
         BufferBedHandle(Rc::new(RefCell::new(BufferBedState {
             needs_redraw: false,
-            text_font: config.textview_font.clone(),
-            text_size: config.textview_font_size.clone(),
-            theme: config.theme.clone(),
+            config,
             theme_set,
         })))
-    }
-
-    pub(crate) fn set_text_font(&mut self, font: FontCollectionHandle) {
-        self.0.borrow_mut().text_font = font;
-    }
-
-    pub(crate) fn scale_text(&mut self, scale: f64) {
-        let mut inner = self.0.borrow_mut();
-        inner.text_size = inner.text_size.scale(scale);
     }
 
     pub(crate) fn collect_redraw_state(&mut self) -> bool {
@@ -59,12 +48,16 @@ impl BufferBedHandle {
         ret
     }
 
+    pub(crate) fn line_pad(&self) -> u32 {
+        self.0.borrow().config.borrow().textview_line_padding
+    }
+
     fn text_font(&self) -> FontCollectionHandle {
-        self.0.borrow().text_font.clone()
+        self.0.borrow().config.borrow().textview_font.clone()
     }
 
     fn text_size(&self) -> TextSize {
-        self.0.borrow().text_size
+        self.0.borrow().config.borrow().textview_font_size
     }
 
     fn theme(&self) -> ThemeGuard {
@@ -78,9 +71,7 @@ impl BufferBedHandle {
 
 struct BufferBedState {
     needs_redraw: bool,
-    text_font: FontCollectionHandle,
-    text_size: TextSize,
-    theme: String,
+    config: Rc<RefCell<Config>>,
     theme_set: Rc<ThemeSet>,
 }
 
@@ -90,6 +81,6 @@ impl<'a> Deref for ThemeGuard<'a> {
     type Target = Theme;
 
     fn deref(&self) -> &Theme {
-        self.0.theme_set.get(&self.0.theme)
+        self.0.theme_set.get(&self.0.config.borrow().theme)
     }
 }
