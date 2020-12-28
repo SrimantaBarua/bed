@@ -10,21 +10,27 @@ use glutin::event_loop::ControlFlow;
 
 mod buffer;
 mod common;
+mod config;
 mod input;
+mod language;
 mod opengl;
 mod painter;
 mod shapes;
 mod style;
 mod text;
 mod textview;
+mod theme;
 mod window;
 
 use common::PixelSize;
 
 static TARGET_DELTA: time::Duration = time::Duration::from_nanos(1_000_000_000 / 60);
+static DEFAULT_THEME: &str = "default";
 
 struct Bed {
     buffer_state: buffer::BufferBedHandle,
+    config: Rc<config::Config>,
+    theme_set: Rc<theme::ThemeSet>,
     buffer_mgr: buffer::BufferMgr,
     text_tree: textview::TextTree,
     painter: painter::Painter,
@@ -38,13 +44,13 @@ impl Bed {
         let window_size = size2(1024, 768);
         let (window, event_loop) = window::Window::new("bed", window_size);
         opengl::gl_init();
+        let theme_set = Rc::new(theme::ThemeSet::load());
         let scale_factor = window.scale_factor();
         let mut font_core = text::FontCore::new(window_size.cast());
+        let config = Rc::new(config::Config::load(&mut font_core, scale_factor));
         let painter = painter::Painter::new(window_size.cast());
 
-        let text_font = font_core.find("monospace").expect("Failed to find font");
-        let text_size = style::TextSize(10).scale(scale_factor);
-        let buffer_state = buffer::BufferBedHandle::new(text_font, text_size);
+        let buffer_state = buffer::BufferBedHandle::new(config.clone(), theme_set.clone());
         let mut buffer_mgr = buffer::BufferMgr::new(buffer_state.clone());
 
         let first_buffer = buffer_mgr.read_file("src/buffer/view.rs").unwrap();
@@ -60,6 +66,8 @@ impl Bed {
             Bed {
                 painter,
                 buffer_state,
+                config,
+                theme_set,
                 buffer_mgr,
                 text_tree,
                 window,
@@ -104,10 +112,9 @@ impl BedHandle {
 
     fn set_scale_factor(&mut self, scale_factor: f64) {
         let inner = &mut *self.0.borrow_mut();
-        let text_size = inner.buffer_state.text_size();
-        inner
-            .buffer_state
-            .set_text_size(text_size.scale(scale_factor / inner.scale_factor));
+        let scale_amt = scale_factor / inner.scale_factor;
+        inner.buffer_state.scale_text(scale_amt);
+        inner.buffer_mgr.scale_text(scale_amt);
         inner.scale_factor = scale_factor;
         inner.window.request_redraw();
     }

@@ -381,6 +381,19 @@ impl InputState {
                 Mode::Change { .. } => true,
                 _ => false,
             };
+            // Handle mode-independent keys
+            match vkey {
+                VirtualKeyCode::Plus if self.modifiers.ctrl() => {
+                    bed.edit_view().update_text_size(1);
+                    return;
+                }
+                VirtualKeyCode::Minus if self.modifiers.ctrl() => {
+                    bed.edit_view().update_text_size(-1);
+                    return;
+                }
+                _ => {}
+            }
+            // Handle mode-specific keys
             match &mut self.mode {
                 Mode::Insert => match vkey {
                     // Basic movement
@@ -481,11 +494,12 @@ impl InputState {
 
 struct ViewEditCtx<'a> {
     view: TextViewEditCtx<'a>,
+    update_global_x: bool,
 }
 
 impl<'a> Drop for ViewEditCtx<'a> {
     fn drop(&mut self) {
-        self.view.snap_to_cursor();
+        self.view.snap_to_cursor(self.update_global_x);
     }
 }
 
@@ -500,118 +514,151 @@ impl<'a> ViewEditCtx<'a> {
 
     fn move_cursor_left(&mut self, n: usize) {
         self.view.move_cursor_left(n);
+        self.update_global_x = true;
     }
 
     fn move_cursor_right(&mut self, n: usize) {
         self.view.move_cursor_right(n);
+        self.update_global_x = true;
     }
 
     fn move_cursor_to_line_start(&mut self, n: usize) {
         self.view.move_cursor_to_line_start(n);
+        self.update_global_x = true;
     }
 
     fn move_cursor_to_line_end(&mut self, n: usize) {
         self.view.move_cursor_to_line_end(n);
+        self.update_global_x = true;
     }
 
     fn move_cursor_to_line(&mut self, linum: usize) {
         self.view.move_cursor_to_line(linum);
+        self.update_global_x = true;
     }
 
     fn move_cursor_to_last_line(&mut self) {
         self.view.move_cursor_to_last_line();
+        self.update_global_x = true;
     }
 
     fn move_word(&mut self, n: usize) {
         self.view.move_cursor_word(n);
+        self.update_global_x = true;
     }
 
     fn move_word_extended(&mut self, n: usize) {
         self.view.move_cursor_word_extended(n);
+        self.update_global_x = true;
     }
 
     fn move_word_end(&mut self, n: usize) {
         self.view.move_cursor_word_end(n);
+        self.update_global_x = true;
     }
 
     fn move_word_end_extended(&mut self, n: usize) {
         self.view.move_cursor_word_end_extended(n);
+        self.update_global_x = true;
     }
 
     fn move_back(&mut self, n: usize) {
         self.view.move_cursor_back(n);
+        self.update_global_x = true;
     }
 
     fn move_back_extended(&mut self, n: usize) {
         self.view.move_cursor_back_extended(n);
+        self.update_global_x = true;
     }
 
     fn set_cursor_style(&mut self, style: CursorStyle) {
         self.view.set_cursor_style(style);
+        self.update_global_x = true;
     }
 
     fn insert_char(&mut self, c: char) {
         self.view.insert_char(c);
+        self.update_global_x = true;
     }
 
     fn delete_left(&mut self, n: usize) {
         self.view.delete_left(n);
+        self.update_global_x = true;
     }
 
     fn delete_right(&mut self, n: usize) {
         self.view.delete_right(n);
+        self.update_global_x = true;
     }
 
     fn delete_up(&mut self, n: usize) {
         self.view.delete_up(n);
+        self.update_global_x = true;
     }
 
     fn delete_down(&mut self, n: usize) {
         self.view.delete_down(n);
+        self.update_global_x = true;
     }
 
     fn delete_to_line(&mut self, n: usize) {
         self.view.delete_to_line(n);
+        self.update_global_x = true;
     }
 
     fn delete_to_last_line(&mut self) {
         self.view.delete_to_last_line();
+        self.update_global_x = true;
     }
 
     fn delete_word(&mut self, n: usize) {
         self.view.delete_word(n);
+        self.update_global_x = true;
     }
 
     fn delete_word_extended(&mut self, n: usize) {
         self.view.delete_word_extended(n);
+        self.update_global_x = true;
     }
 
     fn delete_word_end(&mut self, n: usize) {
         self.view.delete_word_end(n);
+        self.update_global_x = true;
     }
 
     fn delete_word_end_extended(&mut self, n: usize) {
         self.view.delete_word_end_extended(n);
+        self.update_global_x = true;
     }
 
     fn delete_back(&mut self, n: usize) {
         self.view.delete_back(n);
+        self.update_global_x = true;
     }
 
     fn delete_back_extended(&mut self, n: usize) {
         self.view.delete_back_extended(n);
+        self.update_global_x = true;
     }
 
     fn delete_to_line_start(&mut self, n: usize) {
         self.view.delete_to_line_start(n);
+        self.update_global_x = true;
     }
 
     fn delete_to_line_end(&mut self, n: usize) {
         self.view.delete_to_line_end(n);
+        self.update_global_x = true;
     }
 
     fn replace_repeated(&mut self, c: char, n: usize) {
         self.view.replace_repeated(c, n);
+        self.update_global_x = true;
+    }
+
+    fn update_text_size(&mut self, diff: i16) {
+        self.view.update_text_size(diff);
     }
 }
 
@@ -623,6 +670,7 @@ impl<'a> BedEditCtx<'a> {
     fn edit_view(&mut self) -> ViewEditCtx {
         ViewEditCtx {
             view: self.bed.text_tree.active_mut().edit_ctx(),
+            update_global_x: false,
         }
     }
 

@@ -146,8 +146,12 @@ impl<'a> TextViewEditCtx<'a> {
         self.buffer.replace_repeated(self.view_id, c, n);
     }
 
-    pub(crate) fn snap_to_cursor(&mut self) {
-        self.buffer.snap_to_cursor(self.view_id);
+    pub(crate) fn snap_to_cursor(&mut self, update_global_x: bool) {
+        self.buffer.snap_to_cursor(self.view_id, update_global_x);
+    }
+
+    pub(crate) fn update_text_size(&mut self, diff: i16) {
+        self.buffer.update_text_size(self.view_id, diff);
     }
 }
 

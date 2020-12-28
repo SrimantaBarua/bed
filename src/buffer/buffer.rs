@@ -30,12 +30,10 @@ impl PartialEq for BufferHandle {
 impl Eq for BufferHandle {}
 
 impl BufferHandle {
-    // Get reference to inner buffer
     pub(crate) fn buffer(&mut self) -> RefMut<Buffer> {
         self.0.borrow_mut()
     }
 
-    // -------- View manipulation --------
     pub(crate) fn new_view(&mut self, view_id: &BufferViewId, rect: Rect<u32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         let view = View::new(inner.bed_handle.clone(), rect);
@@ -70,7 +68,13 @@ impl BufferHandle {
         view.move_cursor_to_point(point, &inner.rope, inner.tab_width);
     }
 
-    // -------- Buffer creation --------
+    pub(crate) fn scale_text(&mut self, scale: f64) {
+        let inner = &mut *self.0.borrow_mut();
+        for view in inner.views.values_mut() {
+            view.scale_text(scale);
+        }
+    }
+
     pub(super) fn create_empty(bed_handle: BufferBedHandle) -> BufferHandle {
         BufferHandle(Rc::new(RefCell::new(Buffer::empty(bed_handle))))
     }
@@ -327,9 +331,9 @@ impl Buffer {
         self.bed_handle.request_redraw();
     }
 
-    pub(crate) fn snap_to_cursor(&mut self, view_id: &BufferViewId) {
+    pub(crate) fn snap_to_cursor(&mut self, view_id: &BufferViewId, update_global_x: bool) {
         let view = self.views.get_mut(view_id).unwrap();
-        view.snap_to_cursor(&self.rope, self.tab_width);
+        view.snap_to_cursor(&self.rope, self.tab_width, update_global_x);
     }
 
     // -------- Editing --------
@@ -515,6 +519,11 @@ impl Buffer {
         cursor.cidx += n - 1;
         cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
         self.view_mut(view_id).cursor = cursor;
+    }
+
+    pub(crate) fn update_text_size(&mut self, view_id: &BufferViewId, diff: i16) {
+        self.view_mut(view_id).update_text_size(diff);
+        self.bed_handle.request_redraw();
     }
 
     // -------- Internal stuff --------

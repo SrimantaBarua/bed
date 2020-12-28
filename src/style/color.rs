@@ -2,7 +2,10 @@
 
 use std::convert::TryFrom;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+use serde::Deserialize;
+
+#[serde(try_from = "&str")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 pub(crate) struct Color {
     pub(crate) r: u8,
     pub(crate) g: u8,

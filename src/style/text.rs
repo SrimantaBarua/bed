@@ -1,9 +1,14 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cmp::max;
 use std::convert::TryFrom;
 use std::default::Default;
+use std::ops::{Add, AddAssign};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+use serde::Deserialize;
+
+#[serde(try_from = "&str")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
 pub(crate) enum TextWeight {
     Medium,
     Light,
@@ -29,7 +34,8 @@ impl Default for TextWeight {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[serde(try_from = "&str")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
 pub(crate) enum TextSlant {
     Roman,
     Italic,
@@ -67,7 +73,8 @@ impl TextStyle {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
+#[serde(from = "u16")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub(crate) struct TextSize(pub(crate) u16);
 
 impl TextSize {
@@ -81,5 +88,25 @@ impl TextSize {
 
     pub(crate) fn scale(self, scale: f64) -> TextSize {
         TextSize((self.0 as f64 * scale).round() as u16)
+    }
+}
+
+impl From<u16> for TextSize {
+    fn from(u: u16) -> TextSize {
+        TextSize(u)
+    }
+}
+
+impl Add<i16> for TextSize {
+    type Output = TextSize;
+
+    fn add(self, i: i16) -> TextSize {
+        TextSize(max(self.0 as i16 + i, 0) as u16)
+    }
+}
+
+impl AddAssign<i16> for TextSize {
+    fn add_assign(&mut self, i: i16) {
+        self.0 = max(self.0 as i16 + i, 0) as u16
     }
 }

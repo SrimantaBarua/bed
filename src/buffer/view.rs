@@ -12,7 +12,7 @@ use crate::common::{
     PixelSize, RopeGraphemes, SplitCbRes,
 };
 use crate::painter::Painter;
-use crate::style::{Color, TextStyle};
+use crate::style::{TextSize, TextStyle};
 use crate::text::ShapedSpan;
 
 const CUSROR_WIDTH: f32 = 2.0;
@@ -24,6 +24,7 @@ enum SpanOrSpace {
 
 pub(super) struct View {
     pub(super) cursor: ViewCursor,
+    text_size: TextSize,
     rect: Rect<u32, PixelSize>,
     off: Vector2D<i32, PixelSize>,
     start_line: usize,
@@ -34,6 +35,7 @@ impl View {
     pub(super) fn new(bed_handle: BufferBedHandle, rect: Rect<u32, PixelSize>) -> View {
         View {
             rect,
+            text_size: bed_handle.text_size(),
             off: vec2(0, 0),
             start_line: 0,
             bed_handle,
@@ -41,9 +43,17 @@ impl View {
         }
     }
 
+    pub(super) fn scale_text(&mut self, scale: f64) {
+        self.text_size = self.text_size.scale(scale);
+    }
+
+    pub(super) fn update_text_size(&mut self, diff: i16) {
+        self.text_size += diff;
+    }
+
     pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>, data: &Rope, tab_width: usize) {
         self.rect = rect;
-        self.snap_to_cursor(data, tab_width);
+        self.snap_to_cursor(data, tab_width, true);
     }
 
     pub(super) fn move_cursor_to_point(
@@ -88,9 +98,8 @@ impl View {
         // Check cursor position on the line
         let line = data.line(self.cursor.line_num);
         let mut text_font = self.bed_handle.text_font();
-        let text_size = self.bed_handle.text_size();
         let text_style = TextStyle::default();
-        let space_metrics = text_font.space_metrics(text_size, text_style);
+        let space_metrics = text_font.space_metrics(self.text_size, text_style);
         let sp_awidth = space_metrics.advance.width.to_f32();
         let cursor_x = Cell::new(-self.off.x as f32);
         let gidx = Cell::new(0);
@@ -113,7 +122,7 @@ impl View {
                 }
             },
             |text| {
-                let shaped = text_font.shape(text, text_size, TextStyle::default());
+                let shaped = text_font.shape(text, self.text_size, TextStyle::default());
                 let mut gis = shaped.glyph_infos.iter().peekable();
                 for (j, _) in text.grapheme_indices(true) {
                     while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
@@ -141,12 +150,13 @@ impl View {
 
         self.cursor.line_gidx = gidx.get();
         self.cursor.sync_gidx(data, tab_width);
-        self.snap_to_cursor(data, tab_width);
+        self.snap_to_cursor(data, tab_width, true);
     }
 
-    pub(super) fn snap_to_cursor(&mut self, data: &Rope, tab_width: usize) {
+    pub(super) fn snap_to_cursor(&mut self, data: &Rope, tab_width: usize, update_global_x: bool) {
         // Limit cursor based on cursor style
-        self.cursor.limit_for_style(data, tab_width);
+        self.cursor
+            .limit_for_style(data, tab_width, update_global_x);
 
         // Snap to Y
         self.snap_to_line(self.cursor.line_num, data, tab_width);
@@ -154,9 +164,8 @@ impl View {
         // Snap to X
         let line = data.line(self.cursor.line_num);
         let mut text_font = self.bed_handle.text_font();
-        let text_size = self.bed_handle.text_size();
         let text_style = TextStyle::default();
-        let space_metrics = text_font.space_metrics(text_size, text_style);
+        let space_metrics = text_font.space_metrics(self.text_size, text_style);
         let sp_awidth = space_metrics.advance.width.to_f32();
 
         let cursor_x = Cell::new(0.0);
@@ -178,7 +187,7 @@ impl View {
                 }
             },
             |text| {
-                let shaped = text_font.shape(text, text_size, TextStyle::default());
+                let shaped = text_font.shape(text, self.text_size, TextStyle::default());
                 let mut gis = shaped.glyph_infos.iter().peekable();
                 for (j, _) in text.grapheme_indices(true) {
                     while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
@@ -307,13 +316,12 @@ impl View {
 
     pub(super) fn draw(&mut self, data: &Rope, painter: &mut Painter, tab_width: usize) {
         self.sanity_check(data);
-        let mut paint_ctx =
-            painter.widget_ctx(self.rect.cast(), Color::new(0xff, 0xff, 0xff, 0xff), false);
+        let theme = self.bed_handle.theme();
+        let mut paint_ctx = painter.widget_ctx(self.rect.cast(), theme.textview.background, false);
 
         let mut text_font = self.bed_handle.text_font();
-        let text_size = self.bed_handle.text_size();
         let text_style = TextStyle::default();
-        let space_metrics = text_font.space_metrics(text_size, text_style);
+        let space_metrics = text_font.space_metrics(self.text_size, text_style);
         let sp_awidth = space_metrics.advance.width.to_f32();
         let mut origin = point2(0.0f32, 0.0f32) - self.off.cast();
         let spans = RefCell::new(Vec::new());
@@ -357,7 +365,7 @@ impl View {
                     }
                 },
                 |text| {
-                    let shaped = text_font.shape(text, text_size, TextStyle::default());
+                    let shaped = text_font.shape(text, self.text_size, TextStyle::default());
                     let mut gis = shaped.glyph_infos.iter().peekable();
                     for (j, _) in text.grapheme_indices(true) {
                         while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
@@ -410,13 +418,13 @@ impl View {
             if let Some(x) = cursor_x.get() {
                 let rect: Rect<f32, PixelSize> =
                     Rect::new(point2(x, cursor_y), size2(cursor_width, cursor_height));
-                paint_ctx.color_quad(rect, Color::new(0x88, 0x44, 0x22, 0x88), false);
+                paint_ctx.color_quad(rect, theme.textview.cursor, false);
             } else if linum == cursor.line_num {
                 let rect: Rect<f32, PixelSize> = Rect::new(
                     point2(current_x.get(), cursor_y),
                     size2(cursor_width, cursor_height),
                 );
-                paint_ctx.color_quad(rect, Color::new(0x88, 0x44, 0x22, 0x88), false);
+                paint_ctx.color_quad(rect, theme.textview.cursor, false);
             }
 
             let spans = &mut *spans.borrow_mut();
@@ -431,7 +439,7 @@ impl View {
                         pos.x += sp_awidth * (*n as f32);
                     }
                     SpanOrSpace::Span(shaped) => {
-                        shaped.draw(pos, Color::new(0x00, 0x00, 0x00, 0xff));
+                        shaped.draw(pos, theme.textview.foreground);
                         pos.x += shaped.width.to_f32();
                     }
                 }
@@ -452,9 +460,8 @@ impl View {
 
     fn line_metrics(&self, line: &RopeSlice, tab_width: usize) -> LineMetrics {
         let mut text_font = self.bed_handle.text_font();
-        let text_size = self.bed_handle.text_size();
         let text_style = TextStyle::default();
-        let space_metrics = text_font.space_metrics(text_size, text_style);
+        let space_metrics = text_font.space_metrics(self.text_size, text_style);
         let state = RefCell::new((space_metrics.ascender, space_metrics.descender, 0.0));
         split_text(
             &line,
@@ -466,7 +473,7 @@ impl View {
             },
             |text| {
                 let inner = &mut *state.borrow_mut();
-                let shaped = text_font.shape(text, text_size, TextStyle::default());
+                let shaped = text_font.shape(text, self.text_size, TextStyle::default());
                 if shaped.ascender > inner.0 {
                     inner.0 = shaped.ascender;
                 }
@@ -582,14 +589,16 @@ impl ViewCursor {
         self.style == CursorStyle::Line
     }
 
-    fn limit_for_style(&mut self, data: &Rope, tab_width: usize) {
+    fn limit_for_style(&mut self, data: &Rope, tab_width: usize, update_global_x: bool) {
         let trimmed = rope_trim_newlines(data.line(self.line_num));
         let len_chars = trimmed.len_chars();
         if !self.past_end() && self.line_cidx == len_chars && self.line_cidx > 0 {
             let (cidx, gidx) = cidx_gidx_from_cidx(&trimmed, self.line_cidx - 1, tab_width);
             self.line_cidx = cidx;
             self.line_gidx = gidx;
-            self.line_global_x = self.line_gidx;
+            if update_global_x {
+                self.line_global_x = self.line_gidx;
+            }
             self.cidx = data.line_to_char(self.line_num) + self.line_cidx;
         }
     }
