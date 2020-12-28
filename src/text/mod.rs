@@ -10,8 +10,7 @@ use guillotiere::{AllocatorOptions, AtlasAllocator};
 use lru_cache::LruCache;
 
 use crate::common::{PixelSize, TextureSize};
-use crate::opengl::{ElemArr, GlTexture, Mat4, ShaderProgram, TexRed, TexUnit};
-use crate::shapes::TexColorQuad;
+use crate::painter::WidgetCtx;
 use crate::style::{Color, TextSize, TextStyle};
 
 #[cfg(target_os = "windows")]
@@ -29,6 +28,7 @@ mod harfbuzz;
 mod types;
 
 const SHAPED_SPAN_CAPACITY: usize = 4096;
+const ATLAS_SIZE: Size2D<i32, PixelSize> = size2(4096, 4096);
 
 use self::font_source::{Charset, FontSource, Pattern};
 use self::freetype::{GlyphMetrics, RasterCore, RasterFont};
@@ -41,22 +41,14 @@ pub(crate) use types::f26_6;
 pub(crate) struct FontCore(Rc<RefCell<FontCoreInner>>);
 
 impl FontCore {
-    pub(crate) fn new(window_size: Size2D<f32, PixelSize>) -> FontCore {
-        FontCore(Rc::new(RefCell::new(FontCoreInner::new(window_size))))
+    pub(crate) fn new() -> FontCore {
+        FontCore(Rc::new(RefCell::new(FontCoreInner::new())))
     }
 
     pub(crate) fn find(&mut self, family: &str) -> Option<FontCollectionHandle> {
-        let family = {
-            let inner = &mut *self.0.borrow_mut();
-            inner.find(family)?
-        };
+        let family = self.0.borrow_mut().find(family)?;
         let collection = FontCollection::new(family, self.0.clone());
         Some(FontCollectionHandle(Rc::new(RefCell::new(collection))))
-    }
-
-    pub(crate) fn set_window_size(&mut self, size: Size2D<f32, PixelSize>) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.set_window_size(size);
     }
 }
 
@@ -75,9 +67,6 @@ struct GlyphAllocInfo {
 
 struct FontCoreInner {
     // OpenGL stuff
-    shader: ShaderProgram,
-    quad_arr: ElemArr<TexColorQuad>,
-    atlas: GlTexture<TexRed>,
     atlas_allocator: AtlasAllocator,
     rastered_glyph_map: FnvHashMap<GlyphKey, Option<GlyphAllocInfo>>,
     // Font stuff
@@ -90,32 +79,14 @@ struct FontCoreInner {
 }
 
 impl FontCoreInner {
-    fn new(window_size: Size2D<f32, PixelSize>) -> FontCoreInner {
-        let vsrc = include_str!("shader_src/tex_color_quad.vert");
-        let fsrc = include_str!("shader_src/tex_color_quad.frag");
-        let mut shader = ShaderProgram::new(vsrc, fsrc).unwrap();
-        let projection = Mat4::projection(window_size);
-        {
-            let mut active = shader.use_program();
-            active.uniform_mat4f(
-                CStr::from_bytes_with_nul(b"projection\0").unwrap(),
-                &projection,
-            );
-        }
-        let atlas_size = size2(4096, 4096);
+    fn new() -> FontCoreInner {
         let atlas_options = AllocatorOptions {
             snap_size: 1,
             small_size_threshold: 4,
             large_size_threshold: 256,
         };
         FontCoreInner {
-            shader,
-            quad_arr: ElemArr::new(4096),
-            atlas: GlTexture::new(TexUnit::Texture0, atlas_size),
-            atlas_allocator: AtlasAllocator::with_options(
-                atlas_size.cast().to_untyped(),
-                &atlas_options,
-            ),
+            atlas_allocator: AtlasAllocator::with_options(ATLAS_SIZE.to_untyped(), &atlas_options),
             rastered_glyph_map: FnvHashMap::default(),
             next_font_num: 0,
             path_font_map: FnvHashMap::default(),
@@ -145,22 +116,6 @@ impl FontCoreInner {
             Some(family)
         }
     }
-
-    fn flush_glyphs(&mut self) {
-        let active = self.shader.use_program();
-        self.quad_arr.flush(&active);
-    }
-
-    fn set_window_size(&mut self, size: Size2D<f32, PixelSize>) {
-        let projection = Mat4::projection(size);
-        {
-            let mut active = self.shader.use_program();
-            active.uniform_mat4f(
-                CStr::from_bytes_with_nul(b"projection\0").unwrap(),
-                &projection,
-            );
-        }
-    }
 }
 
 // A handle to a font "collection". This is defined by a default font "family", and a list of
@@ -170,17 +125,23 @@ pub(crate) struct FontCollectionHandle(Rc<RefCell<FontCollection>>);
 
 impl FontCollectionHandle {
     pub(crate) fn space_metrics(&mut self, size: TextSize, style: TextStyle) -> GlyphMetrics {
-        let inner = &mut *self.0.borrow_mut();
-        inner.space_metrics(size, style)
-    }
-    pub(crate) fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
-        let inner = &mut *self.0.borrow_mut();
-        inner.shape(text, size, style)
+        self.0.borrow_mut().space_metrics(size, style)
     }
 
-    pub(crate) fn flush_glyphs(&mut self) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.flush_glyphs();
+    pub(crate) fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
+        self.0.borrow_mut().shape(text, size, style)
+    }
+
+    pub(crate) fn render_ctx<'a, 'b>(
+        &'a mut self,
+        widget_ctx: &'a mut WidgetCtx<'b>,
+    ) -> TextRenderCtx<'a, 'b> {
+        let core = self.0.borrow().core.clone();
+        TextRenderCtx {
+            core,
+            fc: self,
+            ctx: widget_ctx,
+        }
     }
 }
 
@@ -226,7 +187,6 @@ impl FontCollection {
             return shaped.clone();
         }
         // Otherwise, go the normal route
-        let ret_core = self.core.clone();
         let core = &mut *self.core.borrow_mut();
         let first_char = text.chars().next().unwrap();
         let families = &mut self.families;
@@ -303,16 +263,10 @@ impl FontCollection {
             underline_pos: font_metrics.underline_pos,
             underline_thickness: font_metrics.underline_thickness,
             width,
-            core: ret_core,
         };
         self.cache
             .insert((text.to_owned(), size, style), ret.clone());
         ret
-    }
-
-    fn flush_glyphs(&mut self) {
-        let core = &mut *self.core.borrow_mut();
-        core.flush_glyphs();
     }
 
     fn new(family: Rc<RefCell<FontFamily>>, core: Rc<RefCell<FontCoreInner>>) -> FontCollection {
@@ -363,29 +317,36 @@ impl Font {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct ShapedSpan {
-    pub(crate) ascender: f26_6,
-    pub(crate) descender: f26_6,
-    pub(crate) underline_pos: f26_6,
-    pub(crate) underline_thickness: f26_6,
-    pub(crate) width: f26_6,
-    pub(crate) glyph_infos: Vec<GlyphInfo>,
-    size: TextSize,
-    font_key: u16,
+// Use a font collection to render text
+pub(crate) struct TextRenderCtx<'a, 'b> {
+    fc: &'a mut FontCollectionHandle,
     core: Rc<RefCell<FontCoreInner>>,
+    ctx: &'a mut WidgetCtx<'b>,
 }
 
-impl ShapedSpan {
-    pub(crate) fn draw(&self, origin: Point2D<f32, PixelSize>, color: Color) {
+impl<'a, 'b> TextRenderCtx<'a, 'b> {
+    pub(crate) fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
+        self.fc.shape(text, size, style)
+    }
+
+    pub(crate) fn color_quad(&mut self, rect: Rect<f32, PixelSize>, color: Color, rounded: bool) {
+        self.ctx.color_quad(rect, color, rounded)
+    }
+
+    pub(crate) fn draw(
+        &mut self,
+        span: &ShapedSpan,
+        origin: Point2D<f32, PixelSize>,
+        color: Color,
+    ) {
         let mut origin = point2(f26_6::from(origin.x), f26_6::from(origin.y));
         let core = &mut *self.core.borrow_mut();
-        let font = core.id_font_map.get(&self.font_key).unwrap().clone();
+        let font = core.id_font_map.get(&span.font_key).unwrap().clone();
         let font = &mut *font.borrow_mut();
         let font_key = font.num;
-        let size = self.size;
+        let size = span.size;
 
-        for gi in &self.glyph_infos {
+        for gi in &span.glyph_infos {
             let base = origin + gi.offset;
             let base_floor = (base.x.floor(), base.y.floor());
             let base_offset = point2(base.x - base_floor.0, base.y - base_floor.1);
@@ -407,8 +368,9 @@ impl ShapedSpan {
                                 point2(allocation.rectangle.min.x, allocation.rectangle.min.y),
                                 rastered.metrics.size.cast(),
                             );
-                            core.atlas.sub_image(glyph_rect.cast(), rastered.buffer);
-                            let tex_rect = core.atlas.get_inverted_tex_dimension(glyph_rect);
+                            let atlas = self.ctx.text_atlas();
+                            atlas.sub_image(glyph_rect.cast(), rastered.buffer);
+                            let tex_rect = atlas.get_inverted_tex_dimension(glyph_rect);
                             let allocation = GlyphAllocInfo {
                                 tex_rect,
                                 metrics: rastered.metrics.clone(),
@@ -446,11 +408,22 @@ impl ShapedSpan {
                     base_floor.1.to_f32() - allocated.metrics.bearing.height as f32,
                 );
                 let rect = Rect::new(rect_origin, allocated.metrics.size.cast());
-                let tex_quad = TexColorQuad::new(rect, allocated.tex_rect, color);
-                core.quad_arr.push(tex_quad);
+                self.ctx.texture_color_quad(rect, allocated.tex_rect, color);
             }
 
             origin += gi.advance;
         }
     }
+}
+
+#[derive(Clone)]
+pub(crate) struct ShapedSpan {
+    pub(crate) ascender: f26_6,
+    pub(crate) descender: f26_6,
+    pub(crate) underline_pos: f26_6,
+    pub(crate) underline_thickness: f26_6,
+    pub(crate) width: f26_6,
+    pub(crate) glyph_infos: Vec<GlyphInfo>,
+    size: TextSize,
+    font_key: u16,
 }

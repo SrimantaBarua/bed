@@ -87,8 +87,7 @@ impl BufferHandle {
     }
 
     pub(super) fn reload_from_file(&mut self, path: &str) -> IOResult<()> {
-        let inner = &mut *self.0.borrow_mut();
-        inner.reload_from_file(path)
+        self.0.borrow_mut().reload_from_file(path)
     }
 }
 

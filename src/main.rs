@@ -46,7 +46,7 @@ impl Bed {
         opengl::gl_init();
         let theme_set = Rc::new(theme::ThemeSet::load());
         let scale_factor = window.scale_factor();
-        let mut font_core = text::FontCore::new(window_size.cast());
+        let mut font_core = text::FontCore::new();
         let config = Rc::new(config::Config::load(&mut font_core, scale_factor));
         let painter = painter::Painter::new(window_size.cast());
 
@@ -88,12 +88,11 @@ impl BedHandle {
     }
 
     fn resize_window(&mut self, physical_size: glutin::dpi::PhysicalSize<u32>) {
-        let inner = &mut *self.0.borrow_mut();
+        let mut inner = self.0.borrow_mut();
         inner.window.resize(physical_size);
         let window_size = inner.window.size();
         opengl::gl_viewport(Rect::new(point2(0, 0), window_size.cast()));
         inner.painter.resize(window_size.cast());
-        inner.font_core.set_window_size(window_size.cast());
         inner
             .text_tree
             .set_rect(Rect::new(point2(0, 0), window_size));
@@ -101,17 +100,15 @@ impl BedHandle {
     }
 
     fn window_size(&self) -> Size2D<u32, PixelSize> {
-        let inner = &*self.0.borrow();
-        inner.window.size()
+        self.0.borrow().window.size()
     }
 
     fn scale_factor(&mut self) -> f64 {
-        let inner = &*self.0.borrow();
-        inner.scale_factor
+        self.0.borrow().scale_factor
     }
 
     fn set_scale_factor(&mut self, scale_factor: f64) {
-        let inner = &mut *self.0.borrow_mut();
+        let mut inner = self.0.borrow_mut();
         let scale_amt = scale_factor / inner.scale_factor;
         inner.buffer_state.scale_text(scale_amt);
         inner.buffer_mgr.scale_text(scale_amt);
@@ -121,7 +118,7 @@ impl BedHandle {
 
     fn check_redraw_required(&mut self) {
         let mut required = false;
-        let inner = &mut *self.0.borrow_mut();
+        let mut inner = self.0.borrow_mut();
         required |= inner.buffer_state.collect_redraw_state();
         if required {
             inner.window.request_redraw();

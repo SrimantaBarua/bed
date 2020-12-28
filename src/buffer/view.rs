@@ -318,8 +318,8 @@ impl View {
         self.sanity_check(data);
         let theme = self.bed_handle.theme();
         let mut paint_ctx = painter.widget_ctx(self.rect.cast(), theme.textview.background, false);
-
         let mut text_font = self.bed_handle.text_font();
+
         let text_style = TextStyle::default();
         let space_metrics = text_font.space_metrics(self.text_size, text_style);
         let sp_awidth = space_metrics.advance.width.to_f32();
@@ -327,6 +327,8 @@ impl View {
         let spans = RefCell::new(Vec::new());
         let mut linum = self.start_line;
         let rect_width = self.rect.size.width as f32;
+
+        let mut text_ctx = text_font.render_ctx(&mut paint_ctx);
 
         for rope_line in data.lines_at(self.start_line) {
             if origin.y >= self.rect.size.height as f32 {
@@ -365,7 +367,7 @@ impl View {
                     }
                 },
                 |text| {
-                    let shaped = text_font.shape(text, self.text_size, TextStyle::default());
+                    let shaped = text_ctx.shape(text, self.text_size, TextStyle::default());
                     let mut gis = shaped.glyph_infos.iter().peekable();
                     for (j, _) in text.grapheme_indices(true) {
                         while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
@@ -418,13 +420,13 @@ impl View {
             if let Some(x) = cursor_x.get() {
                 let rect: Rect<f32, PixelSize> =
                     Rect::new(point2(x, cursor_y), size2(cursor_width, cursor_height));
-                paint_ctx.color_quad(rect, theme.textview.cursor, false);
+                text_ctx.color_quad(rect, theme.textview.cursor, false);
             } else if linum == cursor.line_num {
                 let rect: Rect<f32, PixelSize> = Rect::new(
                     point2(current_x.get(), cursor_y),
                     size2(cursor_width, cursor_height),
                 );
-                paint_ctx.color_quad(rect, theme.textview.cursor, false);
+                text_ctx.color_quad(rect, theme.textview.cursor, false);
             }
 
             let spans = &mut *spans.borrow_mut();
@@ -439,7 +441,7 @@ impl View {
                         pos.x += sp_awidth * (*n as f32);
                     }
                     SpanOrSpace::Span(shaped) => {
-                        shaped.draw(pos, theme.textview.foreground);
+                        text_ctx.draw(shaped, pos, theme.textview.foreground);
                         pos.x += shaped.width.to_f32();
                     }
                 }
@@ -448,8 +450,6 @@ impl View {
             origin.y -= descender.to_f32();
             linum += 1;
         }
-
-        text_font.flush_glyphs();
     }
 
     pub(super) fn scroll_to_top(&mut self) {
@@ -467,12 +467,11 @@ impl View {
             &line,
             tab_width,
             |n| {
-                let inner = &mut *state.borrow_mut();
-                inner.2 += space_metrics.advance.width.to_f32() * n as f32;
+                state.borrow_mut().2 += space_metrics.advance.width.to_f32() * n as f32;
                 SplitCbRes::Continue
             },
             |text| {
-                let inner = &mut *state.borrow_mut();
+                let mut inner = state.borrow_mut();
                 let shaped = text_font.shape(text, self.text_size, TextStyle::default());
                 if shaped.ascender > inner.0 {
                     inner.0 = shaped.ascender;

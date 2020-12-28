@@ -44,30 +44,27 @@ impl BufferBedHandle {
     }
 
     pub(crate) fn set_text_font(&mut self, font: FontCollectionHandle) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.text_font = font;
+        self.0.borrow_mut().text_font = font;
     }
 
     pub(crate) fn scale_text(&mut self, scale: f64) {
-        let inner = &mut *self.0.borrow_mut();
+        let mut inner = self.0.borrow_mut();
         inner.text_size = inner.text_size.scale(scale);
     }
 
     pub(crate) fn collect_redraw_state(&mut self) -> bool {
-        let inner = &mut *self.0.borrow_mut();
+        let mut inner = self.0.borrow_mut();
         let ret = inner.needs_redraw;
         inner.needs_redraw = false;
         ret
     }
 
     fn text_font(&self) -> FontCollectionHandle {
-        let inner = &*self.0.borrow();
-        inner.text_font.clone()
+        self.0.borrow().text_font.clone()
     }
 
     fn text_size(&self) -> TextSize {
-        let inner = &*self.0.borrow();
-        inner.text_size
+        self.0.borrow().text_size
     }
 
     fn theme(&self) -> ThemeGuard {
@@ -75,8 +72,7 @@ impl BufferBedHandle {
     }
 
     fn request_redraw(&mut self) {
-        let inner = &mut *self.0.borrow_mut();
-        inner.needs_redraw = true;
+        self.0.borrow_mut().needs_redraw = true;
     }
 }
 
