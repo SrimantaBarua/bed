@@ -68,7 +68,7 @@ struct GlyphAllocInfo {
 struct FontCoreInner {
     // OpenGL stuff
     atlas_allocator: AtlasAllocator,
-    rastered_glyph_map: FnvHashMap<GlyphKey, Option<GlyphAllocInfo>>,
+    rastered_glyph_map: LruCache<GlyphKey, Option<GlyphAllocInfo>, FnvBuildHasher>,
     // Font stuff
     next_font_num: u16,
     path_font_map: FnvHashMap<(CString, u32), Rc<RefCell<FontFamily>>>,
@@ -81,13 +81,13 @@ struct FontCoreInner {
 impl FontCoreInner {
     fn new() -> FontCoreInner {
         let atlas_options = AllocatorOptions {
-            snap_size: 1,
+            alignment: size2(1, 1),
             small_size_threshold: 4,
             large_size_threshold: 256,
         };
         FontCoreInner {
             atlas_allocator: AtlasAllocator::with_options(ATLAS_SIZE.to_untyped(), &atlas_options),
-            rastered_glyph_map: FnvHashMap::default(),
+            rastered_glyph_map: LruCache::with_hasher(4096 * 4096, FnvBuildHasher::default()),
             next_font_num: 0,
             path_font_map: FnvHashMap::default(),
             id_font_map: FnvHashMap::default(),
@@ -357,51 +357,47 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                 origin: base_offset,
             };
 
+            // FIXME: Optimize LRU glyph replacement algorithm. Now just drops entire cache (BAD)
+            // Ideal procedure - remove LRU glyphs till there's space, allocate, rearrange
+            // Rearranging involves copying glyphs to a second texture, then blitting that entire
+            // texture to this one
+
             if !core.rastered_glyph_map.contains_key(&key) {
                 if let Some(rastered) = font.raster.raster(base_offset, gi.gid, size) {
+                    let atlas_alloc = &mut core.atlas_allocator;
                     loop {
-                        if let Some(allocation) = core
-                            .atlas_allocator
-                            .allocate(rastered.metrics.size.cast().to_untyped())
-                        {
-                            let glyph_rect = Rect::new(
-                                point2(allocation.rectangle.min.x, allocation.rectangle.min.y),
-                                rastered.metrics.size.cast(),
-                            );
-                            let atlas = self.ctx.text_atlas();
-                            atlas.sub_image(glyph_rect.cast(), rastered.buffer);
-                            let tex_rect = atlas.get_inverted_tex_dimension(glyph_rect);
-                            let allocation = GlyphAllocInfo {
-                                tex_rect,
-                                metrics: rastered.metrics.clone(),
-                            };
-                            core.rastered_glyph_map
-                                .insert(key.clone(), Some(allocation));
-
-                            /*
-                            // Print allocation info
-                            let mut total_size = 4096.0 * 4096.0;
-                            let mut free_size = 0;
-                            core.atlas_allocator.for_each_free_rectangle(|rect| {
-                                free_size += rect.area();
-                            });
-                            eprintln!("Free space in atlas: {}%", free_size as f64 * 100.0 / total_size);
-                            */
-
-                            break;
+                        match atlas_alloc.allocate(rastered.metrics.size.cast().to_untyped()) {
+                            Some(allocation) => {
+                                let glyph_rect = Rect::new(
+                                    point2(allocation.rectangle.min.x, allocation.rectangle.min.y),
+                                    rastered.metrics.size.cast(),
+                                );
+                                let atlas = self.ctx.text_atlas();
+                                atlas.sub_image(glyph_rect.cast(), rastered.buffer);
+                                let tex_rect = atlas.get_inverted_tex_dimension(glyph_rect);
+                                let alloc_info = GlyphAllocInfo {
+                                    tex_rect,
+                                    metrics: rastered.metrics.clone(),
+                                };
+                                core.rastered_glyph_map
+                                    .insert(key.clone(), Some(alloc_info));
+                                break;
+                            }
+                            None => {
+                                if core.rastered_glyph_map.len() == 0 {
+                                    panic!("Glyph is too big!! Max size: {:?}", ATLAS_SIZE);
+                                }
+                                core.rastered_glyph_map.clear();
+                                atlas_alloc.clear();
+                            }
                         }
-                        /* TODO: Clear LRU glyph info */
-                        /* TODO: Rearrange to reduce fragmentation */
-                        /* TODO: Flush existing glyphs if any glyphs involved in current draw call
-                         * are overwritten*/
-                        unimplemented!();
                     }
                 } else {
                     core.rastered_glyph_map.insert(key.clone(), None);
                 }
             }
 
-            let opt_allocated = core.rastered_glyph_map.get(&key).unwrap();
+            let opt_allocated = core.rastered_glyph_map.get_mut(&key).unwrap();
             if let Some(allocated) = opt_allocated {
                 let rect_origin = point2(
                     base_floor.0.to_f32() + allocated.metrics.bearing.width as f32,
