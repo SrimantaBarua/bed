@@ -10,8 +10,8 @@ use glutin::event::{
     ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
 };
 
-use crate::buffer::CursorStyle;
 use crate::common::PixelSize;
+use crate::text::CursorStyle;
 use crate::textview::TextViewEditCtx;
 use crate::{Bed, BedHandle};
 

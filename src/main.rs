@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time;
 
-use euclid::{point2, size2, Rect, Size2D};
+use euclid::{point2, size2, Rect};
 use glutin::event::{Event, StartCause, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
@@ -21,8 +21,6 @@ mod text;
 mod textview;
 mod theme;
 mod window;
-
-use common::PixelSize;
 
 static TARGET_DELTA: time::Duration = time::Duration::from_nanos(1_000_000_000 / 60);
 static DEFAULT_THEME: &str = "default";

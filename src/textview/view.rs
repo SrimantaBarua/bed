@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use euclid::{vec2, Point2D, Rect, Vector2D};
 
-use crate::buffer::{Buffer, BufferHandle, BufferViewId, CursorStyle};
+use crate::buffer::{Buffer, BufferHandle, BufferViewId};
 use crate::common::PixelSize;
 use crate::painter::Painter;
+use crate::text::CursorStyle;
 use crate::TARGET_DELTA;
 
 struct ViewInner {

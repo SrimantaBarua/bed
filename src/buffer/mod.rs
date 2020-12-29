@@ -16,7 +16,6 @@ mod view;
 
 pub(crate) use buffer::{Buffer, BufferHandle};
 pub(crate) use mgr::BufferMgr;
-pub(crate) use view::CursorStyle;
 
 // Handle to BufferView
 #[derive(Eq, PartialEq, Hash)]

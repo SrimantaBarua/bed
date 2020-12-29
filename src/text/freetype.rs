@@ -188,11 +188,11 @@ pub(super) struct RasterizedGlyph<'a> {
     pub(super) metrics: GlyphMetrics,
 }
 
-pub(super) struct FontMetrics {
-    pub(super) ascender: f26_6,
-    pub(super) descender: f26_6,
-    pub(super) underline_pos: f26_6,
-    pub(super) underline_thickness: f26_6,
+pub(crate) struct FontMetrics {
+    pub(crate) ascender: f26_6,
+    pub(crate) descender: f26_6,
+    pub(crate) underline_pos: f26_6,
+    pub(crate) underline_thickness: f26_6,
 }
 
 #[derive(Clone, Debug)]

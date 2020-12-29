@@ -13,9 +13,10 @@ use ropey::Rope;
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::painter::Painter;
+use crate::text::CursorStyle;
 
 use super::rope_stuff::{space_containing, word_containing};
-use super::view::{CursorStyle, View, ViewCursor};
+use super::view::{View, ViewCursor};
 use super::{BufferBedHandle, BufferViewId};
 
 #[derive(Clone)]

@@ -1,8 +1,13 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
-use ropey::{iter::Chunks, str_utils::byte_to_char_idx, RopeSlice};
+use std::ops::Range;
+use std::str::Chars as StrChars;
+
+use ropey::{iter::Chars as RopeChars, iter::Chunks, str_utils::byte_to_char_idx, RopeSlice};
 use unicode_script::{Script, UnicodeScript};
-use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
+use unicode_segmentation::{
+    GraphemeCursor, GraphemeIncomplete, GraphemeIndices, UnicodeSegmentation,
+};
 
 // -------- Dummy data types --------
 pub(crate) struct PixelSize;
@@ -22,6 +27,139 @@ pub(crate) fn rope_trim_newlines<'a>(line: RopeSlice<'a>) -> RopeSlice<'a> {
     line.slice(..nchars)
 }
 
+pub(crate) trait SliceRange: Clone + Default {
+    fn push(&mut self, c: char);
+    fn clear(&mut self);
+    fn is_empty(&self) -> bool;
+    fn len(&self) -> usize;
+}
+
+pub(crate) trait RopeOrStr {
+    type CharIter: Iterator<Item = char>;
+    type GraphemeIter: Iterator<Item = usize>;
+    type SliceRange: SliceRange;
+
+    fn char_iter(&self) -> Self::CharIter;
+    fn blen(&self) -> usize;
+    fn string(&self) -> String;
+    fn grapheme_idxs(&self) -> Self::GraphemeIter;
+    fn slice(&self, range: Self::SliceRange) -> Self;
+}
+
+impl<'a> RopeOrStr for RopeSlice<'a> {
+    type CharIter = RopeChars<'a>;
+    type GraphemeIter = RopeGraphemeIndices<'a>;
+    type SliceRange = RopeSliceRange;
+
+    fn char_iter(&self) -> RopeChars<'a> {
+        self.chars()
+    }
+
+    fn blen(&self) -> usize {
+        self.len_bytes()
+    }
+
+    fn string(&self) -> String {
+        self.to_string()
+    }
+
+    fn grapheme_idxs(&self) -> RopeGraphemeIndices<'a> {
+        RopeGraphemeIndices(RopeGraphemes::new(self))
+    }
+
+    fn slice(&self, range: RopeSliceRange) -> RopeSlice<'a> {
+        self.slice(range.0)
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct RopeSliceRange(Range<usize>);
+
+impl SliceRange for RopeSliceRange {
+    fn push(&mut self, c: char) {
+        self.0.end += c.len_utf8()
+    }
+
+    fn clear(&mut self) {
+        self.0.start = self.0.end
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.0.end - self.0.start
+    }
+}
+
+pub(crate) struct RopeGraphemeIndices<'a>(RopeGraphemes<'a>);
+
+impl<'a> Iterator for RopeGraphemeIndices<'a> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        self.0.next().map(|(j, _)| j)
+    }
+}
+
+impl<'a> RopeOrStr for &'a str {
+    type CharIter = StrChars<'a>;
+    type GraphemeIter = StringGraphemeIndices<'a>;
+    type SliceRange = StrSliceRange;
+
+    fn char_iter(&self) -> StrChars<'a> {
+        self.chars()
+    }
+
+    fn blen(&self) -> usize {
+        self.len()
+    }
+
+    fn string(&self) -> String {
+        self.to_string()
+    }
+
+    fn grapheme_idxs(&self) -> StringGraphemeIndices<'a> {
+        StringGraphemeIndices(self.grapheme_indices(true))
+    }
+
+    fn slice(&self, range: StrSliceRange) -> &'a str {
+        &self[range.0]
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct StrSliceRange(Range<usize>);
+
+impl SliceRange for StrSliceRange {
+    fn push(&mut self, c: char) {
+        self.0.end += 1
+    }
+
+    fn clear(&mut self) {
+        self.0.start = self.0.end
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.0.end - self.0.start
+    }
+}
+
+pub(crate) struct StringGraphemeIndices<'a>(GraphemeIndices<'a>);
+
+impl<'a> Iterator for StringGraphemeIndices<'a> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        self.0.next().map(|(j, _)| j)
+    }
+}
+
 #[derive(Eq, PartialEq)]
 pub(crate) enum SplitCbRes {
     Continue,
@@ -29,85 +167,82 @@ pub(crate) enum SplitCbRes {
 }
 
 // Split text into runs and spaces
-pub(crate) fn split_text<S, R>(
-    line: &RopeSlice, // FIXME: Use RopeOrStr
-    tab_width: usize,
-    mut space_cb: S,
-    mut run_cb: R,
-) where
+pub(crate) fn split_text<S, R, SR>(line: &SR, tab_width: usize, mut space_cb: S, mut run_cb: R)
+where
     S: FnMut(usize) -> SplitCbRes,
-    R: FnMut(&str) -> SplitCbRes,
+    R: FnMut(&SR) -> SplitCbRes,
+    SR: RopeOrStr,
 {
-    let mut buf = String::new();
     let mut last_is_space = false;
     let mut last_script = None;
     let mut x = 0;
-    for c in line.chars() {
+    let mut range = SR::SliceRange::default();
+    for c in line.char_iter() {
         match c {
             '\n' | '\r' | '\x0b' | '\x0c' | '\u{85}' | '\u{2028}' | '\u{2029}' => break,
             ' ' => {
-                if !last_is_space && buf.len() > 0 {
-                    if run_cb(&buf) == SplitCbRes::Stop {
+                if !last_is_space && !range.is_empty() {
+                    if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
                         return;
                     }
-                    buf.clear();
+                    range.clear();
                     last_script = None;
                 }
                 last_is_space = true;
                 x += 1;
-                buf.push(c);
+                range.push(c);
             }
             '\t' => {
-                if !last_is_space && buf.len() > 0 {
-                    if run_cb(&buf) == SplitCbRes::Stop {
+                if !last_is_space && !range.is_empty() {
+                    if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
                         return;
                     }
-                    buf.clear();
+                    range.clear();
                     last_script = None;
                 }
                 last_is_space = true;
                 let next = ((x / tab_width) + 1) * tab_width;
                 for _ in x..next {
-                    buf.push(' ');
+                    range.push(' ');
                 }
                 x = next;
             }
             c => {
-                if last_is_space && buf.len() > 0 {
-                    if space_cb(buf.len()) == SplitCbRes::Stop {
+                if last_is_space && !range.is_empty() {
+                    if space_cb(range.len()) == SplitCbRes::Stop {
                         return;
                     }
-                    buf.clear();
+                    range.clear();
                 }
                 let script_here = c.script();
                 if script_here != Script::Unknown && script_here != Script::Common {
                     if let Some(script) = last_script {
                         if script != script_here {
-                            if run_cb(&buf) == SplitCbRes::Stop {
+                            if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
                                 return;
                             }
-                            buf.clear();
+                            range.clear();
                         }
                     }
                     last_script = Some(script_here);
                 }
                 last_is_space = false;
-                buf.push(c);
+                range.push(c);
                 x += 1;
                 // FIXME: Move x by graphemes
             }
         }
     }
-    if buf.len() > 0 {
+    if range.len() > 0 {
         if last_is_space {
-            space_cb(buf.len());
+            space_cb(range.len());
         } else {
-            run_cb(&buf);
+            run_cb(&line.slice(range.clone()));
         }
     }
 }
 
-// From https://github.com/cessen/ropey/blob/master/examples/graphemes_iter.rs
+// Modified from https://github.com/cessen/ropey/blob/master/examples/graphemes_iter.rs
 // An implementation of a graphemes iterator, for iterating over
 // the graphemes of a RopeSlice.
 pub(crate) struct RopeGraphemes<'a> {
@@ -116,6 +251,7 @@ pub(crate) struct RopeGraphemes<'a> {
     cur_chunk: &'a str,
     cur_chunk_start: usize,
     cursor: GraphemeCursor,
+    idx: usize,
 }
 
 impl<'a> RopeGraphemes<'a> {
@@ -128,15 +264,17 @@ impl<'a> RopeGraphemes<'a> {
             cur_chunk: first_chunk,
             cur_chunk_start: 0,
             cursor: GraphemeCursor::new(0, slice.len_bytes(), true),
+            idx: 0,
         }
     }
 }
 
 impl<'a> Iterator for RopeGraphemes<'a> {
-    type Item = RopeSlice<'a>;
+    type Item = (usize, RopeSlice<'a>);
 
-    fn next(&mut self) -> Option<RopeSlice<'a>> {
+    fn next(&mut self) -> Option<(usize, RopeSlice<'a>)> {
         let a = self.cursor.cur_cursor();
+        let idx = self.idx;
         let b;
         loop {
             match self
@@ -157,16 +295,15 @@ impl<'a> Iterator for RopeGraphemes<'a> {
                 _ => unreachable!(),
             }
         }
-
+        self.idx += b - a;
         if a < self.cur_chunk_start {
             let a_char = self.text.byte_to_char(a);
             let b_char = self.text.byte_to_char(b);
-
-            Some(self.text.slice(a_char..b_char))
+            Some((idx, self.text.slice(a_char..b_char)))
         } else {
             let a2 = a - self.cur_chunk_start;
             let b2 = b - self.cur_chunk_start;
-            Some((&self.cur_chunk[a2..b2]).into())
+            Some((idx, (&self.cur_chunk[a2..b2]).into()))
         }
     }
 }

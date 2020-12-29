@@ -4,14 +4,14 @@ use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::rc::Rc;
 
-use euclid::{point2, size2, Point2D, Rect, Size2D};
+use euclid::{size2, Point2D, Rect, Size2D};
 use fnv::{FnvBuildHasher, FnvHashMap};
 use guillotiere::{AllocatorOptions, AtlasAllocator};
 use lru_cache::LruCache;
 
-use crate::common::{PixelSize, TextureSize};
+use crate::common::{PixelSize, RopeOrStr, TextureSize};
 use crate::painter::WidgetCtx;
-use crate::style::{Color, TextSize, TextStyle};
+use crate::style::{TextSize, TextStyle};
 
 #[cfg(target_os = "windows")]
 mod directwrite;
@@ -23,6 +23,7 @@ use self::directwrite as font_source;
 #[cfg(target_os = "linux")]
 use self::fontconfig as font_source;
 
+mod draw;
 mod freetype;
 mod harfbuzz;
 mod types;
@@ -31,9 +32,10 @@ const SHAPED_SPAN_CAPACITY: usize = 4096;
 const ATLAS_SIZE: Size2D<i32, PixelSize> = size2(4096, 4096);
 
 use self::font_source::{Charset, FontSource, Pattern};
-use self::freetype::{GlyphMetrics, RasterCore, RasterFont};
+use self::freetype::{FontMetrics, GlyphMetrics, RasterCore, RasterFont};
 use self::harfbuzz::{GlyphInfo, HbBuffer, HbFont};
 
+pub(crate) use draw::{CursorStyle, TextCursor, CURSOR_WIDTH};
 pub(crate) use types::f26_6;
 
 // Core handle for loading new fonts. Once fonts are loaded, this isn't used directly. However,
@@ -124,20 +126,27 @@ impl FontCoreInner {
 pub(crate) struct FontCollectionHandle(Rc<RefCell<FontCollection>>);
 
 impl FontCollectionHandle {
+    pub(crate) fn metrics(&mut self, size: TextSize) -> FontMetrics {
+        self.0.borrow_mut().metrics(size)
+    }
+
     pub(crate) fn space_metrics(&mut self, size: TextSize, style: TextStyle) -> GlyphMetrics {
         self.0.borrow_mut().space_metrics(size, style)
     }
 
-    pub(crate) fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
+    pub(crate) fn shape<S>(&mut self, text: &S, size: TextSize, style: TextStyle) -> ShapedSpan
+    where
+        S: RopeOrStr,
+    {
         self.0.borrow_mut().shape(text, size, style)
     }
 
     pub(crate) fn render_ctx<'a, 'b>(
         &'a mut self,
         widget_ctx: &'a mut WidgetCtx<'b>,
-    ) -> TextRenderCtx<'a, 'b> {
+    ) -> draw::TextRenderCtx<'a, 'b> {
         let core = self.0.borrow().core.clone();
-        TextRenderCtx {
+        draw::TextRenderCtx {
             core,
             fc: self,
             ctx: widget_ctx,
@@ -152,6 +161,13 @@ struct FontCollection {
 }
 
 impl FontCollection {
+    fn metrics(&mut self, size: TextSize) -> FontMetrics {
+        self.families[0].borrow_mut().fonts[&TextStyle::default()]
+            .borrow_mut()
+            .raster
+            .get_metrics(size)
+    }
+
     fn space_metrics(&mut self, size: TextSize, style: TextStyle) -> GlyphMetrics {
         let core = &mut *self.core.borrow_mut();
         let family = &mut *self.families[0].borrow_mut();
@@ -180,15 +196,19 @@ impl FontCollection {
             .expect("Failed to get glyph metrics for space")
     }
 
-    fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
-        assert!(text.len() > 0);
+    fn shape<S>(&mut self, text: &S, size: TextSize, style: TextStyle) -> ShapedSpan
+    where
+        S: RopeOrStr,
+    {
+        assert!(text.blen() > 0);
+        let text_string = text.string();
         // Check cache
-        if let Some(shaped) = self.cache.get_mut(&(text.to_owned(), size, style)) {
+        if let Some(shaped) = self.cache.get_mut(&(text_string.clone(), size, style)) {
             return shaped.clone();
         }
         // Otherwise, go the normal route
         let core = &mut *self.core.borrow_mut();
-        let first_char = text.chars().next().unwrap();
+        let first_char = text.char_iter().next().unwrap();
         let families = &mut self.families;
         let family_idx = families
             .iter()
@@ -246,7 +266,7 @@ impl FontCollection {
         let font = &mut *font.borrow_mut();
         let buffer = &mut core.hb_buffer;
         buffer.clear_contents();
-        buffer.add_utf8(text);
+        buffer.add_utf8(&text_string);
         buffer.guess_segment_properties();
         font.shaper.set_scale(size);
         let font_metrics = font.raster.get_metrics(size);
@@ -264,8 +284,7 @@ impl FontCollection {
             underline_thickness: font_metrics.underline_thickness,
             width,
         };
-        self.cache
-            .insert((text.to_owned(), size, style), ret.clone());
+        self.cache.insert((text_string, size, style), ret.clone());
         ret
     }
 
@@ -314,101 +333,6 @@ impl Font {
             shaper,
             num,
         })
-    }
-}
-
-// Use a font collection to render text
-pub(crate) struct TextRenderCtx<'a, 'b> {
-    fc: &'a mut FontCollectionHandle,
-    core: Rc<RefCell<FontCoreInner>>,
-    ctx: &'a mut WidgetCtx<'b>,
-}
-
-impl<'a, 'b> TextRenderCtx<'a, 'b> {
-    pub(crate) fn shape(&mut self, text: &str, size: TextSize, style: TextStyle) -> ShapedSpan {
-        self.fc.shape(text, size, style)
-    }
-
-    pub(crate) fn color_quad(&mut self, rect: Rect<f32, PixelSize>, color: Color, rounded: bool) {
-        self.ctx.color_quad(rect, color, rounded)
-    }
-
-    pub(crate) fn draw(
-        &mut self,
-        span: &ShapedSpan,
-        origin: Point2D<f32, PixelSize>,
-        color: Color,
-    ) {
-        let mut origin = point2(f26_6::from(origin.x), f26_6::from(origin.y));
-        let core = &mut *self.core.borrow_mut();
-        let font = core.id_font_map.get(&span.font_key).unwrap().clone();
-        let font = &mut *font.borrow_mut();
-        let font_key = font.num;
-        let size = span.size;
-
-        for gi in &span.glyph_infos {
-            let base = origin + gi.offset;
-            let base_floor = (base.x.floor(), base.y.floor());
-            let base_offset = point2(base.x - base_floor.0, base.y - base_floor.1);
-            let key = GlyphKey {
-                font_key,
-                size,
-                glyph_id: gi.gid,
-                origin: base_offset,
-            };
-
-            // FIXME: Optimize LRU glyph replacement algorithm. Now just drops entire cache (BAD)
-            // Ideal procedure - remove LRU glyphs till there's space, allocate, rearrange
-            // Rearranging involves copying glyphs to a second texture, then blitting that entire
-            // texture to this one
-
-            if !core.rastered_glyph_map.contains_key(&key) {
-                if let Some(rastered) = font.raster.raster(base_offset, gi.gid, size) {
-                    let atlas_alloc = &mut core.atlas_allocator;
-                    loop {
-                        match atlas_alloc.allocate(rastered.metrics.size.cast().to_untyped()) {
-                            Some(allocation) => {
-                                let glyph_rect = Rect::new(
-                                    point2(allocation.rectangle.min.x, allocation.rectangle.min.y),
-                                    rastered.metrics.size.cast(),
-                                );
-                                let atlas = self.ctx.text_atlas();
-                                atlas.sub_image(glyph_rect.cast(), rastered.buffer);
-                                let tex_rect = atlas.get_inverted_tex_dimension(glyph_rect);
-                                let alloc_info = GlyphAllocInfo {
-                                    tex_rect,
-                                    metrics: rastered.metrics.clone(),
-                                };
-                                core.rastered_glyph_map
-                                    .insert(key.clone(), Some(alloc_info));
-                                break;
-                            }
-                            None => {
-                                if core.rastered_glyph_map.len() == 0 {
-                                    panic!("Glyph is too big!! Max size: {:?}", ATLAS_SIZE);
-                                }
-                                core.rastered_glyph_map.clear();
-                                atlas_alloc.clear();
-                            }
-                        }
-                    }
-                } else {
-                    core.rastered_glyph_map.insert(key.clone(), None);
-                }
-            }
-
-            let opt_allocated = core.rastered_glyph_map.get_mut(&key).unwrap();
-            if let Some(allocated) = opt_allocated {
-                let rect_origin = point2(
-                    base_floor.0.to_f32() + allocated.metrics.bearing.width as f32,
-                    base_floor.1.to_f32() - allocated.metrics.bearing.height as f32,
-                );
-                let rect = Rect::new(rect_origin, allocated.metrics.size.cast());
-                self.ctx.texture_color_quad(rect, allocated.tex_rect, color);
-            }
-
-            origin += gi.advance;
-        }
     }
 }
 
