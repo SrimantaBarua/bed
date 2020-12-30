@@ -122,7 +122,8 @@ impl<'a> WidgetCtx<'a> {
         texture_rect: Rect<f32, TextureSize>,
         color: Color,
     ) {
-        let tex_quad = TexColorQuad::new(rect, texture_rect, color);
+        let tvec = self.rect.origin.to_vector();
+        let tex_quad = TexColorQuad::new(rect.translate(tvec), texture_rect, color);
         self.painter.tcq_arr.push(tex_quad);
     }
 

@@ -34,7 +34,7 @@ pub(crate) trait SliceRange: Clone + Default {
     fn len(&self) -> usize;
 }
 
-pub(crate) trait RopeOrStr {
+pub(crate) trait RopeOrStr: std::fmt::Display {
     type CharIter: Iterator<Item = char>;
     type GraphemeIter: Iterator<Item = usize>;
     type SliceRange: SliceRange;
@@ -133,7 +133,7 @@ impl<'a> RopeOrStr for &'a str {
 pub(crate) struct StrSliceRange(Range<usize>);
 
 impl SliceRange for StrSliceRange {
-    fn push(&mut self, c: char) {
+    fn push(&mut self, _: char) {
         self.0.end += 1
     }
 

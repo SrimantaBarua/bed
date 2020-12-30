@@ -10,6 +10,7 @@ use glutin::event::{
     ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
 };
 
+use crate::cmdprompt::CmdPrompt;
 use crate::common::PixelSize;
 use crate::text::CursorStyle;
 use crate::textview::TextViewEditCtx;
@@ -17,6 +18,7 @@ use crate::{Bed, BedHandle};
 
 #[derive(Debug, Eq, PartialEq)]
 enum Mode {
+    Command,
     Change {
         action_mul: Option<usize>,
         move_mul: Option<usize>,
@@ -224,6 +226,10 @@ impl InputState {
                         });
                         bed.edit_view().set_cursor_style(CursorStyle::Underline);
                     }
+                    ':' => {
+                        next_mode = Some(Mode::Command);
+                        bed.edit_cmd().set_prompt(":");
+                    }
                     // Delete
                     'x' => bed.edit_view().delete_right(act_rep),
                     _ => {}
@@ -368,6 +374,19 @@ impl InputState {
                 ctx.set_cursor_style(CursorStyle::Block);
                 self.mode = Mode::Normal { action_mul: None };
             }
+            Mode::Command => {
+                let cmd = bed.edit_cmd();
+                match c as u32 {
+                    8 /* backspace */ => cmd.delete_left(),
+                    127 /* delete */  => cmd.delete_right(),
+                    10 | 13 /* newline / carriage return */ => {
+                        eprintln!("COMMAND: {:?}", cmd.get_command());
+                        cmd.clear();
+                        self.mode = Mode::Normal { action_mul: None };
+                    }
+                    _ => cmd.insert_char(c),
+                }
+            }
         }
     }
 
@@ -401,6 +420,8 @@ impl InputState {
                     VirtualKeyCode::Down => bed.edit_view().move_cursor_down(1),
                     VirtualKeyCode::Left => bed.edit_view().move_cursor_left(1),
                     VirtualKeyCode::Right => bed.edit_view().move_cursor_right(1),
+                    VirtualKeyCode::Home => bed.edit_view().move_cursor_to_line_start(1),
+                    VirtualKeyCode::End => bed.edit_view().move_cursor_to_line_end(1),
                     // Exiting insert mode
                     VirtualKeyCode::Escape => {
                         self.mode = Mode::Normal { action_mul: None };
@@ -419,6 +440,8 @@ impl InputState {
                         VirtualKeyCode::Down => bed.edit_view().move_cursor_down(act_rep),
                         VirtualKeyCode::Left => bed.edit_view().move_cursor_left(act_rep),
                         VirtualKeyCode::Right => bed.edit_view().move_cursor_right(act_rep),
+                        VirtualKeyCode::Home => bed.edit_view().move_cursor_to_line_start(1),
+                        VirtualKeyCode::End => bed.edit_view().move_cursor_to_line_end(1),
                         _ => reset_count = false,
                     }
                     if reset_count {
@@ -444,6 +467,8 @@ impl InputState {
                             VirtualKeyCode::Down => ctx.delete_down(move_rep),
                             VirtualKeyCode::Left => ctx.delete_left(move_rep),
                             VirtualKeyCode::Right => ctx.delete_right(move_rep),
+                            VirtualKeyCode::Home => ctx.delete_to_line_start(1),
+                            VirtualKeyCode::End => ctx.delete_to_line_end(1),
                             _ => reset_mode = false,
                         }
                     }
@@ -468,6 +493,20 @@ impl InputState {
                     }
                     _ => {}
                 },
+                Mode::Command => {
+                    let cmd = bed.edit_cmd();
+                    match vkey {
+                        VirtualKeyCode::Left => cmd.move_left(),
+                        VirtualKeyCode::Right => cmd.move_right(),
+                        VirtualKeyCode::Home => cmd.move_start(),
+                        VirtualKeyCode::End => cmd.move_end(),
+                        VirtualKeyCode::Escape => {
+                            cmd.clear();
+                            self.mode = Mode::Normal { action_mul: None };
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
     }
@@ -672,6 +711,10 @@ impl<'a> BedEditCtx<'a> {
             view: self.bed.text_tree.active_mut().edit_ctx(),
             update_global_x: false,
         }
+    }
+
+    fn edit_cmd(&mut self) -> &mut CmdPrompt {
+        &mut self.bed.cmdprompt
     }
 
     fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
