@@ -12,9 +12,11 @@ use crate::painter::Painter;
 use crate::text::{CursorStyle, TextCursor};
 use crate::theme::ThemeSet;
 
+mod command;
+
 const TAB_WIDTH: usize = 8;
 
-pub(crate) struct CmdPrompt {
+pub(crate) struct Prompt {
     pub(crate) rect: Option<Rect<u32, PixelSize>>,
     pub(crate) needs_redraw: bool,
     config: Rc<RefCell<Config>>,
@@ -24,12 +26,12 @@ pub(crate) struct CmdPrompt {
     prompt_len: usize,
 }
 
-impl CmdPrompt {
+impl Prompt {
     pub(crate) fn new(
         window_rect: Rect<u32, PixelSize>,
         config: Rc<RefCell<Config>>,
         theme_set: Rc<ThemeSet>,
-    ) -> CmdPrompt {
+    ) -> Prompt {
         let height = min_required_height(&config);
         let rect = if window_rect.height() >= height * 2 {
             Some(Rect::new(
@@ -42,7 +44,7 @@ impl CmdPrompt {
         } else {
             None
         };
-        CmdPrompt {
+        Prompt {
             rect,
             needs_redraw: true,
             config,
@@ -115,7 +117,7 @@ impl CmdPrompt {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn get_command(&self) -> Option<String> {
+    pub(crate) fn get_command(&mut self) -> Option<String> {
         if self.prompt_len == 0 {
             None
         } else {

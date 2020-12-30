@@ -160,6 +160,7 @@ pub(crate) struct TextView {
     scroll_vel: Vector2D<f32, PixelSize>,
     views: Vec<ViewInner>,
     active: usize,
+    rect: Rect<u32, PixelSize>,
 }
 
 impl TextView {
@@ -186,6 +187,21 @@ impl TextView {
         TextViewEditCtx { buffer, view_id }
     }
 
+    pub(crate) fn new_view(&mut self, mut buf_handle: BufferHandle, view_id: BufferViewId) {
+        for i in 0..self.views.len() {
+            if self.views[i].buf_handle == buf_handle {
+                self.active = i;
+                return;
+            }
+        }
+        buf_handle.new_view(&view_id, self.rect);
+        self.active = self.views.len();
+        self.views.push(ViewInner {
+            buf_handle,
+            view_id,
+        });
+    }
+
     pub(super) fn new(
         rect: Rect<u32, PixelSize>,
         mut buf_handle: BufferHandle,
@@ -200,12 +216,14 @@ impl TextView {
             scroll_vel: vec2(0.0, 0.0),
             views,
             active: 0,
+            rect,
         }
     }
 
     pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
         let view = &mut self.views[self.active];
         view.buf_handle.set_view_rect(&view.view_id, rect);
+        self.rect = rect;
     }
 
     pub(super) fn draw(&mut self, painter: &mut Painter) {

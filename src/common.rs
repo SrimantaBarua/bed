@@ -76,8 +76,8 @@ impl<'a> RopeOrStr for RopeSlice<'a> {
 pub(crate) struct RopeSliceRange(Range<usize>);
 
 impl SliceRange for RopeSliceRange {
-    fn push(&mut self, c: char) {
-        self.0.end += c.len_utf8()
+    fn push(&mut self, _: char) {
+        self.0.end += 1;
     }
 
     fn clear(&mut self) {
@@ -133,8 +133,8 @@ impl<'a> RopeOrStr for &'a str {
 pub(crate) struct StrSliceRange(Range<usize>);
 
 impl SliceRange for StrSliceRange {
-    fn push(&mut self, _: char) {
-        self.0.end += 1
+    fn push(&mut self, c: char) {
+        self.0.end += c.len_utf8();
     }
 
     fn clear(&mut self) {

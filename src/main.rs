@@ -9,13 +9,13 @@ use glutin::event::{Event, StartCause, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
 mod buffer;
-mod cmdprompt;
 mod common;
 mod config;
 mod input;
 mod language;
 mod opengl;
 mod painter;
+mod prompt;
 mod shapes;
 mod style;
 mod text;
@@ -32,11 +32,12 @@ struct Bed {
     theme_set: Rc<theme::ThemeSet>,
     buffer_mgr: buffer::BufferMgr,
     text_tree: textview::TextTree,
-    cmdprompt: cmdprompt::CmdPrompt,
+    prompt: prompt::Prompt,
     painter: painter::Painter,
     scale_factor: f64,
     window: window::Window,
     font_core: text::FontCore,
+    redraw_required: bool,
 }
 
 impl Bed {
@@ -54,7 +55,7 @@ impl Bed {
         let painter = painter::Painter::new(window_size.cast());
 
         let window_rect = Rect::new(point2(0, 0), window.size());
-        let cmdprompt = cmdprompt::CmdPrompt::new(window_rect, config.clone(), theme_set.clone());
+        let prompt = prompt::Prompt::new(window_rect, config.clone(), theme_set.clone());
 
         let buffer_state = buffer::BufferBedHandle::new(config.clone(), theme_set.clone());
         let mut buffer_mgr = buffer::BufferMgr::new(buffer_state.clone());
@@ -63,7 +64,7 @@ impl Bed {
         let first_view_id = buffer_mgr.next_view_id();
 
         let mut textview_size = window.size();
-        if let Some(rect) = cmdprompt.rect {
+        if let Some(rect) = prompt.rect {
             textview_size.height -= rect.size.height;
         }
         let text_tree = textview::TextTree::new(
@@ -81,10 +82,11 @@ impl Bed {
                 theme_set,
                 buffer_mgr,
                 text_tree,
-                cmdprompt,
+                prompt,
                 window,
                 scale_factor,
                 font_core,
+                redraw_required: true,
             },
             event_loop,
         )
@@ -106,8 +108,8 @@ impl BedHandle {
         opengl::gl_viewport(Rect::new(point2(0, 0), window_size.cast()));
         inner.painter.resize(window_size.cast());
         let mut rect = Rect::new(point2(0, 0), window_size);
-        inner.cmdprompt.resize(rect);
-        if let Some(cmd_rect) = inner.cmdprompt.rect {
+        inner.prompt.resize(rect);
+        if let Some(cmd_rect) = inner.prompt.rect {
             rect.size.height -= cmd_rect.height();
         }
         inner.text_tree.set_rect(rect);
@@ -131,10 +133,10 @@ impl BedHandle {
     }
 
     fn check_redraw_required(&mut self) {
-        let mut required = false;
         let mut inner = self.0.borrow_mut();
+        let mut required = inner.redraw_required;
         required |= inner.buffer_state.collect_redraw_state();
-        required |= inner.cmdprompt.needs_redraw;
+        required |= inner.prompt.needs_redraw;
         if required {
             inner.window.request_redraw();
         }
@@ -144,8 +146,9 @@ impl BedHandle {
         let inner = &mut *self.0.borrow_mut();
         inner.painter.clear();
         inner.text_tree.draw(&mut inner.painter);
-        inner.cmdprompt.draw(&mut inner.painter);
+        inner.prompt.draw(&mut inner.painter);
         inner.window.swap_buffers();
+        inner.redraw_required = false;
     }
 }
 

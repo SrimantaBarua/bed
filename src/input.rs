@@ -10,8 +10,8 @@ use glutin::event::{
     ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
 };
 
-use crate::cmdprompt::CmdPrompt;
 use crate::common::PixelSize;
+use crate::prompt::Prompt;
 use crate::text::CursorStyle;
 use crate::textview::TextViewEditCtx;
 use crate::{Bed, BedHandle};
@@ -228,7 +228,7 @@ impl InputState {
                     }
                     ':' => {
                         next_mode = Some(Mode::Command);
-                        bed.edit_cmd().set_prompt(":");
+                        bed.edit_prompt().set_prompt(":");
                     }
                     // Delete
                     'x' => bed.edit_view().delete_right(act_rep),
@@ -375,16 +375,17 @@ impl InputState {
                 self.mode = Mode::Normal { action_mul: None };
             }
             Mode::Command => {
-                let cmd = bed.edit_cmd();
                 match c as u32 {
-                    8 /* backspace */ => cmd.delete_left(),
-                    127 /* delete */  => cmd.delete_right(),
+                    8 /* backspace */ => bed.edit_prompt().delete_left(),
+                    127 /* delete */  => bed.edit_prompt().delete_right(),
                     10 | 13 /* newline / carriage return */ => {
-                        eprintln!("COMMAND: {:?}", cmd.get_command());
-                        cmd.clear();
+                        if let Some(cmd) = bed.edit_prompt().get_command() {
+                            bed.run_command(&cmd);
+                            bed.edit_prompt().clear();
+                        }
                         self.mode = Mode::Normal { action_mul: None };
                     }
-                    _ => cmd.insert_char(c),
+                    _ => bed.edit_prompt().insert_char(c),
                 }
             }
         }
@@ -494,7 +495,7 @@ impl InputState {
                     _ => {}
                 },
                 Mode::Command => {
-                    let cmd = bed.edit_cmd();
+                    let cmd = bed.edit_prompt();
                     match vkey {
                         VirtualKeyCode::Left => cmd.move_left(),
                         VirtualKeyCode::Right => cmd.move_right(),
@@ -713,8 +714,8 @@ impl<'a> BedEditCtx<'a> {
         }
     }
 
-    fn edit_cmd(&mut self) -> &mut CmdPrompt {
-        &mut self.bed.cmdprompt
+    fn edit_prompt(&mut self) -> &mut Prompt {
+        &mut self.bed.prompt
     }
 
     fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
@@ -725,6 +726,10 @@ impl<'a> BedEditCtx<'a> {
 
     fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
         self.bed.text_tree.move_cursor_to_point(point);
+    }
+
+    fn run_command(&mut self, cmd: &str) {
+        self.bed.run_command(cmd)
     }
 }
 
