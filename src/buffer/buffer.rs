@@ -76,6 +76,10 @@ impl BufferHandle {
         }
     }
 
+    pub(crate) fn reload(&mut self) -> IOResult<()> {
+        self.0.borrow_mut().reload()
+    }
+
     pub(super) fn create_empty(bed_handle: BufferBedHandle) -> BufferHandle {
         BufferHandle(Rc::new(RefCell::new(Buffer::empty(bed_handle))))
     }
@@ -86,10 +90,6 @@ impl BufferHandle {
     ) -> IOResult<BufferHandle> {
         Buffer::from_file(path, bed_handle).map(|buf| BufferHandle(Rc::new(RefCell::new(buf))))
     }
-
-    pub(super) fn reload_from_file(&mut self, path: &str) -> IOResult<()> {
-        self.0.borrow_mut().reload_from_file(path)
-    }
 }
 
 pub(crate) struct Buffer {
@@ -97,6 +97,7 @@ pub(crate) struct Buffer {
     bed_handle: BufferBedHandle,
     rope: Rope,
     tab_width: usize,
+    optpath: Option<String>,
 }
 
 impl Buffer {
@@ -533,6 +534,7 @@ impl Buffer {
             rope: Rope::new(),
             bed_handle,
             tab_width: 8,
+            optpath: None,
         }
     }
 
@@ -544,18 +546,24 @@ impl Buffer {
                 bed_handle,
                 views: FnvHashMap::default(),
                 tab_width: 8,
+                optpath: Some(path.to_owned()),
             })
     }
 
-    fn reload_from_file(&mut self, path: &str) -> IOResult<()> {
-        File::open(path)
-            .and_then(|f| Rope::from_reader(f))
-            .map(|rope| {
-                self.rope = rope;
-                for view in self.views.values_mut() {
-                    view.scroll_to_top();
-                }
-            })
+    fn reload(&mut self) -> IOResult<()> {
+        if let Some(path) = &self.optpath {
+            File::open(path)
+                .and_then(|f| Rope::from_reader(f))
+                .map(|rope| {
+                    self.rope = rope;
+                    for view in self.views.values_mut() {
+                        view.scroll_to_top();
+                    }
+                })
+        } else {
+            // FIXME: Print some error?
+            Ok(())
+        }
     }
 
     fn view(&self, view_id: &BufferViewId) -> &View {

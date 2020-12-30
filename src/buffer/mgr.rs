@@ -34,7 +34,7 @@ impl BufferMgr {
     pub(crate) fn read_file(&mut self, path: &str) -> IOResult<BufferHandle> {
         if let Some(buf_handle) = self.path_buffer_map.get(path) {
             let mut buf_handle = buf_handle.clone();
-            buf_handle.reload_from_file(path)?;
+            buf_handle.reload()?;
             Ok(buf_handle)
         } else {
             let buffer = BufferHandle::create_from_file(path, self.bed_handle.clone())?;

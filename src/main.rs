@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time;
 
-use euclid::{point2, size2, Rect};
+use euclid::{point2, size2, Rect, Size2D};
 use glutin::event::{Event, StartCause, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
@@ -23,8 +23,11 @@ mod textview;
 mod theme;
 mod window;
 
-static TARGET_DELTA: time::Duration = time::Duration::from_nanos(1_000_000_000 / 60);
-static DEFAULT_THEME: &str = "default";
+use common::PixelSize;
+
+const TARGET_DELTA: time::Duration = time::Duration::from_nanos(1_000_000_000 / 60);
+const DEFAULT_THEME: &str = "default";
+const WINDOW_SIZE: Size2D<u32, PixelSize> = size2(1024, 768);
 
 struct Bed {
     buffer_state: buffer::BufferBedHandle,
@@ -42,7 +45,7 @@ struct Bed {
 
 impl Bed {
     fn new() -> (Bed, glutin::event_loop::EventLoop<()>) {
-        let window_size = size2(1024, 768);
+        let window_size = WINDOW_SIZE;
         let (window, event_loop) = window::Window::new("bed", window_size);
         opengl::gl_init();
         let theme_set = Rc::new(theme::ThemeSet::load());
@@ -69,9 +72,10 @@ impl Bed {
         }
         let text_tree = textview::TextTree::new(
             Rect::new(point2(0, 0), textview_size),
-            1,
             first_buffer,
             first_view_id,
+            config.clone(),
+            theme_set.clone(),
         );
 
         (

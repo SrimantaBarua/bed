@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::RefMut;
+use std::io::Result as IOResult;
 use std::time::Duration;
 
 use euclid::{vec2, Point2D, Rect, Vector2D};
@@ -187,6 +188,14 @@ impl TextView {
         TextViewEditCtx { buffer, view_id }
     }
 
+    pub(crate) fn buffer_handle(&self) -> BufferHandle {
+        self.views[self.active].buf_handle.clone()
+    }
+
+    pub(crate) fn reload_buffer(&mut self) -> IOResult<()> {
+        self.views[self.active].buf_handle.reload()
+    }
+
     pub(crate) fn new_view(&mut self, mut buf_handle: BufferHandle, view_id: BufferViewId) {
         for i in 0..self.views.len() {
             if self.views[i].buf_handle == buf_handle {
@@ -200,6 +209,14 @@ impl TextView {
             buf_handle,
             view_id,
         });
+    }
+
+    pub(crate) fn next_view(&mut self) {
+        self.active = (self.active + 1) % self.views.len();
+    }
+
+    pub(crate) fn previous_view(&mut self) {
+        self.active = (self.active + self.views.len() - 1) % self.views.len();
     }
 
     pub(super) fn new(
@@ -221,8 +238,9 @@ impl TextView {
     }
 
     pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
-        let view = &mut self.views[self.active];
-        view.buf_handle.set_view_rect(&view.view_id, rect);
+        for view in &mut self.views {
+            view.buf_handle.set_view_rect(&view.view_id, rect);
+        }
         self.rect = rect;
     }
 
