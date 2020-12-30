@@ -32,6 +32,10 @@ pub(crate) trait SliceRange: Clone + Default {
     fn clear(&mut self);
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
+    fn shift(&mut self, c: char) {
+        self.push(c);
+        self.clear();
+    }
 }
 
 pub(crate) trait RopeOrStr: std::fmt::Display {
@@ -173,46 +177,46 @@ where
     R: FnMut(&SR) -> SplitCbRes,
     SR: RopeOrStr,
 {
-    let mut last_is_space = false;
     let mut last_script = None;
     let mut x = 0;
     let mut range = SR::SliceRange::default();
+    let mut num_spaces = 0;
     for c in line.char_iter() {
         match c {
             '\n' | '\r' | '\x0b' | '\x0c' | '\u{85}' | '\u{2028}' | '\u{2029}' => break,
             ' ' => {
-                if !last_is_space && !range.is_empty() {
+                if !range.is_empty() {
                     if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
                         return;
                     }
                     range.clear();
                     last_script = None;
                 }
-                last_is_space = true;
+                range.shift(' ');
                 x += 1;
-                range.push(c);
+                num_spaces += 1;
             }
             '\t' => {
-                if !last_is_space && !range.is_empty() {
+                if !range.is_empty() {
                     if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
                         return;
                     }
                     range.clear();
                     last_script = None;
                 }
-                last_is_space = true;
                 let next = ((x / tab_width) + 1) * tab_width;
+                range.shift('\t');
                 for _ in x..next {
-                    range.push(' ');
+                    num_spaces += 1;
                 }
                 x = next;
             }
             c => {
-                if last_is_space && !range.is_empty() {
-                    if space_cb(range.len()) == SplitCbRes::Stop {
+                if num_spaces > 0 {
+                    if space_cb(num_spaces) == SplitCbRes::Stop {
                         return;
                     }
-                    range.clear();
+                    num_spaces = 0;
                 }
                 let script_here = c.script();
                 if script_here != Script::Unknown && script_here != Script::Common {
@@ -226,19 +230,16 @@ where
                     }
                     last_script = Some(script_here);
                 }
-                last_is_space = false;
                 range.push(c);
                 x += 1;
-                // FIXME: Move x by graphemes
+                // FIXME: Move x by graphemes?
             }
         }
     }
-    if range.len() > 0 {
-        if last_is_space {
-            space_cb(range.len());
-        } else {
-            run_cb(&line.slice(range.clone()));
-        }
+    if num_spaces > 0 {
+        space_cb(num_spaces);
+    } else if range.len() > 0 {
+        run_cb(&line.slice(range.clone()));
     }
 }
 
