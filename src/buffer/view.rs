@@ -1,6 +1,7 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::{Cell, RefCell};
+use std::fmt::Write;
 
 use euclid::{point2, vec2, Point2D, Rect, Vector2D};
 use ropey::{Rope, RopeSlice};
@@ -12,7 +13,7 @@ use crate::common::{
 };
 use crate::painter::Painter;
 use crate::style::{TextSize, TextStyle};
-use crate::text::{f26_6, CursorStyle, TextCursor, CURSOR_WIDTH};
+use crate::text::{f26_6, CursorStyle, TextAlign, TextCursor, CURSOR_WIDTH};
 
 pub(super) struct View {
     pub(super) cursor: ViewCursor,
@@ -21,17 +22,19 @@ pub(super) struct View {
     off: Vector2D<i32, PixelSize>,
     start_line: usize,
     bed_handle: BufferBedHandle,
+    show_gutter: bool,
 }
 
 impl View {
     pub(super) fn new(bed_handle: BufferBedHandle, rect: Rect<u32, PixelSize>) -> View {
         View {
             rect,
-            text_size: bed_handle.text_size(),
+            text_size: bed_handle.text_font_size(),
             off: vec2(0, 0),
             start_line: 0,
             bed_handle,
             cursor: ViewCursor::default(),
+            show_gutter: true,
         }
     }
 
@@ -57,6 +60,11 @@ impl View {
         let rect = self.rect.cast();
         assert!(rect.contains(point));
         point -= rect.origin.to_vector();
+        point.x -= self.gutter_width(data) as i32;
+        if point.x < 0 {
+            // TODO: Handle click in gutter
+            return;
+        }
         self.sanity_check(data);
 
         // Find line
@@ -66,13 +74,13 @@ impl View {
             let metrics = self.line_metrics(&line, tab_width);
             height += metrics.height as i32;
             if height >= point.y {
-                if height > rect.size.height {
-                    self.off.y += height - rect.size.height;
+                if height > rect.height() {
+                    self.off.y += height - rect.height();
                 }
                 break;
             }
             self.cursor.line_num += 1;
-            assert!(height < rect.size.height);
+            assert!(height < rect.height());
         }
         if self.cursor.line_num >= data.len_lines() {
             self.cursor.line_num = data.len_lines() - 1;
@@ -211,10 +219,11 @@ impl View {
         };
         let cursor_max_x = (cursor_x.get() + cursor_width).ceil() as i32;
         let cursor_min_x = cursor_x.get().floor() as i32;
+        let rect_width = self.rect.width() as i32 - self.gutter_width(data) as i32;
         if self.off.x > cursor_min_x {
             self.off.x = cursor_min_x;
-        } else if self.off.x + (self.rect.size.width as i32) < cursor_max_x {
-            self.off.x = cursor_max_x - (self.rect.size.width as i32);
+        } else if self.off.x + rect_width < cursor_max_x {
+            self.off.x = cursor_max_x - rect_width;
         }
 
         self.bed_handle.request_redraw();
@@ -233,9 +242,9 @@ impl View {
                 start_line -= 1;
                 let metrics = self.line_metrics(&line, tab_width);
                 height += metrics.height;
-                if height >= self.rect.size.height {
+                if height >= self.rect.height() {
                     self.start_line = start_line;
-                    self.off.y = height as i32 - self.rect.size.height as i32;
+                    self.off.y = height as i32 - self.rect.height() as i32;
                     return;
                 }
                 if start_line == self.start_line {
@@ -290,11 +299,11 @@ impl View {
                     max_xoff = metrics.width as i32;
                 }
                 height += metrics.height as i32;
-                if height >= self.rect.size.height as i32 {
+                if height >= self.rect.height() as i32 {
                     break;
                 }
             }
-            max_xoff -= self.rect.size.width as i32;
+            max_xoff -= self.rect.width() as i32 - self.gutter_width(data) as i32;
             if max_xoff < 0 {
                 max_xoff = 0;
             }
@@ -308,40 +317,87 @@ impl View {
 
     pub(super) fn draw(&mut self, data: &Rope, painter: &mut Painter, tab_width: usize) {
         self.sanity_check(data);
+        let gutter_width = self.gutter_width(data) as f32;
+        let mut textview_rect = self.rect.cast();
+        textview_rect.origin.x += gutter_width;
+        textview_rect.size.width -= gutter_width;
+
         let theme = self.bed_handle.theme();
-        let mut paint_ctx = painter.widget_ctx(self.rect.cast(), theme.textview.background, false);
-        let mut text_font = self.bed_handle.text_font();
-        let mut text_ctx = text_font.render_ctx(&mut paint_ctx);
+        let mut gutter_baselines = Vec::new();
 
-        let mut origin = point2(0.0f32, 0.0f32) - self.off.cast();
-        let mut linum = self.start_line;
-        let line_pad = f26_6::from(self.bed_handle.line_pad() as f32);
+        {
+            let mut paint_ctx = painter.widget_ctx(textview_rect, theme.textview.background, false);
+            let mut text_font = self.bed_handle.text_font();
+            let mut text_ctx = text_font.render_ctx(&mut paint_ctx);
 
-        for rope_line in data.lines_at(self.start_line) {
-            origin.y += line_pad.to_f32();
-            if origin.y >= self.rect.size.height as f32 {
-                break;
+            let mut origin = point2(0.0f32, 0.0f32) - self.off.cast();
+            let mut linum = self.start_line;
+            let line_pad = f26_6::from(self.bed_handle.text_line_pad() as f32);
+
+            for rope_line in data.lines_at(self.start_line) {
+                origin.y += line_pad.to_f32();
+                if origin.y >= self.rect.height() as f32 {
+                    break;
+                }
+                let text_cursor = if linum == self.cursor.line_num {
+                    Some(TextCursor {
+                        gidx: self.cursor.line_gidx,
+                        style: self.cursor.style,
+                        color: theme.textview.cursor,
+                    })
+                } else {
+                    None
+                };
+                let (ascender, descender) = text_ctx.draw_line(
+                    &rope_line,
+                    tab_width,
+                    origin,
+                    textview_rect.width(),
+                    text_cursor,
+                    self.text_size,
+                    theme.textview.foreground,
+                    TextAlign::Left,
+                );
+                if self.show_gutter {
+                    gutter_baselines.push(origin.y + ascender);
+                }
+                origin.y += ascender - descender + line_pad.to_f32();
+                linum += 1;
             }
-            let text_cursor = if linum == self.cursor.line_num {
-                Some(TextCursor {
-                    gidx: self.cursor.line_gidx,
-                    style: self.cursor.style,
-                    color: theme.textview.cursor,
-                })
-            } else {
-                None
-            };
-            let height = text_ctx.draw_line(
-                &rope_line,
-                tab_width,
-                origin,
-                self.rect.size.width as f32,
-                text_cursor,
-                self.text_size,
-                theme.textview.foreground,
-            );
-            origin.y += height + line_pad.to_f32();
-            linum += 1;
+        }
+
+        if self.show_gutter {
+            let mut linum = self.start_line;
+            let mut gutter_rect = textview_rect;
+            gutter_rect.origin.x = self.rect.min_x() as f32;
+            gutter_rect.size.width = gutter_width;
+            let gutter_padding = self.bed_handle.gutter_padding() as f32;
+
+            let mut paint_ctx = painter.widget_ctx(gutter_rect, theme.gutter.background, false);
+            let mut text_font = self.bed_handle.gutter_font();
+            let text_size = self.text_size.scale(self.bed_handle.gutter_font_scale());
+            let metrics = text_font.metrics(text_size);
+            let ascender = metrics.ascender.to_f32();
+            let mut text_ctx = text_font.render_ctx(&mut paint_ctx);
+
+            let mut buf = String::new();
+
+            for base in gutter_baselines {
+                linum += 1;
+                buf.clear();
+                write!(&mut buf, "{}", linum).unwrap();
+                let origin = point2(gutter_padding, base - ascender);
+                text_ctx.draw_line(
+                    &buf.as_str(),
+                    tab_width,
+                    origin,
+                    gutter_rect.width() - gutter_padding,
+                    None,
+                    text_size,
+                    theme.gutter.foreground,
+                    TextAlign::Right,
+                );
+            }
         }
     }
 
@@ -356,7 +412,7 @@ impl View {
         let text_style = TextStyle::default();
         let space_metrics = text_font.space_metrics(self.text_size, text_style);
         let state = RefCell::new((space_metrics.ascender, space_metrics.descender, 0.0));
-        let line_pad = f26_6::from(self.bed_handle.line_pad() as f32);
+        let line_pad = f26_6::from(self.bed_handle.text_line_pad() as f32);
         split_text(
             line,
             tab_width,
@@ -381,6 +437,19 @@ impl View {
         LineMetrics {
             height: (state.0 - state.1 + line_pad * 2.0).to_f32().ceil() as u32,
             width: state.2.ceil() as u32,
+        }
+    }
+
+    fn gutter_width(&self, data: &Rope) -> u32 {
+        if !self.show_gutter {
+            0
+        } else {
+            let last_line = data.len_lines() - 1;
+            let line_str = last_line.to_string();
+            let mut font = self.bed_handle.gutter_font();
+            let size = self.text_size.scale(self.bed_handle.gutter_font_scale());
+            let shaped = font.shape(&line_str.as_str(), size, TextStyle::default());
+            shaped.width.to_f32().ceil() as u32 + self.bed_handle.gutter_padding() * 2
         }
     }
 

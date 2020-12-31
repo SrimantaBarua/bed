@@ -85,7 +85,7 @@ pub(crate) struct Config {
     pub(crate) textview_line_padding: u32,
     // Gutter
     pub(crate) gutter_font: FontCollectionHandle,
-    pub(crate) gutter_font_size: TextSize,
+    pub(crate) gutter_font_scale: f64,
     pub(crate) gutter_padding: u32,
     // Prompt
     pub(crate) prompt_font: FontCollectionHandle,
@@ -212,14 +212,10 @@ impl ConfigInner {
             .gutter_font_family
             .and_then(|s| font_core.find(&s))
             .unwrap_or_else(|| textview_font.clone());
-        let gutter_font_size = textview_font_size.scale({
-            let scale = self.gutter_font_scale.unwrap_or(1.0);
-            if scale >= 1.0 {
-                1.0
-            } else {
-                scale
-            }
-        });
+        let gutter_font_scale = self
+            .gutter_font_scale
+            .map(|s| if s >= 1.0 { 1.0 } else { s })
+            .unwrap_or(1.0);
         let gutter_padding = self.gutter_padding.unwrap_or(DEFAULT_GUTTER_PADDING);
         // Prompt
         let prompt_font = self
@@ -273,7 +269,7 @@ impl ConfigInner {
             textview_font_size,
             textview_line_padding: self.textview_line_padding,
             gutter_font,
-            gutter_font_size,
+            gutter_font_scale,
             gutter_padding,
             prompt_font,
             prompt_font_size,

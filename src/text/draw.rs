@@ -29,6 +29,11 @@ impl Default for CursorStyle {
     }
 }
 
+pub(crate) enum TextAlign {
+    Left,
+    Right,
+}
+
 // Cursor state for drawing
 pub(crate) struct TextCursor {
     pub(crate) gidx: usize,
@@ -59,7 +64,8 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         cursor: Option<TextCursor>,
         text_size: TextSize,
         text_color: Color,
-    ) -> f32
+        align: TextAlign,
+    ) -> (f32, f32)
     where
         S: RopeOrStr,
     {
@@ -137,6 +143,17 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                 }
             },
         );
+
+        let text_width = current_x.get();
+        let origin = if text_width >= width {
+            origin
+        } else {
+            match align {
+                TextAlign::Left => origin,
+                TextAlign::Right => point2(origin.x + width - text_width, origin.y),
+            }
+        };
+
         if let Some(cursor) = cursor {
             let cursor_height = ascender - descender;
             let (cursor_width, cursor_height, cursor_y) = match cursor.style {
@@ -180,7 +197,7 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
             }
         }
 
-        (ascender - descender).to_f32()
+        (ascender.to_f32(), descender.to_f32())
     }
 
     pub(crate) fn draw(

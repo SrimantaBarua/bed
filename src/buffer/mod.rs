@@ -47,7 +47,7 @@ impl BufferBedHandle {
         ret
     }
 
-    pub(crate) fn line_pad(&self) -> u32 {
+    fn text_line_pad(&self) -> u32 {
         self.0.borrow().config.borrow().textview_line_padding
     }
 
@@ -55,8 +55,20 @@ impl BufferBedHandle {
         self.0.borrow().config.borrow().textview_font.clone()
     }
 
-    fn text_size(&self) -> TextSize {
+    fn text_font_size(&self) -> TextSize {
         self.0.borrow().config.borrow().textview_font_size
+    }
+
+    fn gutter_font(&self) -> FontCollectionHandle {
+        self.0.borrow().config.borrow().gutter_font.clone()
+    }
+
+    fn gutter_font_scale(&self) -> f64 {
+        self.0.borrow().config.borrow().gutter_font_scale
+    }
+
+    fn gutter_padding(&self) -> u32 {
+        self.0.borrow().config.borrow().gutter_padding
     }
 
     fn theme(&self) -> ThemeGuard {

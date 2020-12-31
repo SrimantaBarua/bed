@@ -9,7 +9,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::common::PixelSize;
 use crate::config::Config;
 use crate::painter::Painter;
-use crate::text::{CursorStyle, TextCursor};
+use crate::text::{CursorStyle, TextAlign, TextCursor};
 use crate::theme::ThemeSet;
 
 mod command;
@@ -97,6 +97,7 @@ impl Prompt {
                     text_cursor,
                     cfg.prompt_font_size,
                     theme.prompt.foreground,
+                    TextAlign::Left,
                 );
             }
         }

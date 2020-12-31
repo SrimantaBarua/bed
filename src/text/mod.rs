@@ -35,7 +35,7 @@ use self::font_source::{Charset, FontSource, Pattern};
 use self::freetype::{FontMetrics, GlyphMetrics, RasterCore, RasterFont};
 use self::harfbuzz::{GlyphInfo, HbBuffer, HbFont};
 
-pub(crate) use draw::{CursorStyle, TextCursor, CURSOR_WIDTH};
+pub(crate) use draw::{CursorStyle, TextAlign, TextCursor, CURSOR_WIDTH};
 pub(crate) use types::f26_6;
 
 // Core handle for loading new fonts. Once fonts are loaded, this isn't used directly. However,

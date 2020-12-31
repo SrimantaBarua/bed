@@ -126,7 +126,6 @@ impl BedHandle {
         {
             let mut config = inner.config.borrow_mut();
             config.completion_font_size = config.completion_font_size.scale(scale_amt);
-            config.gutter_font_size = config.gutter_font_size.scale(scale_amt);
             config.hover_font_size = config.hover_font_size.scale(scale_amt);
             config.prompt_font_size = config.prompt_font_size.scale(scale_amt);
             config.textview_font_size = config.textview_font_size.scale(scale_amt);
