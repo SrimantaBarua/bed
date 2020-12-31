@@ -41,6 +41,7 @@ struct Bed {
     window: window::Window,
     font_core: text::FontCore,
     redraw_required: bool,
+    quitting: bool,
 }
 
 impl Bed {
@@ -91,6 +92,7 @@ impl Bed {
                 scale_factor,
                 font_core,
                 redraw_required: true,
+                quitting: false,
             },
             event_loop,
         )
@@ -152,6 +154,10 @@ impl BedHandle {
         inner.prompt.draw(&mut inner.painter);
         inner.window.swap_buffers();
         inner.redraw_required = false;
+    }
+
+    fn quitting(&self) -> bool {
+        self.0.borrow().quitting
     }
 }
 
@@ -216,6 +222,9 @@ fn main() {
             }
             Event::RedrawRequested(_) => bed.draw(),
             _ => {}
+        };
+        if bed.quitting() {
+            *control_flow = ControlFlow::Exit;
         }
     });
 }

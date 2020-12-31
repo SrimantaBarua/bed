@@ -3,7 +3,7 @@
 use std::cell::{RefCell, RefMut};
 use std::cmp::min;
 use std::fs::File;
-use std::io::Result as IOResult;
+use std::io::{Result as IOResult, Write};
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -78,6 +78,11 @@ impl BufferHandle {
 
     pub(crate) fn reload(&mut self) -> IOResult<()> {
         self.0.borrow_mut().reload()
+    }
+
+    // FIXME: Spawn thread to write to file
+    pub(crate) fn write_file(&self, optpath: Option<&str>) -> IOResult<()> {
+        self.0.borrow().write_file(optpath)
     }
 
     pub(super) fn create_empty(bed_handle: BufferBedHandle) -> BufferHandle {
@@ -572,5 +577,19 @@ impl Buffer {
 
     fn view_mut(&mut self, view_id: &BufferViewId) -> &mut View {
         self.views.get_mut(view_id).unwrap()
+    }
+
+    fn write_file(&self, optpath: Option<&str>) -> IOResult<()> {
+        if let Some(path) = optpath.or(self.optpath.as_ref().map(|s| s.as_str())) {
+            let mut f = File::create(path)?;
+            for c in self.rope.chunks() {
+                f.write(c.as_bytes())?;
+            }
+            Ok(())
+        } else {
+            // FIXME: Feedback in bed UI
+            eprintln!("ERROR: No file specified");
+            Ok(())
+        }
     }
 }

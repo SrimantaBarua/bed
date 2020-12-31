@@ -38,6 +38,21 @@ impl Bed {
                     self.split_vertical(Some(path))
                 }
             }
+            Some(s) if s == "w" || s == "write" => {
+                let path = &cmd[s.len()..].trim();
+                if path.len() == 0 {
+                    self.write_buffer(None)
+                } else {
+                    self.write_buffer(Some(path))
+                }
+            }
+            Some("wq") => {
+                self.write_buffer(None);
+                self.quit();
+            }
+            Some(s) if s == "q" || s == "quit" => {
+                self.quit();
+            }
             _ => {}
         }
     }
@@ -62,43 +77,46 @@ impl Bed {
     }
 
     fn split_horizontal(&mut self, optpath: Option<&str>) {
-        if let Some(path) = optpath {
+        let buf_handle = if let Some(path) = optpath {
             match self.buffer_mgr.read_file(path) {
-                Ok(buffer) => {
-                    let view_id = self.buffer_mgr.next_view_id();
-                    self.text_tree.split_horizontal(buffer, view_id);
-                    self.redraw_required = true;
-                }
+                Ok(buffer) => buffer,
                 Err(e) => {
                     eprintln!("ERROR: Failed to read path: {}: {}", path, e);
+                    return;
                 }
             }
         } else {
-            let buf_handle = self.text_tree.active().buffer_handle();
-            let view_id = self.buffer_mgr.next_view_id();
-            self.text_tree.split_horizontal(buf_handle, view_id);
-            self.redraw_required = true;
-        }
+            self.text_tree.active().buffer_handle()
+        };
+        let view_id = self.buffer_mgr.next_view_id();
+        self.text_tree.split_horizontal(buf_handle, view_id);
+        self.redraw_required = true;
     }
 
     fn split_vertical(&mut self, optpath: Option<&str>) {
-        eprintln!("optpath: {:?}", optpath);
-        if let Some(path) = optpath {
+        let buf_handle = if let Some(path) = optpath {
             match self.buffer_mgr.read_file(path) {
-                Ok(buffer) => {
-                    let view_id = self.buffer_mgr.next_view_id();
-                    self.text_tree.split_vertical(buffer, view_id);
-                    self.redraw_required = true;
-                }
+                Ok(buffer) => buffer,
                 Err(e) => {
                     eprintln!("ERROR: Failed to read path: {}: {}", path, e);
+                    return;
                 }
             }
         } else {
-            let buf_handle = self.text_tree.active().buffer_handle();
-            let view_id = self.buffer_mgr.next_view_id();
-            self.text_tree.split_vertical(buf_handle, view_id);
-            self.redraw_required = true;
+            self.text_tree.active().buffer_handle()
+        };
+        let view_id = self.buffer_mgr.next_view_id();
+        self.text_tree.split_vertical(buf_handle, view_id);
+        self.redraw_required = true;
+    }
+
+    fn write_buffer(&mut self, optpath: Option<&str>) {
+        if let Err(e) = self.text_tree.active().buffer_handle().write_file(optpath) {
+            eprintln!("ERROR: Could not write to {:?}: {}", optpath, e);
         }
+    }
+
+    fn quit(&mut self) {
+        self.quitting = true;
     }
 }
