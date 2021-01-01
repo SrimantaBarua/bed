@@ -21,6 +21,7 @@ mod style;
 mod text;
 mod textview;
 mod theme;
+mod ts;
 mod window;
 
 use common::PixelSize;
@@ -41,6 +42,7 @@ struct Bed {
     window: window::Window,
     font_core: text::FontCore,
     redraw_required: bool,
+    ts_core: ts::TsCore,
     quitting: bool,
 }
 
@@ -58,12 +60,13 @@ impl Bed {
         )));
         let painter = painter::Painter::new(window_size.cast());
 
+        let ts_core = ts::TsCore::new();
+
         let window_rect = Rect::new(point2(0, 0), window.size());
         let prompt = prompt::Prompt::new(window_rect, config.clone(), theme_set.clone());
 
         let buffer_state = buffer::BufferBedHandle::new(config.clone(), theme_set.clone());
         let mut buffer_mgr = buffer::BufferMgr::new(buffer_state.clone());
-
         let first_buffer = buffer_mgr.read_file("src/buffer/view.rs").unwrap();
         let first_view_id = buffer_mgr.next_view_id();
 
@@ -92,6 +95,7 @@ impl Bed {
                 scale_factor,
                 font_core,
                 redraw_required: true,
+                ts_core,
                 quitting: false,
             },
             event_loop,

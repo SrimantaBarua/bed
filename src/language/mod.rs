@@ -7,25 +7,33 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Language {
+    Bash,
     C,
     Cpp,
     CSS,
     HTML,
     JavaScript,
+    Lua,
+    Markdown,
     Python,
     Rust,
+    Toml,
 }
 
 impl Language {
     pub(crate) fn to_str(&self) -> &'static str {
         match self {
+            Language::Bash => "bash",
             Language::C => "c",
             Language::Cpp => "cpp",
             Language::CSS => "css",
             Language::HTML => "html",
             Language::JavaScript => "javascript",
+            Language::Lua => "lua",
+            Language::Markdown => "markdown",
             Language::Python => "python",
             Language::Rust => "rust",
+            Language::Toml => "toml",
         }
     }
 }

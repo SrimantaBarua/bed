@@ -10,10 +10,13 @@ use std::rc::Rc;
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
+use tree_sitter::Parser;
 
 use crate::common::{rope_trim_newlines, PixelSize};
+use crate::language::Language;
 use crate::painter::Painter;
 use crate::text::CursorStyle;
+use crate::ts::TsLang;
 
 use super::rope_stuff::{space_containing, word_containing};
 use super::view::{View, ViewCursor};
@@ -103,6 +106,8 @@ pub(crate) struct Buffer {
     rope: Rope,
     tab_width: usize,
     optpath: Option<String>,
+    optlanguage: Option<Language>,
+    opttslang: Option<TsLang>,
 }
 
 impl Buffer {
@@ -540,6 +545,8 @@ impl Buffer {
             bed_handle,
             tab_width: 8,
             optpath: None,
+            optlanguage: None,
+            opttslang: None,
         }
     }
 
@@ -552,6 +559,8 @@ impl Buffer {
                 views: FnvHashMap::default(),
                 tab_width: 8,
                 optpath: Some(path.to_owned()),
+                optlanguage: None,
+                opttslang: None,
             })
     }
 
