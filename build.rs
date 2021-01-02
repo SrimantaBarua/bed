@@ -7,10 +7,12 @@ fn build_treesitter_bash() {
         .cpp(true)
         .file("res/tree-sitter/bash/src/scanner.cc")
         .include("res/tree-sitter/bash/src")
+        .warnings(false)
         .compile("ts_bash_scanner");
     cc::Build::new()
         .file("res/tree-sitter/bash/src/parser.c")
         .include("res/tree-sitter/bash/src")
+        .warnings(false)
         .compile("ts_bash");
 }
 
@@ -18,6 +20,7 @@ fn build_treesitter_c() {
     cc::Build::new()
         .file("res/tree-sitter/c/src/parser.c")
         .include("res/tree-sitter/c/src")
+        .warnings(false)
         .compile("ts_c");
 }
 
@@ -26,10 +29,12 @@ fn build_treesitter_cpp() {
         .cpp(true)
         .file("res/tree-sitter/cpp/src/scanner.cc")
         .include("res/tree-sitter/cpp/src")
+        .warnings(false)
         .compile("ts_cpp_scanner");
     cc::Build::new()
         .file("res/tree-sitter/cpp/src/parser.c")
         .include("res/tree-sitter/cpp/src")
+        .warnings(false)
         .compile("ts_cpp");
 }
 
@@ -38,6 +43,7 @@ fn build_treesitter_css() {
         .file("res/tree-sitter/css/src/parser.c")
         .file("res/tree-sitter/css/src/scanner.c")
         .include("res/tree-sitter/css/src")
+        .warnings(false)
         .compile("ts_css");
 }
 
@@ -46,10 +52,12 @@ fn build_treesitter_html() {
         .cpp(true)
         .file("res/tree-sitter/html/src/scanner.cc")
         .include("res/tree-sitter/html/src")
+        .warnings(false)
         .compile("ts_html_scanner");
     cc::Build::new()
         .file("res/tree-sitter/html/src/parser.c")
         .include("res/tree-sitter/html/src")
+        .warnings(false)
         .compile("ts_html");
 }
 
@@ -58,6 +66,7 @@ fn build_treesitter_javascript() {
         .file("res/tree-sitter/javascript/src/parser.c")
         .file("res/tree-sitter/javascript/src/scanner.c")
         .include("res/tree-sitter/javascript/src")
+        .warnings(false)
         .compile("ts_javascript");
 }
 
@@ -66,10 +75,12 @@ fn build_treesitter_lua() {
         .cpp(true)
         .file("res/tree-sitter/lua/src/scanner.cc")
         .include("res/tree-sitter/lua/src")
+        .warnings(false)
         .compile("ts_lua_scanner");
     cc::Build::new()
         .file("res/tree-sitter/lua/src/parser.c")
         .include("res/tree-sitter/lua/src")
+        .warnings(false)
         .compile("ts_lua");
 }
 
@@ -78,10 +89,12 @@ fn build_treesitter_markdown() {
         .cpp(true)
         .file("res/tree-sitter/markdown/src/scanner.cc")
         .include("res/tree-sitter/markdown/src")
+        .warnings(false)
         .compile("ts_markdown_scanner");
     cc::Build::new()
         .file("res/tree-sitter/markdown/src/parser.c")
         .include("res/tree-sitter/markdown/src")
+        .warnings(false)
         .compile("ts_markdown");
 }
 
@@ -90,10 +103,12 @@ fn build_treesitter_python() {
         .cpp(true)
         .file("res/tree-sitter/python/src/scanner.cc")
         .include("res/tree-sitter/python/src")
+        .warnings(false)
         .compile("ts_python_scanner");
     cc::Build::new()
         .file("res/tree-sitter/python/src/parser.c")
         .include("res/tree-sitter/python/src")
+        .warnings(false)
         .compile("ts_python");
 }
 
@@ -102,6 +117,7 @@ fn build_treesitter_rust() {
         .file("res/tree-sitter/rust/src/parser.c")
         .file("res/tree-sitter/rust/src/scanner.c")
         .include("res/tree-sitter/rust/src")
+        .warnings(false)
         .compile("ts_rust");
 }
 
@@ -110,6 +126,7 @@ fn build_treesitter_toml() {
         .file("res/tree-sitter/toml/src/parser.c")
         .file("res/tree-sitter/toml/src/scanner.c")
         .include("res/tree-sitter/toml/src")
+        .warnings(false)
         .compile("ts_toml");
 }
 

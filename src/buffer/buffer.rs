@@ -5,18 +5,19 @@ use std::cmp::min;
 use std::fs::File;
 use std::io::{Result as IOResult, Write};
 use std::ops::Range;
+use std::path::Path;
 use std::rc::Rc;
 
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
-use tree_sitter::Parser;
+use tree_sitter::{InputEdit, Point as TsPoint, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::language::Language;
 use crate::painter::Painter;
 use crate::text::CursorStyle;
-use crate::ts::TsLang;
+use crate::ts::{TsCore, TsLang};
 
 use super::rope_stuff::{space_containing, word_containing};
 use super::view::{View, ViewCursor};
@@ -84,19 +85,21 @@ impl BufferHandle {
     }
 
     // FIXME: Spawn thread to write to file
-    pub(crate) fn write_file(&self, optpath: Option<&str>) -> IOResult<()> {
-        self.0.borrow().write_file(optpath)
+    pub(crate) fn write_file(&mut self, optpath: Option<&str>) -> IOResult<()> {
+        self.0.borrow_mut().write_file(optpath)
     }
 
-    pub(super) fn create_empty(bed_handle: BufferBedHandle) -> BufferHandle {
-        BufferHandle(Rc::new(RefCell::new(Buffer::empty(bed_handle))))
+    pub(super) fn create_empty(bed_handle: BufferBedHandle, ts_core: Rc<TsCore>) -> BufferHandle {
+        BufferHandle(Rc::new(RefCell::new(Buffer::empty(bed_handle, ts_core))))
     }
 
     pub(super) fn create_from_file(
         path: &str,
         bed_handle: BufferBedHandle,
+        ts_core: Rc<TsCore>,
     ) -> IOResult<BufferHandle> {
-        Buffer::from_file(path, bed_handle).map(|buf| BufferHandle(Rc::new(RefCell::new(buf))))
+        Buffer::from_file(path, bed_handle, ts_core)
+            .map(|buf| BufferHandle(Rc::new(RefCell::new(buf))))
     }
 }
 
@@ -106,8 +109,11 @@ pub(crate) struct Buffer {
     rope: Rope,
     tab_width: usize,
     optpath: Option<String>,
+    // Tree-sitter stuff
+    ts_core: Rc<TsCore>,
     optlanguage: Option<Language>,
     opttslang: Option<TsLang>,
+    opttree: Option<Tree>,
 }
 
 impl Buffer {
@@ -351,7 +357,9 @@ impl Buffer {
     pub(crate) fn insert_char(&mut self, view_id: &BufferViewId, c: char) {
         let view = self.views.get_mut(view_id).unwrap();
         let cidx = view.cursor.cidx;
+        let old_rope = self.rope.clone();
         self.rope.insert_char(cidx, c);
+        self.edit_tree(old_rope, cidx..cidx, 1);
         for view in self.views.values_mut() {
             if view.cursor.cidx >= cidx {
                 view.cursor.cidx += 1;
@@ -363,7 +371,9 @@ impl Buffer {
     }
 
     fn delete_range(&mut self, range: Range<usize>) {
+        let old_rope = self.rope.clone();
         self.rope.remove(range.clone());
+        self.edit_tree(old_rope, range.clone(), 0);
         for view in self.views.values_mut() {
             if view.cursor.cidx >= range.end {
                 view.cursor.cidx -= range.len();
@@ -523,7 +533,9 @@ impl Buffer {
         if cursor.line_cidx + n > len_chars {
             return;
         }
+        let old_rope = self.rope.clone();
         self.rope.remove(cursor.cidx..cursor.cidx + n);
+        self.edit_tree(old_rope, cursor.cidx..cursor.cidx + n, n);
         let mut buf = [0; 4];
         let s = c.encode_utf8(&mut buf);
         self.rope.insert(cursor.cidx, &s.repeat(n));
@@ -538,29 +550,43 @@ impl Buffer {
     }
 
     // -------- Internal stuff --------
-    fn empty(bed_handle: BufferBedHandle) -> Buffer {
+    fn empty(bed_handle: BufferBedHandle, ts_core: Rc<TsCore>) -> Buffer {
         Buffer {
             views: FnvHashMap::default(),
             rope: Rope::new(),
             bed_handle,
             tab_width: 8,
             optpath: None,
+            ts_core,
             optlanguage: None,
             opttslang: None,
+            opttree: None,
         }
     }
 
-    fn from_file(path: &str, bed_handle: BufferBedHandle) -> IOResult<Buffer> {
+    fn from_file(path: &str, bed_handle: BufferBedHandle, ts_core: Rc<TsCore>) -> IOResult<Buffer> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
-            .map(|rope| Buffer {
-                rope,
-                bed_handle,
-                views: FnvHashMap::default(),
-                tab_width: 8,
-                optpath: Some(path.to_owned()),
-                optlanguage: None,
-                opttslang: None,
+            .map(|rope| {
+                let (optlanguage, opttslang) = Path::new(path)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| ts_core.parser_from_extension(s))
+                    .map(|(l, t)| (Some(l), Some(t)))
+                    .unwrap_or((None, None));
+                let mut ret = Buffer {
+                    rope,
+                    bed_handle,
+                    views: FnvHashMap::default(),
+                    tab_width: 8,
+                    optpath: Some(path.to_owned()),
+                    ts_core,
+                    optlanguage,
+                    opttslang,
+                    opttree: None,
+                };
+                ret.recreate_parse_tree();
+                ret
             })
     }
 
@@ -573,6 +599,7 @@ impl Buffer {
                     for view in self.views.values_mut() {
                         view.scroll_to_top();
                     }
+                    self.recreate_parse_tree();
                 })
         } else {
             // FIXME: Print some error?
@@ -588,11 +615,23 @@ impl Buffer {
         self.views.get_mut(view_id).unwrap()
     }
 
-    fn write_file(&self, optpath: Option<&str>) -> IOResult<()> {
+    fn write_file(&mut self, optpath: Option<&str>) -> IOResult<()> {
         if let Some(path) = optpath.or(self.optpath.as_ref().map(|s| s.as_str())) {
             let mut f = File::create(path)?;
             for c in self.rope.chunks() {
                 f.write(c.as_bytes())?;
+            }
+            if self.optpath.is_none() {
+                let (optlanguage, opttslang) = Path::new(path)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| self.ts_core.parser_from_extension(s))
+                    .map(|(l, t)| (Some(l), Some(t)))
+                    .unwrap_or((None, None));
+                self.optpath = Some(path.to_owned());
+                self.optlanguage = optlanguage;
+                self.opttslang = opttslang;
+                self.recreate_parse_tree();
             }
             Ok(())
         } else {
@@ -601,4 +640,91 @@ impl Buffer {
             Ok(())
         }
     }
+
+    fn recreate_parse_tree(&mut self) {
+        let rope = &self.rope;
+        if let Some(tslang) = &mut self.opttslang {
+            let tree = tslang
+                .parser
+                .parse_with(
+                    &mut |boff, _| {
+                        if boff >= rope.len_bytes() {
+                            ""
+                        } else {
+                            let (chunk, chunk_byte_idx, _, _) = rope.chunk_at_byte(boff);
+                            &chunk[boff - chunk_byte_idx..]
+                        }
+                    },
+                    None,
+                )
+                .expect("failed to parse");
+            /*
+            {
+                let mut cursor = tree.walk();
+                walk_recur(&mut cursor, 0);
+            }
+            */
+            self.opttree = Some(tree);
+        }
+    }
+
+    fn edit_tree(&mut self, old_rope: Rope, old_crange: Range<usize>, new_clen: usize) {
+        let rope = &self.rope;
+        if let Some(mut old_tree) = self.opttree.take() {
+            let start_byte = old_rope.char_to_byte(old_crange.start);
+            let old_end_byte = old_rope.char_to_byte(old_crange.end);
+            let new_end_byte = old_rope.char_to_byte(old_crange.start + new_clen);
+            let start_linum = old_rope.byte_to_line(start_byte);
+            let start_linoff = start_byte - old_rope.line_to_byte(start_linum);
+            let old_end_linum = old_rope.byte_to_line(old_end_byte);
+            let old_end_linoff = old_end_byte - old_rope.line_to_byte(old_end_linum);
+            let new_end_linum = old_rope.byte_to_line(new_end_byte);
+            let new_end_linoff = new_end_byte - old_rope.line_to_byte(new_end_linum);
+            old_tree.edit(&InputEdit {
+                start_byte,
+                old_end_byte,
+                new_end_byte,
+                start_position: TsPoint::new(start_linum, start_linoff),
+                old_end_position: TsPoint::new(old_end_linum, old_end_linoff),
+                new_end_position: TsPoint::new(new_end_linum, new_end_linoff),
+            });
+            if let Some(tslang) = &mut self.opttslang {
+                let new_tree = tslang
+                    .parser
+                    .parse_with(
+                        &mut |boff, _| {
+                            if boff >= rope.len_bytes() {
+                                ""
+                            } else {
+                                let (chunk, chunk_byte_idx, _, _) = rope.chunk_at_byte(boff);
+                                &chunk[boff - chunk_byte_idx..]
+                            }
+                        },
+                        Some(&mut old_tree),
+                    )
+                    .expect("failed to parse");
+                self.opttree = Some(new_tree.clone());
+                for range in old_tree.changed_ranges(&new_tree) {
+                    eprintln!("change: {:?}", range);
+                }
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn walk_recur(cursor: &mut tree_sitter::TreeCursor, indent: usize) {
+    eprint!("\n{}({}", " ".repeat(indent), cursor.node().kind());
+    if cursor.goto_first_child() {
+        walk_recur(cursor, indent + 2);
+    }
+    eprint!(")");
+    while cursor.goto_next_sibling() {
+        eprint!("\n{}({}", " ".repeat(indent), cursor.node().kind());
+        if cursor.goto_first_child() {
+            walk_recur(cursor, indent + 2);
+        }
+        eprint!(")");
+    }
+    cursor.goto_parent();
 }
