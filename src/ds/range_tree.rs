@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::cmp::max;
 use std::ops::Range;
 
 use take_mut::take;
@@ -55,6 +56,7 @@ struct LeafNode<T: Clone + Eq> {
 struct InnerNode<T: Clone + Eq> {
     left: Box<Node<T>>,
     right: Box<Node<T>>,
+    height: usize,
 }
 
 #[derive(Debug)]
@@ -81,9 +83,22 @@ impl<T: Clone + Eq> Node<T> {
     fn new_inner(left: Box<Node<T>>, right: Box<Node<T>>) -> Node<T> {
         let len = left.len + right.len;
         assert!(len > 0);
+        // Rebalance if required
+        let (left, right) = if left.height() > right.height() + 1 {
+            Node::right_rotate(left, right)
+        } else if right.height() > left.height() + 1 {
+            Node::left_rotate(left, right)
+        } else {
+            (left, right)
+        };
+        let height = 1 + max(left.height(), right.height());
         Node {
             len,
-            typ: NodeTyp::Inner(InnerNode { left, right }),
+            typ: NodeTyp::Inner(InnerNode {
+                left,
+                right,
+                height,
+            }),
         }
     }
 
@@ -172,6 +187,49 @@ impl<T: Clone + Eq> Node<T> {
                 }
             }
         })
+    }
+
+    fn height(&self) -> usize {
+        match &self.typ {
+            NodeTyp::Leaf(_) => 1,
+            NodeTyp::Inner(inner) => inner.height,
+        }
+    }
+
+    fn right_rotate(left: Box<Node<T>>, right: Box<Node<T>>) -> (Box<Node<T>>, Box<Node<T>>) {
+        let (ll, lr) = match left.typ {
+            NodeTyp::Inner(inner) => {
+                if inner.right.height() > inner.left.height() {
+                    let (lrl, lrr) = match inner.right.typ {
+                        NodeTyp::Inner(inner) => (inner.left, inner.right),
+                        NodeTyp::Leaf(_) => unreachable!(),
+                    };
+                    (Box::new(Node::new_inner(inner.left, lrl)), lrr)
+                } else {
+                    (inner.left, inner.right)
+                }
+            }
+            NodeTyp::Leaf(_) => unreachable!(),
+        };
+        (ll, Box::new(Node::new_inner(lr, right)))
+    }
+
+    fn left_rotate(left: Box<Node<T>>, right: Box<Node<T>>) -> (Box<Node<T>>, Box<Node<T>>) {
+        let (rl, rr) = match right.typ {
+            NodeTyp::Inner(inner) => {
+                if inner.left.height() > inner.right.height() {
+                    let (rll, rlr) = match inner.left.typ {
+                        NodeTyp::Inner(inner) => (inner.left, inner.right),
+                        NodeTyp::Leaf(_) => unreachable!(),
+                    };
+                    (rll, Box::new(Node::new_inner(rlr, inner.right)))
+                } else {
+                    (inner.left, inner.right)
+                }
+            }
+            NodeTyp::Leaf(_) => unreachable!(),
+        };
+        (Box::new(Node::new_inner(left, rl)), rr)
     }
 }
 
