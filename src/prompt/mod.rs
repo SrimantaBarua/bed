@@ -9,7 +9,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::common::PixelSize;
 use crate::config::Config;
 use crate::painter::Painter;
-use crate::text::{CursorStyle, TextAlign, TextCursor};
+use crate::style::TextStyle;
+use crate::text::{CursorStyle, StyleType, TextAlign, TextCursor};
 use crate::theme::ThemeSet;
 
 mod command;
@@ -88,15 +89,15 @@ impl Prompt {
                     style: CursorStyle::Line,
                     color: theme.prompt.cursor,
                 });
-
+                let fgcol = theme.prompt.foreground;
                 text_ctx.draw_line(
                     &self.text.as_str(),
+                    StyleType::Const(0..self.text.len(), TextStyle::default(), fgcol, false),
                     TAB_WIDTH,
                     origin,
                     width,
                     text_cursor,
                     cfg.prompt_font_size,
-                    theme.prompt.foreground,
                     TextAlign::Left,
                 );
             }

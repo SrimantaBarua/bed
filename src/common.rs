@@ -32,6 +32,7 @@ pub(crate) trait SliceRange: Clone + Default {
     fn clear(&mut self);
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
+    fn from_raw(range: Range<usize>) -> Self;
     fn shift(&mut self, c: char) {
         self.push(c);
         self.clear();
@@ -95,6 +96,10 @@ impl SliceRange for RopeSliceRange {
     fn len(&self) -> usize {
         self.0.end - self.0.start
     }
+
+    fn from_raw(range: Range<usize>) -> Self {
+        RopeSliceRange(range)
+    }
 }
 
 pub(crate) struct RopeGraphemeIndices<'a>(RopeGraphemes<'a>);
@@ -151,6 +156,10 @@ impl SliceRange for StrSliceRange {
 
     fn len(&self) -> usize {
         self.0.end - self.0.start
+    }
+
+    fn from_raw(range: Range<usize>) -> Self {
+        StrSliceRange(range)
     }
 }
 

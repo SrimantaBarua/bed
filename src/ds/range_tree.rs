@@ -39,11 +39,15 @@ impl<T: Clone + Eq> RangeTree<T> {
     }
 
     pub(crate) fn iter(&self) -> Option<RangeTreeIter<T>> {
-        self.iter_from(0)
+        self.iter_range(0..self.len())
     }
 
-    pub(crate) fn iter_from(&self, pos: usize) -> Option<RangeTreeIter<T>> {
-        self.root.as_ref().map(|x| RangeTreeIter::new(x, pos))
+    pub(crate) fn iter_range(&self, range: Range<usize>) -> Option<RangeTreeIter<T>> {
+        self.root.as_ref().map(|x| RangeTreeIter::new(x, range))
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.root.as_ref().map(|x| x.len).unwrap_or(0)
     }
 }
 
@@ -233,16 +237,27 @@ impl<T: Clone + Eq> Node<T> {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct RangeTreeIter<'a, T: Clone + Eq> {
     stack: Vec<&'a InnerNode<T>>,
     cur_start: usize,
     cur_end: usize,
+    last_end: usize,
     cur_node: Option<&'a LeafNode<T>>,
 }
 
 impl<'a, T: Clone + Eq> RangeTreeIter<'a, T> {
-    fn new(root: &'a Node<T>, mut start: usize) -> RangeTreeIter<'a, T> {
-        assert!(start <= root.len);
+    fn new(root: &'a Node<T>, mut range: Range<usize>) -> RangeTreeIter<'a, T> {
+        if range.is_empty() {
+            return RangeTreeIter {
+                stack: vec![],
+                cur_start: 0,
+                cur_end: 0,
+                last_end: 0,
+                cur_node: None,
+            };
+        }
+        assert!(range.end <= root.len);
         let mut node = root;
         let mut stack = Vec::new();
         let mut cur_start = 0;
@@ -256,20 +271,22 @@ impl<'a, T: Clone + Eq> RangeTreeIter<'a, T> {
                     break;
                 }
                 NodeTyp::Inner(inner) => {
-                    if inner.left.len > start {
+                    if inner.left.len > range.start {
                         stack.push(inner);
                         node = &inner.left;
                     } else {
                         cur_start = inner.left.len;
-                        start -= inner.left.len;
+                        range.start -= inner.left.len;
                         node = &inner.right;
                     }
                 }
             }
         }
+        cur_start += range.start;
         RangeTreeIter {
             stack,
             cur_start,
+            last_end: range.end,
             cur_end,
             cur_node,
         }
@@ -281,7 +298,7 @@ impl<'a, T: Clone + Eq> Iterator for RangeTreeIter<'a, T> {
 
     fn next(&mut self) -> Option<(Range<usize>, &'a T)> {
         if let Some(ret_node) = self.cur_node.take() {
-            let range = self.cur_start..self.cur_end;
+            let mut range = self.cur_start..self.cur_end;
             self.cur_start = self.cur_end;
             if let Some(last) = self.stack.pop() {
                 let mut node = &last.right;
@@ -298,6 +315,10 @@ impl<'a, T: Clone + Eq> Iterator for RangeTreeIter<'a, T> {
                         }
                     }
                 }
+            }
+            if range.end >= self.last_end {
+                range.end = self.last_end;
+                self.cur_node = None;
             }
             Some((range, &ret_node.data))
         } else {

@@ -16,6 +16,7 @@ use tree_sitter::{InputEdit, Point as TsPoint, Tree};
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::language::Language;
 use crate::painter::Painter;
+use crate::style::StyleRanges;
 use crate::text::CursorStyle;
 use crate::ts::{TsCore, TsLang};
 
@@ -48,19 +49,19 @@ impl BufferHandle {
     pub(crate) fn set_view_rect(&mut self, view_id: &BufferViewId, rect: Rect<u32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
-        view.set_rect(rect, &inner.rope, inner.tab_width);
+        view.set_rect(rect, &inner.rope, inner.tab_width, &inner.styles);
     }
 
     pub(crate) fn draw_view(&mut self, view_id: &BufferViewId, painter: &mut Painter) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
-        view.draw(&inner.rope, painter, inner.tab_width);
+        view.draw(painter, &inner.rope, inner.tab_width, &inner.styles);
     }
 
     pub(crate) fn scroll_view(&mut self, view_id: &BufferViewId, scroll: Vector2D<i32, PixelSize>) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
-        view.scroll(scroll, &inner.rope, inner.tab_width);
+        view.scroll(scroll, &inner.rope, inner.tab_width, &inner.styles);
     }
 
     pub(crate) fn move_view_cursor_to_point(
@@ -70,7 +71,7 @@ impl BufferHandle {
     ) {
         let inner = &mut *self.0.borrow_mut();
         let view = inner.views.get_mut(view_id).unwrap();
-        view.move_cursor_to_point(point, &inner.rope, inner.tab_width);
+        view.move_cursor_to_point(point, &inner.rope, inner.tab_width, &inner.styles);
     }
 
     pub(crate) fn scale_text(&mut self, scale: f64) {
@@ -114,6 +115,8 @@ pub(crate) struct Buffer {
     optlanguage: Option<Language>,
     opttslang: Option<TsLang>,
     opttree: Option<Tree>,
+    // Highlighting
+    styles: StyleRanges,
 }
 
 impl Buffer {
@@ -350,7 +353,7 @@ impl Buffer {
 
     pub(crate) fn snap_to_cursor(&mut self, view_id: &BufferViewId, update_global_x: bool) {
         let view = self.views.get_mut(view_id).unwrap();
-        view.snap_to_cursor(&self.rope, self.tab_width, update_global_x);
+        view.snap_to_cursor(&self.rope, self.tab_width, &self.styles, update_global_x);
     }
 
     // -------- Editing --------
@@ -359,6 +362,8 @@ impl Buffer {
         let cidx = view.cursor.cidx;
         let old_rope = self.rope.clone();
         self.rope.insert_char(cidx, c);
+        let fgcol = self.bed_handle.theme().textview.foreground;
+        self.styles.insert_default(cidx, 1, fgcol);
         self.edit_tree(old_rope, cidx..cidx, 1);
         for view in self.views.values_mut() {
             if view.cursor.cidx >= cidx {
@@ -373,6 +378,7 @@ impl Buffer {
     fn delete_range(&mut self, range: Range<usize>) {
         let old_rope = self.rope.clone();
         self.rope.remove(range.clone());
+        self.styles.remove(range.clone());
         self.edit_tree(old_rope, range.clone(), 0);
         for view in self.views.values_mut() {
             if view.cursor.cidx >= range.end {
@@ -533,12 +539,14 @@ impl Buffer {
         if cursor.line_cidx + n > len_chars {
             return;
         }
-        let old_rope = self.rope.clone();
-        self.rope.remove(cursor.cidx..cursor.cidx + n);
-        self.edit_tree(old_rope, cursor.cidx..cursor.cidx + n, n);
         let mut buf = [0; 4];
         let s = c.encode_utf8(&mut buf);
+        let old_rope = self.rope.clone();
+        self.rope.remove(cursor.cidx..cursor.cidx + n);
         self.rope.insert(cursor.cidx, &s.repeat(n));
+        let fgcol = self.bed_handle.theme().textview.foreground;
+        self.styles.set_default(cursor.cidx..cursor.cidx + n, fgcol);
+        self.edit_tree(old_rope, cursor.cidx..cursor.cidx + n, n);
         cursor.cidx += n - 1;
         cursor.sync_and_update_char_idx_left(&self.rope, self.tab_width);
         self.view_mut(view_id).cursor = cursor;
@@ -561,6 +569,7 @@ impl Buffer {
             optlanguage: None,
             opttslang: None,
             opttree: None,
+            styles: StyleRanges::new(),
         }
     }
 
@@ -584,7 +593,10 @@ impl Buffer {
                     optlanguage,
                     opttslang,
                     opttree: None,
+                    styles: StyleRanges::new(),
                 };
+                let fgcol = ret.bed_handle.theme().textview.foreground;
+                ret.styles.insert_default(0, ret.rope.len_chars(), fgcol);
                 ret.recreate_parse_tree();
                 ret
             })
@@ -595,10 +607,14 @@ impl Buffer {
             File::open(path)
                 .and_then(|f| Rope::from_reader(f))
                 .map(|rope| {
+                    let old_len_chars = self.rope.len_chars();
                     self.rope = rope;
                     for view in self.views.values_mut() {
                         view.scroll_to_top();
                     }
+                    let fgcol = self.bed_handle.theme().textview.foreground;
+                    self.styles.remove(0..old_len_chars);
+                    self.styles.insert_default(0, self.rope.len_chars(), fgcol);
                     self.recreate_parse_tree();
                 })
         } else {

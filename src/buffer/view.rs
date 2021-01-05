@@ -12,8 +12,8 @@ use crate::common::{
     PixelSize, RopeGraphemes, RopeOrStr, SplitCbRes,
 };
 use crate::painter::Painter;
-use crate::style::{TextSize, TextStyle};
-use crate::text::{f26_6, CursorStyle, TextAlign, TextCursor, CURSOR_WIDTH};
+use crate::style::{StyleRanges, TextSize, TextStyle};
+use crate::text::{f26_6, CursorStyle, StyleType, TextAlign, TextCursor, CURSOR_WIDTH};
 
 pub(super) struct View {
     pub(super) cursor: ViewCursor,
@@ -46,9 +46,15 @@ impl View {
         self.text_size += diff;
     }
 
-    pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>, data: &Rope, tab_width: usize) {
+    pub(super) fn set_rect(
+        &mut self,
+        rect: Rect<u32, PixelSize>,
+        data: &Rope,
+        tab_width: usize,
+        styles: &StyleRanges,
+    ) {
         self.rect = rect;
-        self.snap_to_cursor(data, tab_width, true);
+        self.snap_to_cursor(data, tab_width, styles, true);
     }
 
     pub(super) fn move_cursor_to_point(
@@ -56,6 +62,7 @@ impl View {
         mut point: Point2D<i32, PixelSize>,
         data: &Rope,
         tab_width: usize,
+        styles: &StyleRanges,
     ) {
         let rect = self.rect.cast();
         assert!(rect.contains(point));
@@ -70,8 +77,8 @@ impl View {
         // Find line
         self.cursor.line_num = self.start_line;
         let mut height = -self.off.y;
-        for line in data.lines_at(self.start_line) {
-            let metrics = self.line_metrics(&line, tab_width);
+        for linum in self.start_line..data.len_lines() {
+            let metrics = self.line_metrics(linum, data, tab_width, styles);
             height += metrics.height as i32;
             if height >= point.y {
                 if height > rect.height() {
@@ -86,8 +93,8 @@ impl View {
             self.cursor.line_num = data.len_lines() - 1;
         }
         // Trim lines from the top if we need to
-        for line in data.lines_at(self.start_line) {
-            let metrics = self.line_metrics(&line, tab_width);
+        for linum in self.start_line..data.len_lines() {
+            let metrics = self.line_metrics(linum, data, tab_width, styles);
             if self.off.y < metrics.height as i32 {
                 break;
             }
@@ -96,121 +103,137 @@ impl View {
         }
 
         // Check cursor position on the line
-        let line = data.line(self.cursor.line_num);
         let mut text_font = self.bed_handle.text_font();
-        let text_style = TextStyle::default();
-        let space_metrics = text_font.space_metrics(self.text_size, text_style);
-        let sp_awidth = space_metrics.advance.width.to_f32();
         let cursor_x = Cell::new(-self.off.x as f32);
         let gidx = Cell::new(0);
         let point = point.cast::<f32>();
 
-        split_text(
-            &line,
-            tab_width,
-            |n| {
-                let start = cursor_x.get();
-                let end = start + sp_awidth * n as f32;
-                if point.x < end {
-                    let frac = ((point.x - start) * (n as f32) / (end - start)) as usize;
-                    gidx.set(gidx.get() + frac);
-                    SplitCbRes::Stop
-                } else {
-                    cursor_x.set(cursor_x.get() + sp_awidth * n as f32);
-                    gidx.set(gidx.get() + n);
-                    SplitCbRes::Continue
-                }
-            },
-            |text| {
-                let shaped = text_font.shape(text, self.text_size, TextStyle::default());
-                let mut gis = shaped.glyph_infos.iter().peekable();
-                for j in text.grapheme_idxs() {
-                    while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
-                        if cluster >= j as u32 {
-                            break;
+        let line = data.line(self.cursor.line_num);
+        let start_cidx = data.line_to_char(self.cursor.line_num);
+        let end_cidx = start_cidx + line.len_chars();
+
+        for (range, &style) in styles.style.iter_range(start_cidx..end_cidx).unwrap() {
+            let range = range.start - start_cidx..range.end - start_cidx;
+            let space_metrics = text_font.space_metrics(self.text_size, style);
+            let sp_awidth = space_metrics.advance.width.to_f32();
+            split_text(
+                &line.slice(range),
+                tab_width,
+                |n| {
+                    let start = cursor_x.get();
+                    let end = start + sp_awidth * n as f32;
+                    if point.x < end {
+                        let frac = ((point.x - start) * (n as f32) / (end - start)) as usize;
+                        gidx.set(gidx.get() + frac);
+                        SplitCbRes::Stop
+                    } else {
+                        cursor_x.set(cursor_x.get() + sp_awidth * n as f32);
+                        gidx.set(gidx.get() + n);
+                        SplitCbRes::Continue
+                    }
+                },
+                |text| {
+                    let shaped = text_font.shape(text, self.text_size, style);
+                    let mut gis = shaped.glyph_infos.iter().peekable();
+                    for j in text.grapheme_idxs() {
+                        while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
+                            if cluster >= j as u32 {
+                                break;
+                            }
+                            let gi = gis.next().unwrap();
+                            cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
                         }
-                        let gi = gis.next().unwrap();
+                        if let Some(gi) = gis.peek() {
+                            let aw = gi.advance.width.to_f32();
+                            let x = cursor_x.get() + aw;
+                            if point.x <= x {
+                                return SplitCbRes::Stop;
+                            }
+                        }
+                        gidx.set(gidx.get() + 1);
+                    }
+                    while let Some(gi) = gis.next() {
                         cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
                     }
-                    if let Some(gi) = gis.peek() {
-                        let aw = gi.advance.width.to_f32();
-                        let x = cursor_x.get() + aw;
-                        if point.x <= x {
-                            return SplitCbRes::Stop;
-                        }
-                    }
-                    gidx.set(gidx.get() + 1);
-                }
-                while let Some(gi) = gis.next() {
-                    cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
-                }
-                return SplitCbRes::Continue;
-            },
-        );
+                    return SplitCbRes::Continue;
+                },
+            );
+        }
 
         self.cursor.line_gidx = gidx.get();
         self.cursor.sync_gidx(data, tab_width);
-        self.snap_to_cursor(data, tab_width, true);
+        self.snap_to_cursor(data, tab_width, styles, true);
     }
 
-    pub(super) fn snap_to_cursor(&mut self, data: &Rope, tab_width: usize, update_global_x: bool) {
+    pub(super) fn snap_to_cursor(
+        &mut self,
+        data: &Rope,
+        tab_width: usize,
+        styles: &StyleRanges,
+        update_global_x: bool,
+    ) {
         // Limit cursor based on cursor style
         self.cursor
             .limit_for_style(data, tab_width, update_global_x);
 
         // Snap to Y
-        self.snap_to_line(self.cursor.line_num, data, tab_width);
+        self.snap_to_line(self.cursor.line_num, data, tab_width, styles);
 
         // Snap to X
-        let line = data.line(self.cursor.line_num);
         let mut text_font = self.bed_handle.text_font();
-        let text_style = TextStyle::default();
-        let space_metrics = text_font.space_metrics(self.text_size, text_style);
-        let sp_awidth = space_metrics.advance.width.to_f32();
-
+        let space_metrics = text_font.space_metrics(self.text_size, TextStyle::default());
         let cursor_x = Cell::new(0.0);
-        let cursor_block_width = Cell::new(sp_awidth);
+        let cursor_block_width = Cell::new(space_metrics.advance.width.to_f32());
         let line_gidx = self.cursor.line_gidx;
         let gidx = Cell::new(0);
 
-        split_text(
-            &line,
-            tab_width,
-            |n| {
-                if (gidx.get()..gidx.get() + n).contains(&line_gidx) {
-                    cursor_x.set(cursor_x.get() + sp_awidth * (line_gidx - gidx.get()) as f32);
-                    SplitCbRes::Stop
-                } else {
-                    cursor_x.set(cursor_x.get() + sp_awidth * n as f32);
-                    gidx.set(gidx.get() + n);
-                    SplitCbRes::Continue
-                }
-            },
-            |text| {
-                let shaped = text_font.shape(text, self.text_size, TextStyle::default());
-                let mut gis = shaped.glyph_infos.iter().peekable();
-                for j in text.grapheme_idxs() {
-                    while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
-                        if cluster >= j as u32 {
-                            break;
+        let line = data.line(self.cursor.line_num);
+        let start_cidx = data.line_to_char(self.cursor.line_num);
+        let end_cidx = start_cidx + line.len_chars();
+
+        for (range, &style) in styles.style.iter_range(start_cidx..end_cidx).unwrap() {
+            let range = range.start - start_cidx..range.end - start_cidx;
+            let space_metrics = text_font.space_metrics(self.text_size, style);
+            let sp_awidth = space_metrics.advance.width.to_f32();
+            split_text(
+                &line.slice(range),
+                tab_width,
+                |n| {
+                    if (gidx.get()..gidx.get() + n).contains(&line_gidx) {
+                        cursor_x.set(cursor_x.get() + sp_awidth * (line_gidx - gidx.get()) as f32);
+                        SplitCbRes::Stop
+                    } else {
+                        cursor_x.set(cursor_x.get() + sp_awidth * n as f32);
+                        gidx.set(gidx.get() + n);
+                        SplitCbRes::Continue
+                    }
+                },
+                |text| {
+                    let shaped = text_font.shape(text, self.text_size, style);
+                    let mut gis = shaped.glyph_infos.iter().peekable();
+                    for j in text.grapheme_idxs() {
+                        while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
+                            if cluster >= j as u32 {
+                                break;
+                            }
+                            let gi = gis.next().unwrap();
+                            cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
                         }
-                        let gi = gis.next().unwrap();
+                        if gidx.get() == line_gidx {
+                            if let Some(gi) = gis.peek() {
+                                cursor_block_width.set(gi.advance.width.to_f32());
+                            }
+                            return SplitCbRes::Stop;
+                        }
+                        gidx.set(gidx.get() + 1);
+                    }
+                    while let Some(gi) = gis.next() {
                         cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
                     }
-                    if gidx.get() == line_gidx {
-                        if let Some(gi) = gis.peek() {
-                            cursor_block_width.set(gi.advance.width.to_f32());
-                        }
-                        return SplitCbRes::Stop;
-                    }
-                    gidx.set(gidx.get() + 1);
-                }
-                while let Some(gi) = gis.next() {
-                    cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
-                }
-                SplitCbRes::Continue
-            },
-        );
+                    SplitCbRes::Continue
+                },
+            );
+        }
 
         let cursor_width = if self.cursor.style == CursorStyle::Line {
             CURSOR_WIDTH
@@ -229,18 +252,17 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    fn snap_to_line(&mut self, linum: usize, data: &Rope, tab_width: usize) {
+    fn snap_to_line(&mut self, linum: usize, data: &Rope, tab_width: usize, styles: &StyleRanges) {
         self.sanity_check(data);
         if linum <= self.start_line {
             self.start_line = linum;
             self.off.y = 0;
         } else {
-            let mut iter = data.lines_at(linum + 1);
             let mut start_line = linum + 1;
             let mut height = 0;
-            while let Some(line) = iter.prev() {
+            while start_line > 0 {
                 start_line -= 1;
-                let metrics = self.line_metrics(&line, tab_width);
+                let metrics = self.line_metrics(start_line, data, tab_width, styles);
                 height += metrics.height;
                 if height >= self.rect.height() {
                     self.start_line = start_line;
@@ -261,6 +283,7 @@ impl View {
         scroll: Vector2D<i32, PixelSize>,
         data: &Rope,
         tab_width: usize,
+        styles: &StyleRanges,
     ) {
         self.sanity_check(data);
         self.off += scroll;
@@ -268,14 +291,14 @@ impl View {
         // Scroll y
         while self.off.y < 0 && self.start_line > 0 {
             self.start_line -= 1;
-            let metrics = self.line_metrics(&data.line(self.start_line), tab_width);
+            let metrics = self.line_metrics(self.start_line, data, tab_width, styles);
             self.off.y += metrics.height as i32;
         }
         if self.off.y < 0 {
             self.off.y = 0;
         }
         while self.off.y > 0 {
-            let metrics = self.line_metrics(&data.line(self.start_line), tab_width);
+            let metrics = self.line_metrics(self.start_line, data, tab_width, styles);
             if metrics.height as i32 > self.off.y {
                 break;
             }
@@ -293,8 +316,8 @@ impl View {
         } else {
             let mut height = -self.off.y;
             let mut max_xoff = 0i32;
-            for line in data.lines_at(self.start_line) {
-                let metrics = self.line_metrics(&line, tab_width);
+            for linum in self.start_line..data.len_lines() {
+                let metrics = self.line_metrics(linum, data, tab_width, styles);
                 if metrics.width as i32 > max_xoff {
                     max_xoff = metrics.width as i32;
                 }
@@ -315,7 +338,13 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    pub(super) fn draw(&mut self, data: &Rope, painter: &mut Painter, tab_width: usize) {
+    pub(super) fn draw(
+        &mut self,
+        painter: &mut Painter,
+        data: &Rope,
+        tab_width: usize,
+        styles: &StyleRanges,
+    ) {
         self.sanity_check(data);
         let gutter_width = self.gutter_width(data) as f32;
         let mut textview_rect = self.rect.cast();
@@ -334,7 +363,17 @@ impl View {
             let mut linum = self.start_line;
             let line_pad = f26_6::from(self.bed_handle.text_line_pad() as f32);
 
+            let mut start_cidx = data.line_to_char(self.start_line);
+
             for rope_line in data.lines_at(self.start_line) {
+                let end_cidx = start_cidx + rope_line.len_chars();
+                let style_type = if start_cidx == end_cidx {
+                    StyleType::Const(0..0, TextStyle::default(), theme.textview.foreground, false)
+                } else {
+                    StyleType::Range(styles.sub_range(start_cidx..end_cidx))
+                };
+                start_cidx = end_cidx;
+
                 origin.y += line_pad.to_f32();
                 if origin.y >= self.rect.height() as f32 {
                     break;
@@ -350,12 +389,12 @@ impl View {
                 };
                 let (ascender, descender) = text_ctx.draw_line(
                     &rope_line,
+                    style_type,
                     tab_width,
                     origin,
                     textview_rect.width(),
                     text_cursor,
                     self.text_size,
-                    theme.textview.foreground,
                     TextAlign::Left,
                 );
                 if self.show_gutter {
@@ -387,14 +426,15 @@ impl View {
                 buf.clear();
                 write!(&mut buf, "{}", linum).unwrap();
                 let origin = point2(gutter_padding, base - ascender);
+                let fgcol = theme.gutter.foreground;
                 text_ctx.draw_line(
                     &buf.as_str(),
+                    StyleType::Const(0..buf.len(), TextStyle::default(), fgcol, false),
                     tab_width,
                     origin,
                     gutter_rect.width() - gutter_padding,
                     None,
                     text_size,
-                    theme.gutter.foreground,
                     TextAlign::Right,
                 );
             }
@@ -407,32 +447,44 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    fn line_metrics(&self, line: &RopeSlice, tab_width: usize) -> LineMetrics {
+    fn line_metrics(
+        &self,
+        linum: usize,
+        data: &Rope,
+        tab_width: usize,
+        styles: &StyleRanges,
+    ) -> LineMetrics {
         let mut text_font = self.bed_handle.text_font();
-        let text_style = TextStyle::default();
-        let space_metrics = text_font.space_metrics(self.text_size, text_style);
+        let line = data.line(linum);
+        let start_cidx = data.line_to_char(linum);
+        let end_cidx = start_cidx + line.len_chars();
+        let space_metrics = text_font.space_metrics(self.text_size, TextStyle::default());
         let state = RefCell::new((space_metrics.ascender, space_metrics.descender, 0.0));
         let line_pad = f26_6::from(self.bed_handle.text_line_pad() as f32);
-        split_text(
-            line,
-            tab_width,
-            |n| {
-                state.borrow_mut().2 += space_metrics.advance.width.to_f32() * n as f32;
-                SplitCbRes::Continue
-            },
-            |text| {
-                let mut inner = state.borrow_mut();
-                let shaped = text_font.shape(text, self.text_size, TextStyle::default());
-                if shaped.ascender > inner.0 {
-                    inner.0 = shaped.ascender;
-                }
-                if shaped.descender > inner.1 {
-                    inner.1 = shaped.descender;
-                }
-                inner.2 += shaped.width.to_f32();
-                SplitCbRes::Continue
-            },
-        );
+        for (range, &style) in styles.style.iter_range(start_cidx..end_cidx).unwrap() {
+            let range = range.start - start_cidx..range.end - start_cidx;
+            let space_metrics = text_font.space_metrics(self.text_size, style);
+            split_text(
+                &line.slice(range),
+                tab_width,
+                |n| {
+                    state.borrow_mut().2 += space_metrics.advance.width.to_f32() * n as f32;
+                    SplitCbRes::Continue
+                },
+                |text| {
+                    let mut inner = state.borrow_mut();
+                    let shaped = text_font.shape(text, self.text_size, style);
+                    if shaped.ascender > inner.0 {
+                        inner.0 = shaped.ascender;
+                    }
+                    if shaped.descender > inner.1 {
+                        inner.1 = shaped.descender;
+                    }
+                    inner.2 += shaped.width.to_f32();
+                    SplitCbRes::Continue
+                },
+            );
+        }
         let state = &*state.borrow();
         LineMetrics {
             height: (state.0 - state.1 + line_pad * 2.0).to_f32().ceil() as u32,

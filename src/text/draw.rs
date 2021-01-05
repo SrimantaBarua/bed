@@ -1,20 +1,51 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::{Cell, RefCell};
+use std::ops::Range;
 use std::rc::Rc;
 
 use euclid::{point2, size2, Point2D, Rect};
 
-use crate::common::{split_text, PixelSize, RopeOrStr, SplitCbRes};
+use crate::common::{split_text, PixelSize, RopeOrStr, SliceRange, SplitCbRes};
 use crate::painter::WidgetCtx;
 use crate::style::Color;
-use crate::style::{TextSize, TextStyle};
+use crate::style::{StyleSubRanges, TextSize, TextStyle};
 
 use super::{
     f26_6, FontCollectionHandle, FontCoreInner, GlyphAllocInfo, GlyphKey, ShapedSpan, ATLAS_SIZE,
 };
 
 pub(crate) const CURSOR_WIDTH: f32 = 2.0;
+
+pub(crate) enum StyleType<'a, S: SliceRange> {
+    Range(StyleSubRanges<'a, S>),
+    Const(Range<usize>, TextStyle, Color, bool),
+}
+
+impl<'a, S: SliceRange> StyleType<'a, S> {
+    fn iter(self) -> StyleTypeIter<'a, S> {
+        match self {
+            StyleType::Range(r) => StyleTypeIter::Range(r),
+            StyleType::Const(r, s, c, u) => StyleTypeIter::Const(Some((S::from_raw(r), s, c, u))),
+        }
+    }
+}
+
+enum StyleTypeIter<'a, S: SliceRange> {
+    Range(StyleSubRanges<'a, S>),
+    Const(Option<(S, TextStyle, Color, bool)>),
+}
+
+impl<'a, S: SliceRange> Iterator for StyleTypeIter<'a, S> {
+    type Item = (S, TextStyle, Color, bool);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            StyleTypeIter::Range(r) => r.next(),
+            StyleTypeIter::Const(c) => c.take(),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) enum CursorStyle {
@@ -43,7 +74,7 @@ pub(crate) struct TextCursor {
 
 // Internal enum used when drawing line of text
 enum SpanOrSpace {
-    Span(ShapedSpan),
+    Span(ShapedSpan, Color),
     Space(usize),
 }
 
@@ -58,12 +89,12 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
     pub(crate) fn draw_line<S>(
         &mut self,
         line: &S,
+        styles: StyleType<S::SliceRange>,
         tab_width: usize,
         origin: Point2D<f32, PixelSize>,
         width: f32,
         cursor: Option<TextCursor>,
         text_size: TextSize,
-        text_color: Color,
         align: TextAlign,
     ) -> (f32, f32)
     where
@@ -83,66 +114,71 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         let fc = &mut self.fc;
         let spans = RefCell::new(Vec::new());
 
-        split_text(
-            line,
-            tab_width,
-            |n| {
-                if let Some(cursor) = cursor.as_ref() {
-                    if (gidx.get()..gidx.get() + n).contains(&cursor.gidx) {
-                        cursor_x.set(Some(
-                            current_x.get() + sp_awidth * (cursor.gidx - gidx.get()) as f32,
-                        ));
-                    }
-                }
-                gidx.set(gidx.get() + n);
-                current_x.set(current_x.get() + sp_awidth * n as f32);
-                spans.borrow_mut().push(SpanOrSpace::Space(n));
-                if current_x.get() >= width {
-                    SplitCbRes::Stop
-                } else {
-                    SplitCbRes::Continue
-                }
-            },
-            |text| {
-                let shaped = fc.shape(text, text_size, TextStyle::default());
-                let mut gis = shaped.glyph_infos.iter().peekable();
-                for j in text.grapheme_idxs() {
-                    while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
-                        if cluster >= j as u32 {
-                            break;
-                        }
-                        let gi = gis.next().unwrap();
-                        current_x.set(current_x.get() + gi.advance.width.to_f32());
-                    }
+        for (range, style, color, _) in styles.iter() {
+            let space_metrics = fc.space_metrics(text_size, style);
+            let sp_awidth = space_metrics.advance.width.to_f32();
+
+            split_text(
+                &line.slice(range),
+                tab_width,
+                |n| {
                     if let Some(cursor) = cursor.as_ref() {
-                        if gidx.get() == cursor.gidx {
-                            cursor_x.set(Some(current_x.get()));
-                            cursor_underline_height.set(shaped.underline_thickness.to_f32());
-                            cursor_underline_pos.set(shaped.underline_pos.to_f32());
-                            if let Some(gi) = gis.peek() {
-                                cursor_block_width.set(gi.advance.width.to_f32());
+                        if (gidx.get()..gidx.get() + n).contains(&cursor.gidx) {
+                            cursor_x.set(Some(
+                                current_x.get() + sp_awidth * (cursor.gidx - gidx.get()) as f32,
+                            ));
+                        }
+                    }
+                    gidx.set(gidx.get() + n);
+                    current_x.set(current_x.get() + sp_awidth * n as f32);
+                    spans.borrow_mut().push(SpanOrSpace::Space(n));
+                    if current_x.get() >= width {
+                        SplitCbRes::Stop
+                    } else {
+                        SplitCbRes::Continue
+                    }
+                },
+                |text| {
+                    let shaped = fc.shape(text, text_size, style);
+                    let mut gis = shaped.glyph_infos.iter().peekable();
+                    for j in text.grapheme_idxs() {
+                        while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
+                            if cluster >= j as u32 {
+                                break;
+                            }
+                            let gi = gis.next().unwrap();
+                            current_x.set(current_x.get() + gi.advance.width.to_f32());
+                        }
+                        if let Some(cursor) = cursor.as_ref() {
+                            if gidx.get() == cursor.gidx {
+                                cursor_x.set(Some(current_x.get()));
+                                cursor_underline_height.set(shaped.underline_thickness.to_f32());
+                                cursor_underline_pos.set(shaped.underline_pos.to_f32());
+                                if let Some(gi) = gis.peek() {
+                                    cursor_block_width.set(gi.advance.width.to_f32());
+                                }
                             }
                         }
+                        gidx.set(gidx.get() + 1);
                     }
-                    gidx.set(gidx.get() + 1);
-                }
-                while let Some(gi) = gis.next() {
-                    current_x.set(current_x.get() + gi.advance.width.to_f32());
-                }
-                if shaped.ascender > ascender {
-                    ascender = shaped.ascender;
-                }
-                if shaped.descender > descender {
-                    descender = shaped.descender;
-                }
-                spans.borrow_mut().push(SpanOrSpace::Span(shaped));
-                if current_x.get() >= width {
-                    SplitCbRes::Stop
-                } else {
-                    SplitCbRes::Continue
-                }
-            },
-        );
+                    while let Some(gi) = gis.next() {
+                        current_x.set(current_x.get() + gi.advance.width.to_f32());
+                    }
+                    if shaped.ascender > ascender {
+                        ascender = shaped.ascender;
+                    }
+                    if shaped.descender > descender {
+                        descender = shaped.descender;
+                    }
+                    spans.borrow_mut().push(SpanOrSpace::Span(shaped, color));
+                    if current_x.get() >= width {
+                        SplitCbRes::Stop
+                    } else {
+                        SplitCbRes::Continue
+                    }
+                },
+            );
+        }
 
         let text_width = current_x.get();
         let origin = if text_width >= width {
@@ -190,8 +226,8 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                 SpanOrSpace::Space(n) => {
                     pos.x += sp_awidth * (*n as f32);
                 }
-                SpanOrSpace::Span(shaped) => {
-                    self.draw(shaped, pos, text_color);
+                SpanOrSpace::Span(shaped, color) => {
+                    self.draw(shaped, pos, *color);
                     pos.x += shaped.width.to_f32();
                 }
             }
