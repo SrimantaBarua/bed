@@ -38,10 +38,6 @@ impl View {
         }
     }
 
-    pub(super) fn scale_text(&mut self, scale: f64) {
-        self.text_size = self.text_size.scale(scale);
-    }
-
     pub(super) fn update_text_size(&mut self, diff: i16) {
         self.text_size += diff;
     }

@@ -109,7 +109,7 @@ pub(crate) struct Config {
 }
 
 impl Config {
-    pub(crate) fn load(font_core: &mut FontCore, scale_factor: f64) -> Config {
+    pub(crate) fn load(font_core: &mut FontCore) -> Config {
         if let Some(proj_dirs) = ProjectDirs::from("", "sbarua", "bed") {
             // Try loading config
             let cfg_dir_path = proj_dirs.config_dir();
@@ -123,9 +123,9 @@ impl Config {
                     }
                 })
                 .unwrap_or_default()
-                .finalize(font_core, scale_factor)
+                .finalize(font_core)
         } else {
-            ConfigInner::default().finalize(font_core, scale_factor)
+            ConfigInner::default().finalize(font_core)
         }
     }
 }
@@ -194,7 +194,7 @@ struct ConfigInner {
 }
 
 impl ConfigInner {
-    fn finalize(self, font_core: &mut FontCore, scale_factor: f64) -> Config {
+    fn finalize(self, font_core: &mut FontCore) -> Config {
         let theme = self.theme.unwrap_or(DEFAULT_THEME.to_owned());
         let tab_width = self.tab_width.unwrap_or(DEFAULT_TAB_WIDTH);
         let indent_tabs = self.indent_tabs.unwrap_or(DEFAULT_INDENT_TABS);
@@ -203,10 +203,7 @@ impl ConfigInner {
             .textview_font_family
             .and_then(|s| font_core.find(&s))
             .unwrap_or_else(|| font_core.find(DEFAULT_FONT).expect("failed to load font"));
-        let textview_font_size = self
-            .textview_font_size
-            .unwrap_or(DEFAULT_FONT_SIZE)
-            .scale(scale_factor);
+        let textview_font_size = self.textview_font_size.unwrap_or(DEFAULT_FONT_SIZE);
         // Gutter
         let gutter_font = self
             .gutter_font_family

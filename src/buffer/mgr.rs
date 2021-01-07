@@ -26,12 +26,6 @@ impl BufferMgr {
         }
     }
 
-    pub(crate) fn scale_text(&mut self, scale: f64) {
-        for buf in self.path_buffer_map.values_mut() {
-            buf.scale_text(scale);
-        }
-    }
-
     pub(crate) fn empty_buffer(&mut self) -> BufferHandle {
         BufferHandle::create_empty(self.bed_handle.clone(), self.ts_core.clone())
     }

@@ -39,7 +39,6 @@ struct Bed {
     text_tree: textview::TextTree,
     prompt: prompt::Prompt,
     painter: painter::Painter,
-    scale_factor: f64,
     window: window::Window,
     font_core: text::FontCore,
     redraw_required: bool,
@@ -53,12 +52,8 @@ impl Bed {
         let (window, event_loop) = window::Window::new("bed", window_size);
         opengl::gl_init();
         let theme_set = Rc::new(theme::ThemeSet::load());
-        let scale_factor = window.scale_factor();
         let mut font_core = text::FontCore::new();
-        let config = Rc::new(RefCell::new(config::Config::load(
-            &mut font_core,
-            scale_factor,
-        )));
+        let config = Rc::new(RefCell::new(config::Config::load(&mut font_core)));
         let painter = painter::Painter::new(window_size.cast());
 
         let ts_core = Rc::new(ts::TsCore::new());
@@ -93,7 +88,6 @@ impl Bed {
                 text_tree,
                 prompt,
                 window,
-                scale_factor,
                 font_core,
                 redraw_required: true,
                 ts_core,
@@ -124,21 +118,6 @@ impl BedHandle {
             rect.size.height -= cmd_rect.height();
         }
         inner.text_tree.set_rect(rect);
-        inner.window.request_redraw();
-    }
-
-    fn set_scale_factor(&mut self, scale_factor: f64) {
-        let mut inner = self.0.borrow_mut();
-        let scale_amt = scale_factor / inner.scale_factor;
-        {
-            let mut config = inner.config.borrow_mut();
-            config.completion_font_size = config.completion_font_size.scale(scale_amt);
-            config.hover_font_size = config.hover_font_size.scale(scale_amt);
-            config.prompt_font_size = config.prompt_font_size.scale(scale_amt);
-            config.textview_font_size = config.textview_font_size.scale(scale_amt);
-        }
-        inner.buffer_mgr.scale_text(scale_amt);
-        inner.scale_factor = scale_factor;
         inner.window.request_redraw();
     }
 
@@ -203,10 +182,6 @@ fn main() {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(physical_size) => bed.resize_window(physical_size),
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                    // FIXME: Maybe track window size change?
-                    bed.set_scale_factor(scale_factor)
-                }
                 WindowEvent::ModifiersChanged(m) => input_state.update_modifiers(m),
                 WindowEvent::MouseWheel { delta, .. } => input_state.add_scroll_amount(delta),
                 WindowEvent::CursorMoved { position, .. } => {

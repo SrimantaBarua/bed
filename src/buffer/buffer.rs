@@ -74,13 +74,6 @@ impl BufferHandle {
         view.move_cursor_to_point(point, &inner.rope, inner.tab_width, &inner.styles);
     }
 
-    pub(crate) fn scale_text(&mut self, scale: f64) {
-        let inner = &mut *self.0.borrow_mut();
-        for view in inner.views.values_mut() {
-            view.scale_text(scale);
-        }
-    }
-
     pub(crate) fn reload(&mut self) -> IOResult<()> {
         self.0.borrow_mut().reload()
     }
