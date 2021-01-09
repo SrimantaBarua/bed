@@ -237,7 +237,7 @@ impl<T: Clone + Eq> Node<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct RangeTreeIter<'a, T: Clone + Eq> {
     stack: Vec<&'a InnerNode<T>>,
     cur_start: usize,
@@ -260,14 +260,14 @@ impl<'a, T: Clone + Eq> RangeTreeIter<'a, T> {
         assert!(range.end <= root.len);
         let mut node = root;
         let mut stack = Vec::new();
-        let mut cur_start = 0;
+        let cur_start = range.start;
         let cur_end;
         let cur_node;
         loop {
             match &node.typ {
                 NodeTyp::Leaf(leaf) => {
                     cur_node = Some(leaf);
-                    cur_end = cur_start + node.len;
+                    cur_end = cur_start + node.len - range.start;
                     break;
                 }
                 NodeTyp::Inner(inner) => {
@@ -275,14 +275,12 @@ impl<'a, T: Clone + Eq> RangeTreeIter<'a, T> {
                         stack.push(inner);
                         node = &inner.left;
                     } else {
-                        cur_start = inner.left.len;
                         range.start -= inner.left.len;
                         node = &inner.right;
                     }
                 }
             }
         }
-        cur_start += range.start;
         RangeTreeIter {
             stack,
             cur_start,
@@ -336,6 +334,31 @@ mod tests {
             .unwrap()
             .map(|(x, y)| (x, y.clone()))
             .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn iter_range() {
+        let mut tree = RangeTree::new();
+        tree.insert(0..0, 50, 1);
+        tree.insert(5..10, 2, 2);
+        tree.insert(12..17, 2, 3);
+        tree.insert(19..24, 2, 4);
+        tree.insert(13..20, 20, 5);
+        tree.insert(49..54, 20, 6);
+        tree.insert(69..69, 20, 7);
+        assert_eq!(
+            tree.iter_range(14..71)
+                .unwrap()
+                .map(|(x, y)| (x, y.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                (14..33, 5),
+                (33..34, 4),
+                (34..49, 1),
+                (49..69, 6),
+                (69..71, 7),
+            ]
+        );
     }
 
     #[test]
