@@ -1,5 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::fs::read_to_string;
 use std::rc::Rc;
 
 use fnv::FnvHashMap;
@@ -21,56 +22,39 @@ extern "C" {
     fn tree_sitter_toml() -> TSLanguage;
 }
 
-static HIGHLIGHTS: [&str; 11] = [
-    include_str!("../res/tree-sitter/queries/bash/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/c/highlight.scm"),
-    concat!(
-        include_str!("../res/tree-sitter/queries/c/highlight.scm"),
-        include_str!("../res/tree-sitter/queries/cpp/highlight.scm")
-    ),
-    include_str!("../res/tree-sitter/queries/css/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/html/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/javascript/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/lua/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/markdown/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/python/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/rust/highlight.scm"),
-    include_str!("../res/tree-sitter/queries/toml/highlight.scm"),
+const LANGUAGES: [&'static str; 11] = [
+    "bash",
+    "c",
+    "cpp",
+    "css",
+    "html",
+    "javascript",
+    "lua",
+    "markdown",
+    "python",
+    "rust",
+    "toml",
 ];
 
-static FOLDS: [&str; 11] = [
-    include_str!("../res/tree-sitter/queries/bash/fold.scm"),
-    include_str!("../res/tree-sitter/queries/c/fold.scm"),
-    concat!(
-        include_str!("../res/tree-sitter/queries/c/fold.scm"),
-        include_str!("../res/tree-sitter/queries/cpp/fold.scm")
-    ),
-    include_str!("../res/tree-sitter/queries/css/fold.scm"),
-    include_str!("../res/tree-sitter/queries/html/fold.scm"),
-    include_str!("../res/tree-sitter/queries/javascript/fold.scm"),
-    include_str!("../res/tree-sitter/queries/lua/fold.scm"),
-    include_str!("../res/tree-sitter/queries/markdown/fold.scm"),
-    include_str!("../res/tree-sitter/queries/python/fold.scm"),
-    include_str!("../res/tree-sitter/queries/rust/fold.scm"),
-    include_str!("../res/tree-sitter/queries/toml/fold.scm"),
-];
+const QUERY_DIR: &'static str = concat!(env!("CARGO_MANIFEST_DIR"), "/res/tree-sitter/queries");
 
-static INDENTS: [&str; 11] = [
-    include_str!("../res/tree-sitter/queries/bash/indent.scm"),
-    include_str!("../res/tree-sitter/queries/c/indent.scm"),
-    concat!(
-        include_str!("../res/tree-sitter/queries/c/indent.scm"),
-        include_str!("../res/tree-sitter/queries/cpp/indent.scm")
-    ),
-    include_str!("../res/tree-sitter/queries/css/indent.scm"),
-    include_str!("../res/tree-sitter/queries/html/indent.scm"),
-    include_str!("../res/tree-sitter/queries/javascript/indent.scm"),
-    include_str!("../res/tree-sitter/queries/lua/indent.scm"),
-    include_str!("../res/tree-sitter/queries/markdown/indent.scm"),
-    include_str!("../res/tree-sitter/queries/python/indent.scm"),
-    include_str!("../res/tree-sitter/queries/rust/indent.scm"),
-    include_str!("../res/tree-sitter/queries/toml/indent.scm"),
-];
+fn highlight_paths() -> impl Iterator<Item = String> {
+    LANGUAGES
+        .iter()
+        .map(|lang| QUERY_DIR.to_owned() + "/" + lang + "/highlight.scm")
+}
+
+fn fold_paths() -> impl Iterator<Item = String> {
+    LANGUAGES
+        .iter()
+        .map(|lang| QUERY_DIR.to_owned() + "/" + lang + "/fold.scm")
+}
+
+fn indent_paths() -> impl Iterator<Item = String> {
+    LANGUAGES
+        .iter()
+        .map(|lang| QUERY_DIR.to_owned() + "/" + lang + "/indent.scm")
+}
 
 pub(crate) struct TsLang {
     pub(crate) parser: Parser,
@@ -108,27 +92,25 @@ impl TsCore {
             eprintln!("failed to load {}: {}: {:?}", s, i, e);
             Query::new(languages[i], "").unwrap()
         };
-        let highlights = HIGHLIGHTS
-            .iter()
+        let highlights = highlight_paths()
             .enumerate()
             .map(|(i, s)| {
-                Rc::new(
-                    Query::new(languages[i], s).unwrap_or_else(|e| query_err(e, i, "highlight")),
-                )
+                let b = read_to_string(&s).expect("failed to read highlights");
+                Rc::new(Query::new(languages[i], &b).unwrap_or_else(|e| query_err(e, i, s)))
             })
             .collect();
-        let folds = FOLDS
-            .iter()
+        let folds = fold_paths()
             .enumerate()
             .map(|(i, s)| {
-                Rc::new(Query::new(languages[i], s).unwrap_or_else(|e| query_err(e, i, "fold")))
+                let b = read_to_string(&s).expect("failed to read folds");
+                Rc::new(Query::new(languages[i], &b).unwrap_or_else(|e| query_err(e, i, s)))
             })
             .collect();
-        let indents = INDENTS
-            .iter()
+        let indents = indent_paths()
             .enumerate()
             .map(|(i, s)| {
-                Rc::new(Query::new(languages[i], s).unwrap_or_else(|e| query_err(e, i, "indent")))
+                let b = read_to_string(&s).expect("failed to read indents");
+                Rc::new(Query::new(languages[i], &b).unwrap_or_else(|e| query_err(e, i, s)))
             })
             .collect();
         let mut exts = FnvHashMap::default();

@@ -53,17 +53,23 @@ impl StyleRanges {
 
     pub(crate) fn set_style(&mut self, range: Range<usize>, style: TextStyle) {
         let len = range.len();
-        self.style.insert(range, len, style);
+        if len > 0 {
+            self.style.insert(range, len, style);
+        }
     }
 
     pub(crate) fn set_color(&mut self, range: Range<usize>, color: Color) {
         let len = range.len();
-        self.color.insert(range, len, color);
+        if len > 0 {
+            self.color.insert(range, len, color);
+        }
     }
 
     pub(crate) fn set_under(&mut self, range: Range<usize>, under: bool) {
         let len = range.len();
-        self.under.insert(range, len, under);
+        if len > 0 {
+            self.under.insert(range, len, under);
+        }
     }
 
     pub(crate) fn sub_range<S: SliceRange>(&self, range: Range<usize>) -> StyleSubRanges<S> {
@@ -82,7 +88,7 @@ impl StyleRanges {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct StyleSubRanges<'a, S: SliceRange> {
     styles: Peekable<RangeTreeIter<'a, TextStyle>>,
     colors: Peekable<RangeTreeIter<'a, Color>>,

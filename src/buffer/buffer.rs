@@ -3,7 +3,7 @@
 use std::cell::{RefCell, RefMut};
 use std::cmp::min;
 use std::fs::File;
-use std::io::{Result as IOResult, Write};
+use std::io::{Result as IOResult, Write as IOWrite};
 use std::ops::Range;
 use std::path::Path;
 use std::rc::Rc;
@@ -11,12 +11,12 @@ use std::rc::Rc;
 use euclid::{Point2D, Rect, Vector2D};
 use fnv::FnvHashMap;
 use ropey::Rope;
-use tree_sitter::{InputEdit, Point as TsPoint, Tree};
+use tree_sitter::{InputEdit, Point as TsPoint, QueryCursor, Tree};
 
 use crate::common::{rope_trim_newlines, PixelSize};
 use crate::language::Language;
 use crate::painter::Painter;
-use crate::style::StyleRanges;
+use crate::style::{StyleRanges, TextStyle};
 use crate::text::CursorStyle;
 use crate::ts::{TsCore, TsLang};
 
@@ -674,6 +674,15 @@ impl Buffer {
             }
             */
             self.opttree = Some(tree);
+            self.rehighlight_range(tree_sitter::Range {
+                start_byte: 0,
+                end_byte: self.rope.len_bytes(),
+                start_point: tree_sitter::Point::new(0, 0),
+                end_point: tree_sitter::Point::new(
+                    self.rope.len_lines(),
+                    self.rope.len_bytes() - self.rope.line_to_byte(self.rope.len_lines()),
+                ),
+            })
         }
     }
 
@@ -714,7 +723,52 @@ impl Buffer {
                     .expect("failed to parse");
                 self.opttree = Some(new_tree.clone());
                 for range in old_tree.changed_ranges(&new_tree) {
-                    eprintln!("change: {:?}", range);
+                    self.rehighlight_range(range);
+                }
+            }
+        }
+    }
+
+    fn rehighlight_range(&mut self, range: tree_sitter::Range) {
+        if self.opttree.is_none() || self.opttslang.is_none() {
+            return;
+        }
+        let tree = self.opttree.as_ref().unwrap();
+        let tslang = self.opttslang.as_ref().unwrap();
+        let rope = &self.rope;
+        let theme = self.bed_handle.theme();
+        // Reset highlighting
+        let crange = rope.byte_to_char(range.start_byte)..rope.byte_to_char(range.end_byte);
+        self.styles.set_default(crange, theme.textview.foreground);
+        // Add new highlighting
+        let mut cursor = QueryCursor::new();
+        cursor.set_byte_range(range.start_byte, range.end_byte);
+        let iter = cursor.captures(&tslang.hl_query, tree.root_node(), |node| {
+            let range = node.byte_range();
+            let range = rope.byte_to_char(range.start)..rope.byte_to_char(range.end);
+            rope.slice(range).to_string()
+        });
+        let mut buf = String::new();
+        for (query_match, _) in iter {
+            for capture in query_match.captures {
+                let range = capture.node.byte_range();
+                let crange = rope.byte_to_char(range.start)..rope.byte_to_char(range.end);
+                buf.clear();
+                let mut elem = None;
+                let capture_name = &tslang.hl_query.capture_names()[capture.index as usize];
+                for split in capture_name.split('.') {
+                    if buf.len() > 0 {
+                        buf.push('.');
+                    }
+                    buf.push_str(split);
+                    if let Some(se) = theme.syntax.get(&buf) {
+                        elem = Some(se);
+                    }
+                }
+                if let Some(elem) = elem {
+                    let style = TextStyle::new(elem.weight, elem.slant);
+                    self.styles.set_style(crange.clone(), style);
+                    self.styles.set_color(crange, elem.foreground);
                 }
             }
         }
