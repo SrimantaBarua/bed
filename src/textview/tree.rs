@@ -12,6 +12,7 @@ use crate::common::PixelSize;
 use crate::config::Config;
 use crate::painter::Painter;
 use crate::style::Color;
+use crate::text::CursorStyle;
 use crate::theme::ThemeSet;
 
 use super::view::TextView;
@@ -55,7 +56,9 @@ impl TextTree {
     }
 
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
+        self.set_active_cursor_underline();
         self.root.move_cursor_to_point(point);
+        self.set_active_cursor_block();
     }
 
     pub(crate) fn scroll_views_with_active_acc(
@@ -67,17 +70,81 @@ impl TextTree {
     }
 
     pub(crate) fn split_horizontal(&mut self, buffer: BufferHandle, view_id: BufferViewId) {
+        self.set_active_cursor_underline();
         take(&mut self.root, |root| {
             root.split(buffer, view_id, SplitDir::Horizontal)
         });
         self.root.set_rect(self.root.rect(), self.border_width());
+        self.set_active_cursor_block();
     }
 
     pub(crate) fn split_vertical(&mut self, buffer: BufferHandle, view_id: BufferViewId) {
+        self.set_active_cursor_underline();
         take(&mut self.root, |root| {
             root.split(buffer, view_id, SplitDir::Vertical)
         });
         self.root.set_rect(self.root.rect(), self.border_width());
+        self.set_active_cursor_block();
+    }
+
+    pub(crate) fn set_left_active(&mut self) {
+        self.set_active_cursor_underline();
+        self.root.set_left_active();
+        self.set_active_cursor_block();
+    }
+
+    pub(crate) fn set_right_active(&mut self) {
+        self.set_active_cursor_underline();
+        self.root.set_right_active();
+        self.set_active_cursor_block();
+    }
+
+    pub(crate) fn set_up_active(&mut self) {
+        self.set_active_cursor_underline();
+        self.root.set_up_active();
+        self.set_active_cursor_block();
+    }
+
+    pub(crate) fn set_down_active(&mut self) {
+        self.set_active_cursor_underline();
+        self.root.set_down_active();
+        self.set_active_cursor_block();
+    }
+
+    pub(crate) fn move_left(&mut self) {
+        self.root.move_left();
+    }
+
+    pub(crate) fn move_right(&mut self) {
+        self.root.move_right();
+    }
+
+    pub(crate) fn move_up(&mut self) {
+        self.root.move_up();
+    }
+
+    pub(crate) fn move_down(&mut self) {
+        self.root.move_down();
+    }
+
+    pub(crate) fn cycle_prev(&mut self) {
+        self.set_active_cursor_underline();
+        self.root.cycle_prev();
+        self.set_active_cursor_block();
+    }
+
+    pub(crate) fn cycle_next(&mut self) {
+        self.set_active_cursor_underline();
+        self.root.cycle_next();
+        self.set_active_cursor_block();
+    }
+
+    pub(crate) fn grow_active(&mut self) {
+        self.root.grow_active();
+    }
+
+    pub(crate) fn shrink_active(&mut self) {
+        self.root.shrink_active();
     }
 
     fn border_color(&self) -> Color {
@@ -93,9 +160,21 @@ impl TextTree {
             .textview
             .border_width
     }
+
+    fn set_active_cursor_underline(&mut self) {
+        let mut ctx = self.active_mut().edit_ctx();
+        ctx.set_cursor_style(CursorStyle::Underline);
+        ctx.snap_to_cursor(true);
+    }
+
+    fn set_active_cursor_block(&mut self) {
+        let mut ctx = self.active_mut().edit_ctx();
+        ctx.set_cursor_style(CursorStyle::Block);
+        ctx.snap_to_cursor(true);
+    }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 enum SplitDir {
     Horizontal,
     Vertical,
@@ -313,5 +392,185 @@ impl Node {
         match self {
             Node::Leaf { rect, .. } | Node::Inner { rect, .. } => *rect,
         }
+    }
+
+    fn set_rightmost_active(&mut self) {
+        match self {
+            Node::Leaf { .. } => {}
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => match split_dir {
+                SplitDir::Horizontal => children[*active].set_rightmost_active(),
+                SplitDir::Vertical => *active = children.len() - 1,
+            },
+        }
+    }
+
+    fn set_leftmost_active(&mut self) {
+        match self {
+            Node::Leaf { .. } => {}
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => match split_dir {
+                SplitDir::Horizontal => children[*active].set_leftmost_active(),
+                SplitDir::Vertical => *active = 0,
+            },
+        }
+    }
+
+    fn set_topmost_active(&mut self) {
+        match self {
+            Node::Leaf { .. } => {}
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => match split_dir {
+                SplitDir::Horizontal => *active = 0,
+                SplitDir::Vertical => children[*active].set_leftmost_active(),
+            },
+        }
+    }
+
+    fn set_bottommost_active(&mut self) {
+        match self {
+            Node::Leaf { .. } => {}
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => match split_dir {
+                SplitDir::Horizontal => *active = children.len() - 1,
+                SplitDir::Vertical => children[*active].set_leftmost_active(),
+            },
+        }
+    }
+
+    fn set_left_active(&mut self) -> bool {
+        match self {
+            Node::Leaf { .. } => false,
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => {
+                if children[*active].set_left_active() {
+                    return true;
+                }
+                if *split_dir == SplitDir::Vertical && *active > 0 {
+                    *active = *active - 1;
+                    children[*active].set_rightmost_active();
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
+    fn set_right_active(&mut self) -> bool {
+        match self {
+            Node::Leaf { .. } => false,
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => {
+                if children[*active].set_right_active() {
+                    return true;
+                }
+                if *split_dir == SplitDir::Vertical && *active < children.len() - 1 {
+                    *active = *active + 1;
+                    children[*active].set_leftmost_active();
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
+    fn set_up_active(&mut self) -> bool {
+        match self {
+            Node::Leaf { .. } => false,
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => {
+                if children[*active].set_up_active() {
+                    return true;
+                }
+                if *split_dir == SplitDir::Horizontal && *active > 0 {
+                    *active = *active - 1;
+                    children[*active].set_bottommost_active();
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
+    fn set_down_active(&mut self) -> bool {
+        match self {
+            Node::Leaf { .. } => false,
+            Node::Inner {
+                children,
+                active,
+                split_dir,
+                ..
+            } => {
+                if children[*active].set_down_active() {
+                    return true;
+                }
+                if *split_dir == SplitDir::Horizontal && *active < children.len() - 1 {
+                    *active = *active + 1;
+                    children[*active].set_topmost_active();
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
+    fn move_left(&mut self) {
+        unimplemented!()
+    }
+
+    fn move_right(&mut self) {
+        unimplemented!()
+    }
+
+    fn move_up(&mut self) {
+        unimplemented!()
+    }
+
+    fn move_down(&mut self) {
+        unimplemented!()
+    }
+
+    fn cycle_prev(&mut self) {
+        unimplemented!()
+    }
+
+    fn cycle_next(&mut self) {
+        unimplemented!()
+    }
+
+    fn grow_active(&mut self) {
+        unimplemented!()
+    }
+
+    fn shrink_active(&mut self) {
+        unimplemented!()
     }
 }

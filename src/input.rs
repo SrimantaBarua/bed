@@ -13,7 +13,7 @@ use glutin::event::{
 use crate::common::PixelSize;
 use crate::prompt::Prompt;
 use crate::text::CursorStyle;
-use crate::textview::TextViewEditCtx;
+use crate::textview::{TextTree, TextViewEditCtx};
 use crate::{Bed, BedHandle};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -34,6 +34,7 @@ enum Mode {
         action_mul: Option<usize>,
     },
     Insert,
+    PaneUpdate,
 }
 
 pub(crate) struct InputState {
@@ -388,6 +389,28 @@ impl InputState {
                     _ => bed.edit_prompt().insert_char(c),
                 }
             }
+            Mode::PaneUpdate => {
+                let tree = bed.edit_text_tree();
+                let mut valid_input = true;
+                match c {
+                    'h' => tree.set_left_active(),
+                    'H' => tree.move_left(),
+                    'j' => tree.set_down_active(),
+                    'J' => tree.move_down(),
+                    'k' => tree.set_up_active(),
+                    'K' => tree.move_up(),
+                    'l' => tree.set_right_active(),
+                    'L' => tree.move_right(),
+                    'w' => tree.cycle_next(),
+                    'W' => tree.cycle_prev(),
+                    '>' => tree.grow_active(),
+                    '<' => tree.shrink_active(),
+                    _ => valid_input = false,
+                }
+                if valid_input {
+                    self.mode = Mode::Normal { action_mul: None };
+                }
+            }
         }
     }
 
@@ -435,6 +458,7 @@ impl InputState {
                 Mode::Normal { action_mul } => {
                     let act_rep = action_mul.unwrap_or(1);
                     let mut reset_count = true;
+                    let mut next_mode = None;
                     match vkey {
                         // Basic movement
                         VirtualKeyCode::Up => bed.edit_view().move_cursor_up(act_rep),
@@ -443,10 +467,17 @@ impl InputState {
                         VirtualKeyCode::Right => bed.edit_view().move_cursor_right(act_rep),
                         VirtualKeyCode::Home => bed.edit_view().move_cursor_to_line_start(1),
                         VirtualKeyCode::End => bed.edit_view().move_cursor_to_line_end(1),
+                        // Pane update mode
+                        VirtualKeyCode::W if self.modifiers == ModifiersState::CTRL => {
+                            next_mode = Some(Mode::PaneUpdate)
+                        }
                         _ => reset_count = false,
                     }
                     if reset_count {
                         *action_mul = None;
+                    }
+                    if let Some(mode) = next_mode {
+                        self.mode = mode;
                     }
                 }
                 Mode::Delete {
@@ -508,6 +539,10 @@ impl InputState {
                         _ => {}
                     }
                 }
+                Mode::PaneUpdate => match vkey {
+                    VirtualKeyCode::Escape => self.mode = Mode::Normal { action_mul: None },
+                    _ => {}
+                },
             }
         }
     }
@@ -716,6 +751,10 @@ impl<'a> BedEditCtx<'a> {
 
     fn edit_prompt(&mut self) -> &mut Prompt {
         &mut self.bed.prompt
+    }
+
+    fn edit_text_tree(&mut self) -> &mut TextTree {
+        &mut self.bed.text_tree
     }
 
     fn scroll_views_with_active_acc(&mut self, acc: Vector2D<f32, PixelSize>, duration: Duration) {
