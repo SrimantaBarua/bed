@@ -5,7 +5,6 @@ use std::cmp::min;
 use std::fs::File;
 use std::io::{Result as IOResult, Write as IOWrite};
 use std::ops::Range;
-use std::path::Path;
 use std::rc::Rc;
 
 use euclid::{Point2D, Rect, Vector2D};
@@ -13,7 +12,7 @@ use fnv::FnvHashMap;
 use ropey::Rope;
 use tree_sitter::{InputEdit, Point as TsPoint, QueryCursor, Tree};
 
-use crate::common::{rope_trim_newlines, PixelSize};
+use crate::common::{rope_trim_newlines, AbsPath, PixelSize};
 use crate::language::Language;
 use crate::painter::Painter;
 use crate::style::{StyleRanges, TextStyle};
@@ -88,7 +87,7 @@ impl BufferHandle {
     }
 
     pub(super) fn create_from_file(
-        path: &str,
+        path: &AbsPath,
         bed_handle: BufferBedHandle,
         ts_core: Rc<TsCore>,
     ) -> IOResult<BufferHandle> {
@@ -102,7 +101,7 @@ pub(crate) struct Buffer {
     bed_handle: BufferBedHandle,
     rope: Rope,
     tab_width: usize,
-    optpath: Option<String>,
+    optpath: Option<AbsPath>,
     // Tree-sitter stuff
     ts_core: Rc<TsCore>,
     optlanguage: Option<Language>,
@@ -566,11 +565,16 @@ impl Buffer {
         }
     }
 
-    fn from_file(path: &str, bed_handle: BufferBedHandle, ts_core: Rc<TsCore>) -> IOResult<Buffer> {
+    fn from_file(
+        path: &AbsPath,
+        bed_handle: BufferBedHandle,
+        ts_core: Rc<TsCore>,
+    ) -> IOResult<Buffer> {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
             .map(|rope| {
-                let (optlanguage, opttslang) = Path::new(path)
+                let (optlanguage, opttslang) = path
+                    .as_ref()
                     .extension()
                     .and_then(|s| s.to_str())
                     .and_then(|s| ts_core.parser_from_extension(s))
@@ -581,7 +585,7 @@ impl Buffer {
                     bed_handle,
                     views: FnvHashMap::default(),
                     tab_width: 8,
-                    optpath: Some(path.to_owned()),
+                    optpath: Some(path.clone()),
                     ts_core,
                     optlanguage,
                     opttslang,
@@ -625,19 +629,23 @@ impl Buffer {
     }
 
     fn write_file(&mut self, optpath: Option<&str>) -> IOResult<()> {
-        if let Some(path) = optpath.or(self.optpath.as_ref().map(|s| s.as_str())) {
-            let mut f = File::create(path)?;
+        if let Some(path) = optpath
+            .map(|s| AbsPath::from(s))
+            .or(self.optpath.as_ref().map(|s| s.clone()))
+        {
+            let mut f = File::create(&path)?;
             for c in self.rope.chunks() {
                 f.write(c.as_bytes())?;
             }
             if self.optpath.is_none() {
-                let (optlanguage, opttslang) = Path::new(path)
+                let (optlanguage, opttslang) = path
+                    .as_ref()
                     .extension()
                     .and_then(|s| s.to_str())
                     .and_then(|s| self.ts_core.parser_from_extension(s))
                     .map(|(l, t)| (Some(l), Some(t)))
                     .unwrap_or((None, None));
-                self.optpath = Some(path.to_owned());
+                self.optpath = Some(path.clone());
                 self.optlanguage = optlanguage;
                 self.opttslang = opttslang;
                 self.recreate_parse_tree();

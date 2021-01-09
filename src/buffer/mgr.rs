@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use fnv::FnvHashMap;
 
+use crate::common::AbsPath;
 use crate::ts::TsCore;
 
 use super::{BufferBedHandle, BufferHandle, BufferViewId};
@@ -12,7 +13,7 @@ use super::{BufferBedHandle, BufferHandle, BufferViewId};
 pub(crate) struct BufferMgr {
     bed_handle: BufferBedHandle,
     next_view_id: usize,
-    path_buffer_map: FnvHashMap<String, BufferHandle>,
+    path_buffer_map: FnvHashMap<AbsPath, BufferHandle>,
     ts_core: Rc<TsCore>,
 }
 
@@ -31,17 +32,18 @@ impl BufferMgr {
     }
 
     pub(crate) fn read_file(&mut self, path: &str) -> IOResult<BufferHandle> {
-        if let Some(buf_handle) = self.path_buffer_map.get(path) {
+        let path = AbsPath::from(path);
+        if let Some(buf_handle) = self.path_buffer_map.get(&path) {
             let mut buf_handle = buf_handle.clone();
             buf_handle.reload()?;
             Ok(buf_handle)
         } else {
             let buffer = BufferHandle::create_from_file(
-                path,
+                &path,
                 self.bed_handle.clone(),
                 self.ts_core.clone(),
             )?;
-            self.path_buffer_map.insert(path.to_owned(), buffer.clone());
+            self.path_buffer_map.insert(path, buffer.clone());
             Ok(buffer)
         }
     }

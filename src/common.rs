@@ -1,6 +1,8 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
+use std::env;
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 use std::str::Chars as StrChars;
 
 use ropey::{iter::Chars as RopeChars, iter::Chunks, str_utils::byte_to_char_idx, RopeSlice};
@@ -10,8 +12,38 @@ use unicode_segmentation::{
 };
 
 // -------- Dummy data types --------
+
 pub(crate) struct PixelSize;
 pub(crate) struct TextureSize;
+
+// -------- Absolute paths --------
+
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub(crate) struct AbsPath(PathBuf);
+
+impl AsRef<Path> for AbsPath {
+    fn as_ref(&self) -> &Path {
+        self.0.as_path()
+    }
+}
+
+impl AbsPath {
+    pub(crate) fn from<P: AsRef<Path>>(p: P) -> AbsPath {
+        let path = p.as_ref();
+        if path.is_absolute() {
+            AbsPath(path.to_path_buf())
+        } else if path.starts_with("~") {
+            let path = path.strip_prefix("~").unwrap();
+            let mut home = PathBuf::from(env::var("HOME").expect("failed to get HOME directory"));
+            home.push(path);
+            AbsPath(home)
+        } else {
+            let mut cur_dir = env::current_dir().expect("failed to get current directory");
+            cur_dir.push(path);
+            AbsPath(cur_dir)
+        }
+    }
+}
 
 // -------- Rope stuff --------
 
