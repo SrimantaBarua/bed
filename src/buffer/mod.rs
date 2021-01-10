@@ -1,7 +1,6 @@
 // (C) 2020 Srimanta Barua <srimanta.barua1@gmail.com>
 
 use std::cell::{Ref, RefCell};
-use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::config::Config;
@@ -29,69 +28,62 @@ impl BufferViewId {
 
 // Handle to editor state for buffer module
 #[derive(Clone)]
-pub(crate) struct BufferBedHandle(Rc<RefCell<BufferBedState>>);
+pub(crate) struct BufferBedHandle {
+    config: Rc<RefCell<Config>>,
+    theme_set: Rc<ThemeSet>,
+    needs_redraw: Rc<RefCell<bool>>,
+}
 
 impl BufferBedHandle {
     pub(crate) fn new(config: Rc<RefCell<Config>>, theme_set: Rc<ThemeSet>) -> BufferBedHandle {
-        BufferBedHandle(Rc::new(RefCell::new(BufferBedState {
-            needs_redraw: false,
+        BufferBedHandle {
+            needs_redraw: Rc::new(RefCell::new(false)),
             config,
             theme_set,
-        })))
+        }
     }
 
     pub(crate) fn collect_redraw_state(&mut self) -> bool {
-        let mut inner = self.0.borrow_mut();
-        let ret = inner.needs_redraw;
-        inner.needs_redraw = false;
+        let mut needs_redraw = self.needs_redraw.borrow_mut();
+        let ret = *needs_redraw;
+        *needs_redraw = false;
         ret
     }
 
     fn text_line_pad(&self) -> u32 {
-        self.0.borrow().config.borrow().textview_line_padding
+        self.config().textview_line_padding
     }
 
     fn text_font(&self) -> FontCollectionHandle {
-        self.0.borrow().config.borrow().textview_font.clone()
+        self.config().textview_font.clone()
     }
 
     fn text_font_size(&self) -> TextSize {
-        self.0.borrow().config.borrow().textview_font_size
+        self.config().textview_font_size
     }
 
     fn gutter_font(&self) -> FontCollectionHandle {
-        self.0.borrow().config.borrow().gutter_font.clone()
+        self.config().gutter_font.clone()
     }
 
     fn gutter_font_scale(&self) -> f64 {
-        self.0.borrow().config.borrow().gutter_font_scale
+        self.config().gutter_font_scale
     }
 
     fn gutter_padding(&self) -> u32 {
-        self.0.borrow().config.borrow().gutter_padding
+        self.config().gutter_padding
     }
 
-    fn theme(&self) -> ThemeGuard {
-        ThemeGuard(self.0.borrow())
+    fn theme(&self) -> &Theme {
+        self.theme_set.get(&self.config.borrow().theme)
+    }
+
+    fn config(&self) -> Ref<Config> {
+        self.config.borrow()
     }
 
     fn request_redraw(&mut self) {
-        self.0.borrow_mut().needs_redraw = true;
-    }
-}
-
-struct BufferBedState {
-    needs_redraw: bool,
-    config: Rc<RefCell<Config>>,
-    theme_set: Rc<ThemeSet>,
-}
-
-struct ThemeGuard<'a>(Ref<'a, BufferBedState>);
-
-impl<'a> Deref for ThemeGuard<'a> {
-    type Target = Theme;
-
-    fn deref(&self) -> &Theme {
-        self.0.theme_set.get(&self.0.config.borrow().theme)
+        let mut needs_redraw = self.needs_redraw.borrow_mut();
+        *needs_redraw = true;
     }
 }

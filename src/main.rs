@@ -47,7 +47,7 @@ struct Bed {
 }
 
 impl Bed {
-    fn new() -> (Bed, glutin::event_loop::EventLoop<()>) {
+    fn new(args: &clap::ArgMatches) -> (Bed, glutin::event_loop::EventLoop<()>) {
         let window_size = WINDOW_SIZE;
         let (window, event_loop) = window::Window::new("bed", window_size);
         opengl::gl_init();
@@ -63,7 +63,13 @@ impl Bed {
 
         let buffer_state = buffer::BufferBedHandle::new(config.clone(), theme_set.clone());
         let mut buffer_mgr = buffer::BufferMgr::new(buffer_state.clone(), ts_core.clone());
-        let first_buffer = buffer_mgr.read_file("src/buffer/view.rs").unwrap();
+        let first_buffer = match args.value_of("FILE") {
+            Some(path) => buffer_mgr.read_file(path).unwrap_or_else(|e| {
+                eprintln!("failed to open file: {}: {}", path, e);
+                buffer_mgr.empty_buffer()
+            }),
+            _ => buffer_mgr.empty_buffer(),
+        };
         let first_view_id = buffer_mgr.next_view_id();
 
         let mut textview_size = window.size();
@@ -146,7 +152,8 @@ impl BedHandle {
 }
 
 fn main() {
-    let (bed, event_loop) = Bed::new();
+    let args = parse_args();
+    let (bed, event_loop) = Bed::new(&args);
     let mut bed = BedHandle::new(bed);
     let mut input_state = input::InputState::new(bed.clone());
 
@@ -207,4 +214,19 @@ fn main() {
             *control_flow = ControlFlow::Exit;
         }
     });
+}
+
+fn parse_args() -> clap::ArgMatches<'static> {
+    use clap::{App, Arg};
+    App::new(clap::crate_name!())
+        .version(clap::crate_version!())
+        .author(clap::crate_authors!())
+        .about(clap::crate_description!())
+        .arg(
+            Arg::with_name("FILE")
+                .help("file to open")
+                .required(false)
+                .index(1),
+        )
+        .get_matches()
 }

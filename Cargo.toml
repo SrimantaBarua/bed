@@ -10,6 +10,7 @@ build = "build.rs"
 cc = { version = "1.0", features = ["parallel"] }
 
 [dependencies]
+clap = "2.33"
 directories = "2.0"
 euclid = "0.22.1"
 fnv = "1.0.7"

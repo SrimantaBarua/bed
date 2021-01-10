@@ -101,6 +101,7 @@ pub(crate) struct Buffer {
     bed_handle: BufferBedHandle,
     rope: Rope,
     tab_width: usize,
+    indent_tabs: bool,
     optpath: Option<AbsPath>,
     // Tree-sitter stuff
     ts_core: Rc<TsCore>,
@@ -353,13 +354,21 @@ impl Buffer {
         let view = self.views.get_mut(view_id).unwrap();
         let cidx = view.cursor.cidx;
         let old_rope = self.rope.clone();
-        self.rope.insert_char(cidx, c);
+        let num_chars = if !self.indent_tabs && c == '\t' {
+            let next_stop = ((view.cursor.line_cidx / self.tab_width) + 1) * self.tab_width;
+            let num_chars = next_stop - view.cursor.line_cidx;
+            self.rope.insert(cidx, &" ".repeat(num_chars));
+            num_chars
+        } else {
+            self.rope.insert_char(cidx, c);
+            1
+        };
         let fgcol = self.bed_handle.theme().textview.foreground;
-        self.styles.insert_default(cidx, 1, fgcol);
-        self.edit_tree(old_rope, cidx..cidx, 1);
+        self.styles.insert_default(cidx, num_chars, fgcol);
+        self.edit_tree(old_rope, cidx..cidx, num_chars);
         for view in self.views.values_mut() {
             if view.cursor.cidx >= cidx {
-                view.cursor.cidx += 1;
+                view.cursor.cidx += num_chars;
                 view.cursor
                     .sync_and_update_char_idx_left(&self.rope, self.tab_width);
             }
@@ -551,11 +560,16 @@ impl Buffer {
 
     // -------- Internal stuff --------
     fn empty(bed_handle: BufferBedHandle, ts_core: Rc<TsCore>) -> Buffer {
+        let (tab_width, indent_tabs) = {
+            let config = bed_handle.config();
+            (config.tab_width, config.indent_tabs)
+        };
         Buffer {
             views: FnvHashMap::default(),
             rope: Rope::new(),
             bed_handle,
-            tab_width: 8,
+            tab_width,
+            indent_tabs,
             optpath: None,
             ts_core,
             optlanguage: None,
@@ -573,6 +587,10 @@ impl Buffer {
         File::open(path)
             .and_then(|f| Rope::from_reader(f))
             .map(|rope| {
+                let (mut tab_width, mut indent_tabs) = {
+                    let config = bed_handle.config();
+                    (config.tab_width, config.indent_tabs)
+                };
                 let (optlanguage, opttslang) = path
                     .as_ref()
                     .extension()
@@ -580,11 +598,19 @@ impl Buffer {
                     .and_then(|s| ts_core.parser_from_extension(s))
                     .map(|(l, t)| (Some(l), Some(t)))
                     .unwrap_or((None, None));
+                if let Some(lang) = &optlanguage {
+                    let config = bed_handle.config();
+                    config.language.get(lang).map(|lang| {
+                        tab_width = lang.tab_width;
+                        indent_tabs = lang.indent_tabs;
+                    });
+                }
                 let mut ret = Buffer {
                     rope,
                     bed_handle,
                     views: FnvHashMap::default(),
-                    tab_width: 8,
+                    tab_width,
+                    indent_tabs,
                     optpath: Some(path.clone()),
                     ts_core,
                     optlanguage,
@@ -645,6 +671,14 @@ impl Buffer {
                     .and_then(|s| self.ts_core.parser_from_extension(s))
                     .map(|(l, t)| (Some(l), Some(t)))
                     .unwrap_or((None, None));
+                if let Some(lang) = &optlanguage {
+                    let (tab_width, indent_tabs) = (&mut self.tab_width, &mut self.indent_tabs);
+                    let config = self.bed_handle.config();
+                    config.language.get(lang).map(|lang| {
+                        *tab_width = lang.tab_width;
+                        *indent_tabs = lang.indent_tabs;
+                    });
+                }
                 self.optpath = Some(path.clone());
                 self.optlanguage = optlanguage;
                 self.opttslang = opttslang;
