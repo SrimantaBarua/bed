@@ -10,6 +10,7 @@ use glutin::event::{
     ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
 };
 
+use crate::buffer::Mode as BufferMode;
 use crate::common::PixelSize;
 use crate::prompt::Prompt;
 use crate::text::CursorStyle;
@@ -159,19 +160,23 @@ impl InputState {
                     // Entering insert mode
                     'i' => {
                         next_mode = Some(Mode::Insert);
-                        bed.edit_view().set_cursor_style(CursorStyle::Line)
+                        let mut ctx = bed.edit_view();
+                        ctx.set_cursor_style(CursorStyle::Line);
+                        ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'I' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.move_cursor_to_line_start(1);
+                        ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'a' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.move_cursor_right(1);
+                        ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'A' => {
                         next_mode = Some(Mode::Insert);
@@ -185,6 +190,7 @@ impl InputState {
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.move_cursor_to_line_end(1);
                         ctx.insert_char('\n');
+                        ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'O' => {
                         next_mode = Some(Mode::Insert);
@@ -193,12 +199,14 @@ impl InputState {
                         ctx.move_cursor_to_line_start(1);
                         ctx.insert_char('\n');
                         ctx.move_cursor_up(1);
+                        ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     's' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.delete_right(act_rep);
+                        ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'S' => {
                         next_mode = Some(Mode::Insert);
@@ -206,6 +214,7 @@ impl InputState {
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.move_cursor_to_line_start(1);
                         ctx.delete_to_line_end(act_rep);
+                        ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     // Entering other modes
                     'c' => {
@@ -364,7 +373,10 @@ impl InputState {
                         next_mode = Mode::Normal { action_mul: None };
                     }
                     match next_mode {
-                        Mode::Insert => ctx.set_cursor_style(CursorStyle::Line),
+                        Mode::Insert => {
+                            ctx.set_cursor_style(CursorStyle::Line);
+                            ctx.set_buffer_mode(BufferMode::Insert);
+                        }
                         Mode::Normal { .. } => ctx.set_cursor_style(CursorStyle::Block),
                         _ => unreachable!(),
                     }
@@ -454,6 +466,7 @@ impl InputState {
                         let mut ctx = bed.edit_view();
                         ctx.move_cursor_left(1);
                         ctx.set_cursor_style(CursorStyle::Block);
+                        ctx.set_buffer_mode(BufferMode::Normal);
                     }
                     _ => {}
                 },
@@ -510,6 +523,7 @@ impl InputState {
                         if is_change_mode {
                             self.mode = Mode::Insert;
                             ctx.set_cursor_style(CursorStyle::Line);
+                            ctx.set_buffer_mode(BufferMode::Normal);
                         } else {
                             self.mode = Mode::Normal { action_mul: None };
                             ctx.set_cursor_style(CursorStyle::Block);
@@ -746,6 +760,10 @@ impl<'a> ViewEditCtx<'a> {
 
     fn update_text_size(&mut self, diff: i16) {
         self.view.update_text_size(diff);
+    }
+
+    fn set_buffer_mode(&mut self, mode: BufferMode) {
+        self.view.set_buffer_mode(mode);
     }
 }
 

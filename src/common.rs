@@ -43,6 +43,10 @@ impl AbsPath {
             AbsPath(cur_dir)
         }
     }
+
+    pub(crate) fn file_name(&self) -> Option<&str> {
+        self.0.file_name().and_then(|s| s.to_str())
+    }
 }
 
 // -------- Rope stuff --------

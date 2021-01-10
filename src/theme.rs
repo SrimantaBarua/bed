@@ -56,6 +56,25 @@ impl Default for ThemeGutter {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct ThemeStatus {
+    pub(crate) background: Color,
+    pub(crate) foreground: Color,
+    pub(crate) left_sep: String,
+    pub(crate) right_sep: String,
+}
+
+impl Default for ThemeStatus {
+    fn default() -> ThemeStatus {
+        ThemeStatus {
+            background: Color::new(0xff, 0xff, 0xff, 0xff),
+            foreground: Color::new(0, 0, 0, 0x80),
+            left_sep: "|".to_owned(),
+            right_sep: "|".to_owned(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
 pub(crate) struct ThemePrompt {
     pub(crate) background: Color,
     pub(crate) foreground: Color,
@@ -123,6 +142,7 @@ pub(crate) struct ThemeSyntaxElem {
 pub(crate) struct Theme {
     pub(crate) textview: ThemeTextview,
     pub(crate) gutter: ThemeGutter,
+    pub(crate) status: ThemeStatus,
     pub(crate) hover: ThemeHover,
     pub(crate) completion: ThemeCompletion,
     pub(crate) prompt: ThemePrompt,
@@ -134,6 +154,7 @@ impl Default for Theme {
         Theme {
             textview: ThemeTextview::default(),
             gutter: ThemeGutter::default(),
+            status: ThemeStatus::default(),
             hover: ThemeHover::default(),
             completion: ThemeCompletion::default(),
             prompt: ThemePrompt::default(),

@@ -6,14 +6,16 @@ use std::fmt::Write;
 use euclid::{point2, vec2, Point2D, Rect, Vector2D};
 use ropey::{Rope, RopeSlice};
 
-use crate::buffer::BufferBedHandle;
 use crate::common::{
     rope_is_grapheme_boundary, rope_next_grapheme_boundary, rope_trim_newlines, split_text,
     PixelSize, RopeGraphemes, RopeOrStr, SplitCbRes,
 };
+use crate::config::Config;
 use crate::painter::Painter;
-use crate::style::{StyleRanges, TextSize, TextStyle};
+use crate::style::{TextSize, TextStyle};
 use crate::text::{f26_6, CursorStyle, StyleType, TextAlign, TextCursor, CURSOR_WIDTH};
+
+use super::{buffer::BufferSharedState, BufferBedHandle, Mode};
 
 pub(super) struct View {
     pub(super) cursor: ViewCursor,
@@ -23,10 +25,19 @@ pub(super) struct View {
     start_line: usize,
     bed_handle: BufferBedHandle,
     show_gutter: bool,
+    status_height: u32,
+    shared: BufferSharedState,
+    mode: Mode,
 }
 
 impl View {
-    pub(super) fn new(bed_handle: BufferBedHandle, rect: Rect<u32, PixelSize>) -> View {
+    pub(super) fn new(
+        bed_handle: BufferBedHandle,
+        rect: Rect<u32, PixelSize>,
+        shared: BufferSharedState,
+    ) -> View {
+        let status_height = status_required_height(&bed_handle.config);
+        assert!(status_height < rect.height());
         View {
             rect,
             text_size: bed_handle.text_font_size(),
@@ -35,149 +46,160 @@ impl View {
             bed_handle,
             cursor: ViewCursor::default(),
             show_gutter: true,
+            status_height,
+            shared,
+            mode: Mode::Normal,
         }
+    }
+
+    pub(super) fn set_mode(&mut self, mode: Mode) {
+        self.mode = mode;
+        self.bed_handle.request_redraw();
     }
 
     pub(super) fn update_text_size(&mut self, diff: i16) {
         self.text_size += diff;
+        self.status_height = status_required_height(&self.bed_handle.config);
+        assert!(self.status_height < self.rect.height());
     }
 
-    pub(super) fn set_rect(
-        &mut self,
-        rect: Rect<u32, PixelSize>,
-        data: &Rope,
-        tab_width: usize,
-        styles: &StyleRanges,
-    ) {
+    pub(super) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
         self.rect = rect;
-        self.snap_to_cursor(data, tab_width, styles, true);
+        assert!(self.status_height < self.rect.height());
+        self.snap_to_cursor(true);
     }
 
-    pub(super) fn move_cursor_to_point(
-        &mut self,
-        mut point: Point2D<i32, PixelSize>,
-        data: &Rope,
-        tab_width: usize,
-        styles: &StyleRanges,
-    ) {
-        let rect = self.rect.cast();
-        assert!(rect.contains(point));
-        point -= rect.origin.to_vector();
-        point.x -= self.gutter_width(data) as i32;
-        if point.x < 0 {
-            // TODO: Handle click in gutter
-            return;
-        }
-        self.sanity_check(data);
+    pub(super) fn move_cursor_to_point(&mut self, mut point: Point2D<i32, PixelSize>) {
+        self.sanity_check();
+        {
+            let shared = self.shared.borrow();
+            let data = &shared.rope;
+            let tab_width = shared.tab_width;
+            let styles = &shared.styles;
 
-        // Find line
-        self.cursor.line_num = self.start_line;
-        let mut height = -self.off.y;
-        for linum in self.start_line..data.len_lines() {
-            let metrics = self.line_metrics(linum, data, tab_width, styles);
-            height += metrics.height as i32;
-            if height >= point.y {
-                if height > rect.height() {
-                    self.off.y += height - rect.height();
+            let rect = self.rect.cast();
+            let view_height = rect.height() - self.status_height as i32;
+            assert!(rect.contains(point));
+            point -= rect.origin.to_vector();
+            point.x -= self.gutter_width() as i32;
+            if point.x < 0 {
+                // TODO: Handle click in gutter
+                return;
+            }
+
+            // Find line
+            self.cursor.line_num = self.start_line;
+            let mut height = -self.off.y;
+            for linum in self.start_line..data.len_lines() {
+                let metrics = self.line_metrics(linum);
+                height += metrics.height as i32;
+                if height >= point.y {
+                    if height > view_height {
+                        self.off.y += height - view_height;
+                    }
+                    break;
                 }
-                break;
+                self.cursor.line_num += 1;
+                assert!(height < view_height);
             }
-            self.cursor.line_num += 1;
-            assert!(height < rect.height());
-        }
-        if self.cursor.line_num >= data.len_lines() {
-            self.cursor.line_num = data.len_lines() - 1;
-        }
-        // Trim lines from the top if we need to
-        for linum in self.start_line..data.len_lines() {
-            let metrics = self.line_metrics(linum, data, tab_width, styles);
-            if self.off.y < metrics.height as i32 {
-                break;
+            if self.cursor.line_num >= data.len_lines() {
+                self.cursor.line_num = data.len_lines() - 1;
             }
-            self.off.y -= metrics.height as i32;
-            self.start_line += 1;
-        }
+            // Trim lines from the top if we need to
+            for linum in self.start_line..data.len_lines() {
+                let metrics = self.line_metrics(linum);
+                if self.off.y < metrics.height as i32 {
+                    break;
+                }
+                self.off.y -= metrics.height as i32;
+                self.start_line += 1;
+            }
 
-        // Check cursor position on the line
-        let mut text_font = self.bed_handle.text_font();
-        let cursor_x = Cell::new(-self.off.x as f32);
-        let gidx = Cell::new(0);
-        let point = point.cast::<f32>();
+            // Check cursor position on the line
+            let mut text_font = self.bed_handle.text_font();
+            let cursor_x = Cell::new(-self.off.x as f32);
+            let gidx = Cell::new(0);
+            let point = point.cast::<f32>();
 
-        let line = data.line(self.cursor.line_num);
-        let start_cidx = data.line_to_char(self.cursor.line_num);
-        let end_cidx = start_cidx + line.len_chars();
+            let line = data.line(self.cursor.line_num);
+            let start_cidx = data.line_to_char(self.cursor.line_num);
+            let end_cidx = start_cidx + line.len_chars();
 
-        if let Some(iter) = styles.style.iter_range(start_cidx..end_cidx) {
-            for (range, &style) in iter {
-                let range = range.start - start_cidx..range.end - start_cidx;
-                let space_metrics = text_font.space_metrics(self.text_size, style);
-                let sp_awidth = space_metrics.advance.width.to_f32();
-                split_text(
-                    &line.slice(range),
-                    tab_width,
-                    |n| {
-                        let start = cursor_x.get();
-                        let end = start + sp_awidth * n as f32;
-                        if point.x < end {
-                            let frac = ((point.x - start) * (n as f32) / (end - start)) as usize;
-                            gidx.set(gidx.get() + frac);
-                            SplitCbRes::Stop
-                        } else {
-                            cursor_x.set(cursor_x.get() + sp_awidth * n as f32);
-                            gidx.set(gidx.get() + n);
-                            SplitCbRes::Continue
-                        }
-                    },
-                    |text| {
-                        let shaped = text_font.shape(text, self.text_size, style);
-                        let mut gis = shaped.glyph_infos.iter().peekable();
-                        for j in text.grapheme_idxs() {
-                            while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
-                                if cluster >= j as u32 {
-                                    break;
+            if let Some(iter) = styles.style.iter_range(start_cidx..end_cidx) {
+                for (range, &style) in iter {
+                    let range = range.start - start_cidx..range.end - start_cidx;
+                    let space_metrics = text_font.space_metrics(self.text_size, style);
+                    let sp_awidth = space_metrics.advance.width.to_f32();
+                    split_text(
+                        &line.slice(range),
+                        tab_width,
+                        |n| {
+                            let start = cursor_x.get();
+                            let end = start + sp_awidth * n as f32;
+                            if point.x < end {
+                                let frac =
+                                    ((point.x - start) * (n as f32) / (end - start)) as usize;
+                                gidx.set(gidx.get() + frac);
+                                SplitCbRes::Stop
+                            } else {
+                                cursor_x.set(cursor_x.get() + sp_awidth * n as f32);
+                                gidx.set(gidx.get() + n);
+                                SplitCbRes::Continue
+                            }
+                        },
+                        |text| {
+                            let shaped = text_font.shape(text, self.text_size, style);
+                            let mut gis = shaped.glyph_infos.iter().peekable();
+                            for j in text.grapheme_idxs() {
+                                while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
+                                    if cluster >= j as u32 {
+                                        break;
+                                    }
+                                    let gi = gis.next().unwrap();
+                                    cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
                                 }
-                                let gi = gis.next().unwrap();
+                                if let Some(gi) = gis.peek() {
+                                    let aw = gi.advance.width.to_f32();
+                                    let x = cursor_x.get() + aw;
+                                    if point.x <= x {
+                                        return SplitCbRes::Stop;
+                                    }
+                                }
+                                gidx.set(gidx.get() + 1);
+                            }
+                            while let Some(gi) = gis.next() {
                                 cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
                             }
-                            if let Some(gi) = gis.peek() {
-                                let aw = gi.advance.width.to_f32();
-                                let x = cursor_x.get() + aw;
-                                if point.x <= x {
-                                    return SplitCbRes::Stop;
-                                }
-                            }
-                            gidx.set(gidx.get() + 1);
-                        }
-                        while let Some(gi) = gis.next() {
-                            cursor_x.set(cursor_x.get() + gi.advance.width.to_f32());
-                        }
-                        return SplitCbRes::Continue;
-                    },
-                );
+                            return SplitCbRes::Continue;
+                        },
+                    );
+                }
             }
-        }
 
-        self.cursor.line_gidx = gidx.get();
-        self.cursor.sync_gidx(data, tab_width);
-        self.snap_to_cursor(data, tab_width, styles, true);
+            self.cursor.line_gidx = gidx.get();
+            self.cursor.sync_gidx(data, tab_width);
+        }
+        self.snap_to_cursor(true);
     }
 
-    pub(super) fn snap_to_cursor(
-        &mut self,
-        data: &Rope,
-        tab_width: usize,
-        styles: &StyleRanges,
-        update_global_x: bool,
-    ) {
+    pub(super) fn snap_to_cursor(&mut self, update_global_x: bool) {
+        // Snap to Y
+        self.snap_to_line(self.cursor.line_num);
+
+        let shared = self.shared.borrow();
+        let data = &shared.rope;
+        let tab_width = shared.tab_width;
+        let styles = &shared.styles;
+
         // Limit cursor based on cursor style
         self.cursor
             .limit_for_style(data, tab_width, update_global_x);
 
-        // Snap to Y
-        self.snap_to_line(self.cursor.line_num, data, tab_width, styles);
-
         // Snap to X
+        let shared = self.shared.borrow();
+        let data = &shared.rope;
+        let tab_width = shared.tab_width;
+
         let mut text_font = self.bed_handle.text_font();
         let space_metrics = text_font.space_metrics(self.text_size, TextStyle::default());
         let cursor_x = Cell::new(0.0);
@@ -243,7 +265,7 @@ impl View {
         };
         let cursor_max_x = (cursor_x.get() + cursor_width).ceil() as i32;
         let cursor_min_x = cursor_x.get().floor() as i32;
-        let rect_width = self.rect.width() as i32 - self.gutter_width(data) as i32;
+        let rect_width = self.rect.width() as i32 - self.gutter_width() as i32;
         if self.off.x > cursor_min_x {
             self.off.x = cursor_min_x;
         } else if self.off.x + rect_width < cursor_max_x {
@@ -253,8 +275,9 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    fn snap_to_line(&mut self, linum: usize, data: &Rope, tab_width: usize, styles: &StyleRanges) {
-        self.sanity_check(data);
+    fn snap_to_line(&mut self, linum: usize) {
+        self.sanity_check();
+        let view_height = self.rect.height() - self.status_height;
         if linum <= self.start_line {
             self.start_line = linum;
             self.off.y = 0;
@@ -263,11 +286,11 @@ impl View {
             let mut height = 0;
             while start_line > 0 {
                 start_line -= 1;
-                let metrics = self.line_metrics(start_line, data, tab_width, styles);
+                let metrics = self.line_metrics(start_line);
                 height += metrics.height;
-                if height >= self.rect.height() {
+                if height >= view_height {
                     self.start_line = start_line;
-                    self.off.y = height as i32 - self.rect.height() as i32;
+                    self.off.y = height as i32 - view_height as i32;
                     return;
                 }
                 if start_line == self.start_line {
@@ -279,31 +302,27 @@ impl View {
         }
     }
 
-    pub(super) fn scroll(
-        &mut self,
-        scroll: Vector2D<i32, PixelSize>,
-        data: &Rope,
-        tab_width: usize,
-        styles: &StyleRanges,
-    ) {
-        self.sanity_check(data);
+    pub(super) fn scroll(&mut self, scroll: Vector2D<i32, PixelSize>) {
+        self.sanity_check();
+
         self.off += scroll;
+        let view_height = self.rect.height() - self.status_height;
 
         // Scroll y
         while self.off.y < 0 && self.start_line > 0 {
             self.start_line -= 1;
-            let metrics = self.line_metrics(self.start_line, data, tab_width, styles);
+            let metrics = self.line_metrics(self.start_line);
             self.off.y += metrics.height as i32;
         }
         if self.off.y < 0 {
             self.off.y = 0;
         }
         while self.off.y > 0 {
-            let metrics = self.line_metrics(self.start_line, data, tab_width, styles);
+            let metrics = self.line_metrics(self.start_line);
             if metrics.height as i32 > self.off.y {
                 break;
             }
-            if self.start_line == data.len_lines() - 1 {
+            if self.start_line == self.shared.borrow().rope.len_lines() - 1 {
                 self.off.y = 0;
                 break;
             }
@@ -317,17 +336,17 @@ impl View {
         } else {
             let mut height = -self.off.y;
             let mut max_xoff = 0i32;
-            for linum in self.start_line..data.len_lines() {
-                let metrics = self.line_metrics(linum, data, tab_width, styles);
+            for linum in self.start_line..self.shared.borrow().rope.len_lines() {
+                let metrics = self.line_metrics(linum);
                 if metrics.width as i32 > max_xoff {
                     max_xoff = metrics.width as i32;
                 }
                 height += metrics.height as i32;
-                if height >= self.rect.height() as i32 {
+                if height >= view_height as i32 {
                     break;
                 }
             }
-            max_xoff -= self.rect.width() as i32 - self.gutter_width(data) as i32;
+            max_xoff -= self.rect.width() as i32 - self.gutter_width() as i32;
             if max_xoff < 0 {
                 max_xoff = 0;
             }
@@ -339,22 +358,26 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    pub(super) fn draw(
-        &mut self,
-        painter: &mut Painter,
-        data: &Rope,
-        tab_width: usize,
-        styles: &StyleRanges,
-    ) {
-        self.sanity_check(data);
-        let gutter_width = self.gutter_width(data) as f32;
+    pub(super) fn draw(&mut self, painter: &mut Painter) {
+        self.sanity_check();
+        let gutter_width = self.gutter_width() as f32;
+        let (status_left, status_right) = self.build_statusline();
+
+        let shared = self.shared.borrow();
+        let data = &shared.rope;
+        let styles = &shared.styles;
+        let tab_width = shared.tab_width;
+
+        let view_height = self.rect.height() - self.status_height;
         let mut textview_rect = self.rect.cast();
         textview_rect.origin.x += gutter_width;
         textview_rect.size.width -= gutter_width;
+        textview_rect.size.height = view_height as f32;
 
         let theme = self.bed_handle.theme();
         let mut gutter_baselines = Vec::new();
 
+        // Draw textview
         {
             let mut paint_ctx = painter.widget_ctx(textview_rect, theme.textview.background, false);
             let mut text_font = self.bed_handle.text_font();
@@ -376,7 +399,7 @@ impl View {
                 start_cidx = end_cidx;
 
                 origin.y += line_pad.to_f32();
-                if origin.y >= self.rect.height() as f32 {
+                if origin.y >= view_height as f32 {
                     break;
                 }
                 let text_cursor = if linum == self.cursor.line_num {
@@ -406,12 +429,14 @@ impl View {
             }
         }
 
+        // Draw gutter
         if self.show_gutter {
             let mut linum = self.start_line;
             let mut gutter_rect = textview_rect;
             gutter_rect.origin.x = self.rect.min_x() as f32;
             gutter_rect.size.width = gutter_width;
             let gutter_padding = self.bed_handle.gutter_padding() as f32;
+            let fgcol = theme.gutter.foreground;
 
             let mut paint_ctx = painter.widget_ctx(gutter_rect, theme.gutter.background, false);
             let mut text_font = self.bed_handle.gutter_font();
@@ -427,7 +452,6 @@ impl View {
                 buf.clear();
                 write!(&mut buf, "{}", linum).unwrap();
                 let origin = point2(gutter_padding, base - ascender);
-                let fgcol = theme.gutter.foreground;
                 text_ctx.draw_line(
                     &buf.as_str(),
                     StyleType::Const(0..buf.len(), TextStyle::default(), fgcol, false),
@@ -440,6 +464,43 @@ impl View {
                 );
             }
         }
+
+        // Draw status bar
+        {
+            let cfg = &mut *self.bed_handle.config.borrow_mut();
+            let status_font = &mut cfg.status_font;
+            let mut status_rect = self.rect.cast();
+            let hor_padding = cfg.status_padding_horizontal as f32;
+            let ver_padding = cfg.status_padding_vertical as f32;
+            status_rect.origin.y += status_rect.height() - self.status_height as f32;
+            status_rect.size.height = self.status_height as f32;
+            let mut paint_ctx = painter.widget_ctx(status_rect, theme.status.background, false);
+            let mut text_ctx = status_font.render_ctx(&mut paint_ctx);
+            let origin = point2(hor_padding, ver_padding);
+            let text_size = cfg.textview_font_size.scale(cfg.status_font_scale);
+            let fgcol = theme.status.foreground;
+
+            text_ctx.draw_line(
+                &status_left.as_str(),
+                StyleType::Const(0..status_left.len(), TextStyle::default(), fgcol, false),
+                tab_width,
+                origin,
+                status_rect.width() - hor_padding,
+                None,
+                text_size,
+                TextAlign::Left,
+            );
+            text_ctx.draw_line(
+                &status_right.as_str(),
+                StyleType::Const(0..status_right.len(), TextStyle::default(), fgcol, false),
+                tab_width,
+                origin,
+                status_rect.width() - hor_padding,
+                None,
+                text_size,
+                TextAlign::Right,
+            );
+        }
     }
 
     pub(super) fn scroll_to_top(&mut self) {
@@ -448,13 +509,12 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    fn line_metrics(
-        &self,
-        linum: usize,
-        data: &Rope,
-        tab_width: usize,
-        styles: &StyleRanges,
-    ) -> LineMetrics {
+    fn line_metrics(&self, linum: usize) -> LineMetrics {
+        let shared = self.shared.borrow();
+        let data = &shared.rope;
+        let styles = &shared.styles;
+        let tab_width = shared.tab_width;
+
         let mut text_font = self.bed_handle.text_font();
         let line = data.line(linum);
         let start_cidx = data.line_to_char(linum);
@@ -495,7 +555,9 @@ impl View {
         }
     }
 
-    fn gutter_width(&self, data: &Rope) -> u32 {
+    fn gutter_width(&self) -> u32 {
+        let shared = self.shared.borrow();
+        let data = &shared.rope;
         if !self.show_gutter {
             0
         } else {
@@ -508,13 +570,90 @@ impl View {
         }
     }
 
-    fn sanity_check(&mut self, data: &Rope) {
+    fn sanity_check(&mut self) {
+        let shared = self.shared.borrow();
+        let data = &shared.rope;
         if self.start_line >= data.len_lines() {
             self.start_line = data.len_lines() - 1;
             self.off = vec2(0, 0);
             self.bed_handle.request_redraw();
         }
     }
+
+    fn build_statusline(&self) -> (String, String) {
+        let cfg = self.bed_handle.config();
+        let theme = &self.bed_handle.theme().status;
+        let shared = self.shared.borrow();
+        let mut var = String::new();
+        let mut left = String::new();
+        let mut right = String::new();
+
+        let mut expand = |buf: &mut String, mut iter: std::str::Chars, sep| {
+            while let Some(c) = iter.next() {
+                match c {
+                    '{' => match iter.next() {
+                        Some('{') => buf.push('{'),
+                        Some(c) => {
+                            var.push(c);
+                        }
+                        _ => break,
+                    },
+                    '}' => {
+                        if var.len() > 0 {
+                            match var.as_ref() {
+                                "mode" => buf.push_str(self.mode.to_str()),
+                                "buffer" => buf.push_str(
+                                    shared
+                                        .optname
+                                        .as_ref()
+                                        .map(|s| s.as_str())
+                                        .unwrap_or("[No Name]"),
+                                ),
+                                "encoding" => buf.push_str("utf-8"),
+                                "language" => buf.push_str(
+                                    shared.optlanguage.map(|l| l.to_str()).unwrap_or("none"),
+                                ),
+                                "line" => {
+                                    write!(buf, "{}", self.cursor.line_num).unwrap();
+                                }
+                                "col" => {
+                                    write!(buf, "{}", self.cursor.line_cidx).unwrap();
+                                }
+                                "sep" => buf.push_str(sep),
+                                _ => {}
+                            }
+                            var.clear();
+                        } else {
+                            buf.push('}');
+                        }
+                    }
+                    c => {
+                        if var.len() > 0 {
+                            var.push(c);
+                        } else {
+                            buf.push(c);
+                        }
+                    }
+                }
+            }
+        };
+
+        expand(&mut left, cfg.status_fmt_left.chars(), &theme.left_sep);
+        expand(&mut right, cfg.status_fmt_right.chars(), &theme.right_sep);
+
+        (left, right)
+    }
+}
+
+fn status_required_height(config: &RefCell<Config>) -> u32 {
+    let mut config_ref = config.borrow_mut();
+    let font_size = config_ref
+        .textview_font_size
+        .scale(config_ref.status_font_scale);
+    let font_metrics = config_ref.status_font.metrics(font_size);
+    let height = (font_metrics.ascender - font_metrics.descender).to_f32()
+        + (config_ref.status_padding_vertical as f32) * 2.0;
+    height.ceil() as u32
 }
 
 struct LineMetrics {

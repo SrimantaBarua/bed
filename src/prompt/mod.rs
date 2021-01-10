@@ -75,15 +75,16 @@ impl Prompt {
     pub(super) fn draw(&mut self, painter: &mut Painter) {
         self.needs_redraw = false;
         if let Some(rect) = self.rect {
-            let cfg = self.config.borrow_mut();
+            let cfg = &mut *self.config.borrow_mut();
             let theme = self.theme_set.get(&cfg.theme);
             let mut paint_ctx = painter.widget_ctx(rect.cast(), theme.prompt.background, false);
-            let mut text_font = cfg.prompt_font.clone();
-            let mut text_ctx = text_font.render_ctx(&mut paint_ctx);
-            let origin = point2(cfg.prompt_padding_horizontal, cfg.prompt_padding_vertical).cast();
-            let width = (rect.width() - cfg.prompt_padding_horizontal * 2) as f32;
 
             if self.prompt_len > 0 {
+                let text_font = &mut cfg.prompt_font;
+                let mut text_ctx = text_font.render_ctx(&mut paint_ctx);
+                let origin =
+                    point2(cfg.prompt_padding_horizontal, cfg.prompt_padding_vertical).cast();
+                let width = (rect.width() - cfg.prompt_padding_horizontal * 2) as f32;
                 let text_cursor = Some(TextCursor {
                     gidx: self.cursor.gidx,
                     style: CursorStyle::Line,

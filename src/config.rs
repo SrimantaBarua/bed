@@ -21,6 +21,8 @@ static DEFAULT_FONT_SIZE: TextSize = TextSize(12);
 static DEFAULT_TAB_WIDTH: usize = 8;
 static DEFAULT_INDENT_TABS: bool = true;
 static DEFAULT_GUTTER_PADDING: u32 = 8;
+static DEFAULT_STATUS_PADDING_HORIZONTAL: u32 = 2;
+static DEFAULT_STATUS_PADDING_VERTICAL: u32 = 2;
 static DEFAULT_PROMPT_PADDING_HORIZONTAL: u32 = 4;
 static DEFAULT_PROMPT_PADDING_VERTICAL: u32 = 2;
 static DEFAULT_COMPLETION_PADDING_HORIZONTAL: u32 = 4;
@@ -87,6 +89,13 @@ pub(crate) struct Config {
     pub(crate) gutter_font: FontCollectionHandle,
     pub(crate) gutter_font_scale: f64,
     pub(crate) gutter_padding: u32,
+    // Status bar
+    pub(crate) status_font: FontCollectionHandle,
+    pub(crate) status_font_scale: f64,
+    pub(crate) status_fmt_left: String,
+    pub(crate) status_fmt_right: String,
+    pub(crate) status_padding_vertical: u32,
+    pub(crate) status_padding_horizontal: u32,
     // Prompt
     pub(crate) prompt_font: FontCollectionHandle,
     pub(crate) prompt_font_size: TextSize,
@@ -134,9 +143,9 @@ impl Config {
 struct ConfigInner {
     theme: Option<String>,
     // Textview
-    #[serde(rename(deserialize = "editor.font_family"))]
+    #[serde(rename(deserialize = "editor.font.family"))]
     textview_font_family: Option<String>,
-    #[serde(rename(deserialize = "editor.font_size"))]
+    #[serde(rename(deserialize = "editor.font.size"))]
     textview_font_size: Option<TextSize>,
     #[serde(rename(deserialize = "editor.line_padding"), default)]
     textview_line_padding: u32,
@@ -145,29 +154,42 @@ struct ConfigInner {
     #[serde(rename(deserialize = "editor.indent_tabs"))]
     indent_tabs: Option<bool>,
     // Gutter
-    #[serde(rename(deserialize = "gutter.font_family"))]
+    #[serde(rename(deserialize = "gutter.font.family"))]
     gutter_font_family: Option<String>,
-    #[serde(rename(deserialize = "gutter.font_scale"))]
+    #[serde(rename(deserialize = "gutter.font.scale"))]
     gutter_font_scale: Option<f64>,
     #[serde(rename(deserialize = "gutter.padding"))]
     gutter_padding: Option<u32>,
+    // Status bar
+    #[serde(rename(deserialize = "status.font.family"))]
+    status_font_family: Option<String>,
+    #[serde(rename(deserialize = "status.font.scale"))]
+    status_font_scale: Option<f64>,
+    #[serde(rename(deserialize = "status.fmt.left"))]
+    status_fmt_left: Option<String>,
+    #[serde(rename(deserialize = "status.fmt.right"))]
+    status_fmt_right: Option<String>,
+    #[serde(rename(deserialize = "status.padding.vertical"))]
+    status_padding_vertical: Option<u32>,
+    #[serde(rename(deserialize = "status.padding.horizontal"))]
+    status_padding_horizontal: Option<u32>,
     // Prompt
-    #[serde(rename(deserialize = "prompt.font_family"))]
+    #[serde(rename(deserialize = "prompt.font.family"))]
     prompt_font_family: Option<String>,
-    #[serde(rename(deserialize = "prompt.font_scale"))]
+    #[serde(rename(deserialize = "prompt.font.scale"))]
     prompt_font_scale: Option<f64>,
-    #[serde(rename(deserialize = "prompt.padding_vertical"))]
+    #[serde(rename(deserialize = "prompt.padding.vertical"))]
     prompt_padding_vertical: Option<u32>,
-    #[serde(rename(deserialize = "prompt.padding_horizontal"))]
+    #[serde(rename(deserialize = "prompt.padding.horizontal"))]
     prompt_padding_horizontal: Option<u32>,
     // Completion
-    #[serde(rename(deserialize = "completion.font_family"))]
+    #[serde(rename(deserialize = "completion.font.family"))]
     completion_font_family: Option<String>,
-    #[serde(rename(deserialize = "completion.font_scale"))]
+    #[serde(rename(deserialize = "completion.font.scale"))]
     completion_font_scale: Option<f64>,
-    #[serde(rename(deserialize = "completion.padding_vertical"))]
+    #[serde(rename(deserialize = "completion.padding.vertical"))]
     completion_padding_vertical: Option<u32>,
-    #[serde(rename(deserialize = "completion.padding_horizontal"))]
+    #[serde(rename(deserialize = "completion.padding.horizontal"))]
     completion_padding_horizontal: Option<u32>,
     #[serde(rename(deserialize = "completion.line_padding"), default)]
     completion_line_padding: u32,
@@ -179,13 +201,13 @@ struct ConfigInner {
     )]
     completion_langserver_root_markers: Vec<String>,
     // Hover
-    #[serde(rename(deserialize = "hover.font_family"))]
+    #[serde(rename(deserialize = "hover.font.family"))]
     hover_font_family: Option<String>,
-    #[serde(rename(deserialize = "hover.font_scale"))]
+    #[serde(rename(deserialize = "hover.font.scale"))]
     hover_font_scale: Option<f64>,
-    #[serde(rename(deserialize = "hover.padding_vertical"))]
+    #[serde(rename(deserialize = "hover.padding.vertical"))]
     hover_padding_vertical: Option<u32>,
-    #[serde(rename(deserialize = "hover.padding_horizontal"))]
+    #[serde(rename(deserialize = "hover.padding.horizontal"))]
     hover_padding_horizontal: Option<u32>,
     #[serde(rename(deserialize = "hover.line_padding"), default)]
     hover_line_padding: u32,
@@ -214,6 +236,27 @@ impl ConfigInner {
             .map(|s| if s >= 1.0 { 1.0 } else { s })
             .unwrap_or(1.0);
         let gutter_padding = self.gutter_padding.unwrap_or(DEFAULT_GUTTER_PADDING);
+        // Status bar
+        let status_font = self
+            .status_font_family
+            .and_then(|s| font_core.find(&s))
+            .unwrap_or_else(|| textview_font.clone());
+        let status_fmt_left = self
+            .status_fmt_left
+            .unwrap_or_else(|| "{mode} {sep} {buffer} {sep}".to_owned());
+        let status_fmt_right = self
+            .status_fmt_right
+            .unwrap_or_else(|| "< {encoding} {sep} {language} {sep} {line}:{col}".to_owned());
+        let status_padding_horizontal = self
+            .status_padding_horizontal
+            .unwrap_or(DEFAULT_STATUS_PADDING_HORIZONTAL);
+        let status_padding_vertical = self
+            .status_padding_vertical
+            .unwrap_or(DEFAULT_STATUS_PADDING_VERTICAL);
+        let status_font_scale = self
+            .status_font_scale
+            .map(|s| if s >= 1.0 { 1.0 } else { s })
+            .unwrap_or(1.0);
         // Prompt
         let prompt_font = self
             .prompt_font_family
@@ -268,6 +311,12 @@ impl ConfigInner {
             gutter_font,
             gutter_font_scale,
             gutter_padding,
+            status_font,
+            status_fmt_left,
+            status_fmt_right,
+            status_padding_vertical,
+            status_padding_horizontal,
+            status_font_scale,
             prompt_font,
             prompt_font_size,
             prompt_padding_vertical,

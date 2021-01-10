@@ -16,6 +16,21 @@ mod view;
 pub(crate) use buffer::{Buffer, BufferHandle};
 pub(crate) use mgr::BufferMgr;
 
+// Buffer-visible input modes
+pub(crate) enum Mode {
+    Normal,
+    Insert,
+}
+
+impl Mode {
+    fn to_str(&self) -> &'static str {
+        match self {
+            Mode::Normal => "NORMAL",
+            Mode::Insert => "INSERT",
+        }
+    }
+}
+
 // Handle to BufferView
 #[derive(Eq, PartialEq, Hash)]
 pub(crate) struct BufferViewId(usize);

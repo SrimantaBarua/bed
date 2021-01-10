@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use euclid::{vec2, Point2D, Rect, Vector2D};
 
-use crate::buffer::{Buffer, BufferHandle, BufferViewId};
+use crate::buffer::{Buffer, BufferHandle, BufferViewId, Mode};
 use crate::common::PixelSize;
 use crate::painter::Painter;
 use crate::text::CursorStyle;
@@ -163,6 +163,10 @@ impl<'a> TextViewEditCtx<'a> {
 
     pub(crate) fn update_text_size(&mut self, diff: i16) {
         self.buffer.update_text_size(self.view_id, diff);
+    }
+
+    pub(crate) fn set_buffer_mode(&mut self, mode: Mode) {
+        self.buffer.set_mode(self.view_id, mode);
     }
 }
 
