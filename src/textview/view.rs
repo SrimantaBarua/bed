@@ -47,6 +47,11 @@ impl<'a> TextViewEditCtx<'a> {
         self.buffer.move_view_cursor_to_line_end(self.view_id, n);
     }
 
+    pub(crate) fn move_cursor_to_first_non_blank(&mut self) {
+        self.buffer
+            .move_view_cursor_to_first_non_blank(self.view_id);
+    }
+
     pub(crate) fn move_cursor_to_line(&mut self, linum: usize) {
         self.buffer.move_view_cursor_to_line(self.view_id, linum);
     }
@@ -142,6 +147,10 @@ impl<'a> TextViewEditCtx<'a> {
 
     pub(crate) fn delete_to_line_end(&mut self, n: usize) {
         self.buffer.delete_to_line_end(self.view_id, n);
+    }
+
+    pub(crate) fn delete_to_first_non_blank(&mut self) {
+        self.buffer.delete_to_first_non_blank(self.view_id);
     }
 
     pub(crate) fn replace_repeated(&mut self, c: char, n: usize) {

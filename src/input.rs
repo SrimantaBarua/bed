@@ -155,6 +155,7 @@ impl InputState {
                         };
                     }
                     '$' => bed.edit_view().move_cursor_to_line_end(act_rep),
+                    '^' => bed.edit_view().move_cursor_to_first_non_blank(),
                     // Entering insert mode
                     'i' => {
                         next_mode = Some(Mode::Insert);
@@ -355,6 +356,7 @@ impl InputState {
                             ctx.delete_to_line_end(move_rep)
                         }
                     }
+                    '^' => ctx.delete_to_first_non_blank(),
                     _ => next_mode = Mode::Normal { action_mul: None },
                 }
                 if !is_num {
@@ -607,6 +609,11 @@ impl<'a> ViewEditCtx<'a> {
         self.update_global_x = true;
     }
 
+    fn move_cursor_to_first_non_blank(&mut self) {
+        self.view.move_cursor_to_first_non_blank();
+        self.update_global_x = true;
+    }
+
     fn move_cursor_to_line(&mut self, linum: usize) {
         self.view.move_cursor_to_line(linum);
         self.update_global_x = true;
@@ -724,6 +731,11 @@ impl<'a> ViewEditCtx<'a> {
 
     fn delete_to_line_end(&mut self, n: usize) {
         self.view.delete_to_line_end(n);
+        self.update_global_x = true;
+    }
+
+    fn delete_to_first_non_blank(&mut self) {
+        self.view.delete_to_first_non_blank();
         self.update_global_x = true;
     }
 

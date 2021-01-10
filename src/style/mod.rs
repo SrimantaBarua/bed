@@ -34,21 +34,27 @@ impl StyleRanges {
     }
 
     pub(crate) fn insert_default(&mut self, point: usize, len: usize, color: Color) {
-        self.style.insert(point..point, len, TextStyle::default());
-        self.color.insert(point..point, len, color);
-        self.under.insert(point..point, len, false);
+        if len > 0 {
+            self.style.insert(point..point, len, TextStyle::default());
+            self.color.insert(point..point, len, color);
+            self.under.insert(point..point, len, false);
+        }
     }
 
     pub(crate) fn set_default(&mut self, range: Range<usize>, color: Color) {
         let len = range.len();
-        self.style.insert(range.clone(), len, TextStyle::default());
-        self.color.insert(range.clone(), len, color);
-        self.under.insert(range, len, false);
+        if len > 0 {
+            self.style.insert(range.clone(), len, TextStyle::default());
+            self.color.insert(range.clone(), len, color);
+            self.under.insert(range, len, false);
+        }
     }
     pub(crate) fn remove(&mut self, range: Range<usize>) {
-        self.style.remove(range.clone());
-        self.color.remove(range.clone());
-        self.under.remove(range);
+        if !range.is_empty() {
+            self.style.remove(range.clone());
+            self.color.remove(range.clone());
+            self.under.remove(range);
+        }
     }
 
     pub(crate) fn set_style(&mut self, range: Range<usize>, style: TextStyle) {

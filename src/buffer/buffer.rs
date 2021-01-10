@@ -187,6 +187,18 @@ impl Buffer {
         cursor
     }
 
+    fn cursor_first_non_blank(&self, cursor: &ViewCursor) -> ViewCursor {
+        let mut cursor = cursor.clone();
+        for (i, c) in self.rope.line(cursor.line_num).chars().enumerate() {
+            if !c.is_whitespace() {
+                cursor.line_cidx = i;
+                cursor.sync_line_cidx_gidx_left(&self.rope, self.tab_width);
+                break;
+            }
+        }
+        cursor
+    }
+
     fn cursor_line(&self, cursor: &ViewCursor, linum: usize) -> ViewCursor {
         let mut cursor = cursor.clone();
         cursor.line_num = linum;
@@ -294,6 +306,11 @@ impl Buffer {
 
     pub(crate) fn move_view_cursor_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
         self.view_mut(view_id).cursor = self.cursor_line_end(&self.view(view_id).cursor, n);
+        self.bed_handle.request_redraw();
+    }
+
+    pub(crate) fn move_view_cursor_to_first_non_blank(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).cursor = self.cursor_first_non_blank(&self.view(view_id).cursor);
         self.bed_handle.request_redraw();
     }
 
@@ -457,6 +474,15 @@ impl Buffer {
             let view = self.view(view_id);
             let dest = self.cursor_line_end(&view.cursor, n);
             view.cursor.cidx..min(dest.cidx, self.rope.len_chars())
+        };
+        self.delete_range(range);
+    }
+
+    pub(crate) fn delete_to_first_non_blank(&mut self, view_id: &BufferViewId) {
+        let range = {
+            let view = self.view(view_id);
+            let dest = self.cursor_first_non_blank(&view.cursor);
+            dest.cidx..view.cursor.cidx
         };
         self.delete_range(range);
     }
