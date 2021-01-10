@@ -157,8 +157,6 @@ fn main() {
     let mut bed = BedHandle::new(bed);
     let mut input_state = input::InputState::new(bed.clone());
 
-    // random_text_here = "Hindi:उनका एक समय में बड़ा नाम था"
-
     let mut is_fps_boundary = true;
     let mut last_duration = time::Duration::from_secs(1);
 

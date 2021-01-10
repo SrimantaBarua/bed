@@ -56,9 +56,9 @@ impl TextTree {
     }
 
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(false);
         self.root.move_cursor_to_point(point);
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn scroll_views_with_active_acc(
@@ -70,45 +70,45 @@ impl TextTree {
     }
 
     pub(crate) fn split_horizontal(&mut self, buffer: BufferHandle, view_id: BufferViewId) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(true);
         take(&mut self.root, |root| {
             root.split(buffer, view_id, SplitDir::Horizontal)
         });
         self.root.set_rect(self.root.rect(), self.border_width());
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn split_vertical(&mut self, buffer: BufferHandle, view_id: BufferViewId) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(true);
         take(&mut self.root, |root| {
             root.split(buffer, view_id, SplitDir::Vertical)
         });
         self.root.set_rect(self.root.rect(), self.border_width());
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_left_active(&mut self) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(false);
         self.root.set_left_active();
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_right_active(&mut self) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(false);
         self.root.set_right_active();
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_up_active(&mut self) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(false);
         self.root.set_up_active();
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_down_active(&mut self) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(false);
         self.root.set_down_active();
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn move_left(&mut self) {
@@ -128,15 +128,15 @@ impl TextTree {
     }
 
     pub(crate) fn cycle_prev(&mut self) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(false);
         self.root.cycle_prev();
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn cycle_next(&mut self) {
-        self.set_active_cursor_underline();
+        self.set_active_cursor_underline(false);
         self.root.cycle_next();
-        self.set_active_cursor_block();
+        self.set_active_cursor_block(true);
     }
 
     pub(crate) fn grow_active(&mut self) {
@@ -161,16 +161,20 @@ impl TextTree {
             .border_width
     }
 
-    fn set_active_cursor_underline(&mut self) {
+    fn set_active_cursor_underline(&mut self, snap_to_cursor: bool) {
         let mut ctx = self.active_mut().edit_ctx();
         ctx.set_cursor_style(CursorStyle::Underline);
-        ctx.snap_to_cursor(true);
+        if snap_to_cursor {
+            ctx.snap_to_cursor(true);
+        }
     }
 
-    fn set_active_cursor_block(&mut self) {
+    fn set_active_cursor_block(&mut self, snap_to_cursor: bool) {
         let mut ctx = self.active_mut().edit_ctx();
         ctx.set_cursor_style(CursorStyle::Block);
-        ctx.snap_to_cursor(true);
+        if snap_to_cursor {
+            ctx.snap_to_cursor(true);
+        }
     }
 }
 
