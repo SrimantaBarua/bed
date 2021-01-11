@@ -69,8 +69,24 @@ impl View {
         self.snap_to_cursor(true);
     }
 
+    pub(super) fn move_cursor_to_first_line(&mut self) {
+        self.cursor.line_num = self.start_line;
+        self.off.y = 0;
+    }
+
+    pub(super) fn move_cursor_to_middle_line(&mut self) {
+        let last_linum = self.last_line_idx();
+        self.cursor.line_num = (self.start_line + last_linum) / 2;
+    }
+
+    pub(super) fn move_cursor_to_last_line(&mut self) {
+        let last_linum = self.last_line_idx();
+        self.cursor.line_num = last_linum;
+    }
+
     pub(super) fn move_cursor_to_point(&mut self, mut point: Point2D<i32, PixelSize>) {
         self.sanity_check();
+        let view_height = self.view_height() as i32;
         {
             let shared = self.shared.borrow();
             let data = &shared.rope;
@@ -78,7 +94,6 @@ impl View {
             let styles = &shared.styles;
 
             let rect = self.rect.cast();
-            let view_height = rect.height() - self.status_height as i32;
             assert!(rect.contains(point));
             point -= rect.origin.to_vector();
             point.x -= self.gutter_width() as i32;
@@ -277,7 +292,7 @@ impl View {
 
     fn snap_to_line(&mut self, linum: usize) {
         self.sanity_check();
-        let view_height = self.rect.height() - self.status_height;
+        let view_height = self.view_height();
         if linum <= self.start_line {
             self.start_line = linum;
             self.off.y = 0;
@@ -304,9 +319,8 @@ impl View {
 
     pub(super) fn scroll(&mut self, scroll: Vector2D<i32, PixelSize>) {
         self.sanity_check();
-
+        let view_height = self.view_height();
         self.off += scroll;
-        let view_height = self.rect.height() - self.status_height;
 
         // Scroll y
         while self.off.y < 0 && self.start_line > 0 {
@@ -360,6 +374,7 @@ impl View {
 
     pub(super) fn draw(&mut self, painter: &mut Painter) {
         self.sanity_check();
+        let view_height = self.view_height();
         let gutter_width = self.gutter_width() as f32;
         let (status_left, status_right) = self.build_statusline();
 
@@ -368,7 +383,6 @@ impl View {
         let styles = &shared.styles;
         let tab_width = shared.tab_width;
 
-        let view_height = self.rect.height() - self.status_height;
         let mut textview_rect = self.rect.cast();
         textview_rect.origin.x += gutter_width;
         textview_rect.size.width -= gutter_width;
@@ -509,6 +523,24 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
+    fn last_line_idx(&self) -> usize {
+        let shared = self.shared.borrow();
+        let data = &shared.rope;
+        let len_lines = data.len_lines();
+        let view_height = self.view_height() as i32;
+        let mut linum = self.start_line;
+        let mut height = -self.off.y;
+        while linum < len_lines {
+            let metrics = self.line_metrics(linum);
+            height += metrics.height as i32;
+            if height >= view_height {
+                break;
+            }
+            linum += 1;
+        }
+        linum
+    }
+
     fn line_metrics(&self, linum: usize) -> LineMetrics {
         let shared = self.shared.borrow();
         let data = &shared.rope;
@@ -578,6 +610,10 @@ impl View {
             self.off = vec2(0, 0);
             self.bed_handle.request_redraw();
         }
+    }
+
+    fn view_height(&self) -> u32 {
+        self.rect.height() - self.status_height
     }
 
     fn build_statusline(&self) -> (String, String) {

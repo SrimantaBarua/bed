@@ -353,6 +353,21 @@ impl Buffer {
         self.move_view_cursor_to_line(view_id, len_lines - 1);
     }
 
+    pub(crate) fn move_view_cursor_to_view_first_line(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).move_cursor_to_first_line();
+        self.move_view_cursor_to_first_non_blank(view_id);
+    }
+
+    pub(crate) fn move_view_cursor_to_view_middle_line(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).move_cursor_to_middle_line();
+        self.move_view_cursor_to_first_non_blank(view_id);
+    }
+
+    pub(crate) fn move_view_cursor_to_view_last_line(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).move_cursor_to_last_line();
+        self.move_view_cursor_to_first_non_blank(view_id);
+    }
+
     pub(crate) fn move_view_cursor_word(&mut self, view_id: &BufferViewId, n: usize) {
         self.view_mut(view_id).cursor = self.cursor_word(&self.view(view_id).cursor, n, false);
         self.bed_handle.request_redraw();

@@ -135,6 +135,9 @@ impl InputState {
                         bed.edit_view().move_cursor_to_line(linum - 1);
                     }
                     'G' => bed.edit_view().move_cursor_to_last_line(),
+                    'H' => bed.edit_view().move_cursor_to_view_first_line(),
+                    'L' => bed.edit_view().move_cursor_to_view_last_line(),
+                    'M' => bed.edit_view().move_cursor_to_view_middle_line(),
                     // Object movement
                     'w' => bed.edit_view().move_word(act_rep),
                     'W' => bed.edit_view().move_word_extended(act_rep),
@@ -635,6 +638,21 @@ impl<'a> ViewEditCtx<'a> {
 
     fn move_cursor_to_last_line(&mut self) {
         self.view.move_cursor_to_last_line();
+        self.update_global_x = true;
+    }
+
+    fn move_cursor_to_view_first_line(&mut self) {
+        self.view.move_cursor_to_view_first_line();
+        self.update_global_x = true;
+    }
+
+    fn move_cursor_to_view_middle_line(&mut self) {
+        self.view.move_cursor_to_view_middle_line();
+        self.update_global_x = true;
+    }
+
+    fn move_cursor_to_view_last_line(&mut self) {
+        self.view.move_cursor_to_view_last_line();
         self.update_global_x = true;
     }
 
