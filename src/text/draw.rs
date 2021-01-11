@@ -100,8 +100,9 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
     where
         S: RopeOrStr,
     {
-        let space_metrics = self.fc.space_metrics(text_size, TextStyle::default());
-        let sp_awidth = space_metrics.advance.width.to_f32();
+        let mut style = TextStyle::default();
+        let mut space_metrics = self.fc.space_metrics(text_size, style);
+        let mut sp_awidth = space_metrics.advance.width.to_f32();
         let mut ascender = space_metrics.ascender;
         let mut descender = space_metrics.descender;
 
@@ -114,9 +115,12 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         let fc = &mut self.fc;
         let spans = RefCell::new(Vec::new());
 
-        for (range, style, color, _) in styles.iter() {
-            let space_metrics = fc.space_metrics(text_size, style);
-            let sp_awidth = space_metrics.advance.width.to_f32();
+        for (range, cur_style, color, _) in styles.iter() {
+            if cur_style != style {
+                space_metrics = fc.space_metrics(text_size, style);
+                sp_awidth = space_metrics.advance.width.to_f32();
+                style = cur_style;
+            }
 
             split_text(
                 &line.slice(range),
