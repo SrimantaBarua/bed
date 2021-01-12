@@ -71,17 +71,78 @@ impl View {
 
     pub(super) fn move_cursor_to_first_line(&mut self) {
         self.cursor.line_num = self.start_line;
+        self.cursor.line_cidx = 0;
         self.off.y = 0;
+        let shared = self.shared.borrow();
+        self.cursor
+            .sync_line_cidx_gidx_left(&shared.rope, shared.tab_width);
     }
 
     pub(super) fn move_cursor_to_middle_line(&mut self) {
-        let last_linum = self.last_line_idx();
-        self.cursor.line_num = (self.start_line + last_linum) / 2;
+        let middle_linum = self.line_idx_below(self.view_height() / 2);
+        self.cursor.line_num = middle_linum;
+        self.cursor.line_cidx = 0;
+        let shared = self.shared.borrow();
+        self.cursor
+            .sync_line_cidx_gidx_left(&shared.rope, shared.tab_width);
     }
 
     pub(super) fn move_cursor_to_last_line(&mut self) {
-        let last_linum = self.last_line_idx();
+        let last_linum = self.line_idx_below(self.view_height());
         self.cursor.line_num = last_linum;
+        self.cursor.line_cidx = 0;
+        let shared = self.shared.borrow();
+        self.cursor
+            .sync_line_cidx_gidx_left(&shared.rope, shared.tab_width);
+    }
+
+    fn pixels_down(&mut self, npix: u32) {
+        let linum = self.line_idx_below(npix);
+        let shared = self.shared.borrow();
+        let len_lines = shared.rope.len_lines();
+        if linum == len_lines - 1 {
+            self.cursor.line_num = linum;
+        } else {
+            let diff = linum - self.start_line;
+            self.cursor.line_num += diff;
+            self.start_line += diff;
+            self.off.y = 0;
+        }
+        self.cursor.line_cidx = 0;
+        self.cursor
+            .sync_line_cidx_gidx_left(&shared.rope, shared.tab_width);
+    }
+
+    pub(super) fn half_page_down(&mut self) {
+        self.pixels_down(self.view_height() / 2);
+    }
+
+    pub(super) fn page_down(&mut self) {
+        self.pixels_down(self.view_height());
+    }
+
+    fn pixels_up(&mut self, npix: u32) {
+        if self.start_line == 0 {
+            self.cursor.line_num = 0;
+        } else {
+            let linum = self.line_idx_above(npix);
+            let diff = self.start_line - linum;
+            self.start_line -= diff;
+            self.cursor.line_num -= diff;
+        }
+        self.off.y = 0;
+        self.cursor.line_cidx = 0;
+        let shared = self.shared.borrow();
+        self.cursor
+            .sync_line_cidx_gidx_left(&shared.rope, shared.tab_width);
+    }
+
+    pub(super) fn half_page_up(&mut self) {
+        self.pixels_up(self.view_height() / 2);
+    }
+
+    pub(super) fn page_up(&mut self) {
+        self.pixels_up(self.view_height());
     }
 
     pub(super) fn move_cursor_to_point(&mut self, mut point: Point2D<i32, PixelSize>) {
@@ -523,17 +584,30 @@ impl View {
         self.bed_handle.request_redraw();
     }
 
-    fn last_line_idx(&self) -> usize {
+    fn line_idx_above(&self, npix: u32) -> usize {
+        let mut linum = self.start_line;
+        let mut height = self.off.y;
+        while linum > 0 {
+            if height >= npix as i32 {
+                break;
+            }
+            let metrics = self.line_metrics(linum);
+            height += metrics.height as i32;
+            linum -= 1;
+        }
+        linum
+    }
+
+    fn line_idx_below(&self, npix: u32) -> usize {
         let shared = self.shared.borrow();
         let data = &shared.rope;
         let len_lines = data.len_lines();
-        let view_height = self.view_height() as i32;
         let mut linum = self.start_line;
         let mut height = -self.off.y;
-        while linum < len_lines {
+        while linum + 1 < len_lines {
             let metrics = self.line_metrics(linum);
             height += metrics.height as i32;
-            if height >= view_height {
+            if height >= npix as i32 {
                 break;
             }
             linum += 1;

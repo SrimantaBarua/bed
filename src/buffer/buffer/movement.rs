@@ -43,7 +43,7 @@ impl Buffer {
 
     pub(crate) fn move_view_cursor_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
         self.view_mut(view_id).cursor = self.cursor_line(&self.view(view_id).cursor, linum);
-        self.bed_handle.request_redraw();
+        self.move_view_cursor_to_first_non_blank(view_id);
     }
 
     pub(crate) fn move_view_cursor_to_last_line(&mut self, view_id: &BufferViewId) {
@@ -108,5 +108,26 @@ impl Buffer {
     pub(crate) fn snap_to_cursor(&mut self, view_id: &BufferViewId, update_global_x: bool) {
         let view = self.views.get_mut(view_id).unwrap();
         view.snap_to_cursor(update_global_x);
+    }
+
+    // -------- Scrolling --------
+    pub(crate) fn half_page_down_view(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).half_page_down();
+        self.move_view_cursor_to_first_non_blank(view_id);
+    }
+
+    pub(crate) fn half_page_up_view(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).half_page_up();
+        self.move_view_cursor_to_first_non_blank(view_id);
+    }
+
+    pub(crate) fn page_down_view(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).page_down();
+        self.move_view_cursor_to_first_non_blank(view_id);
+    }
+
+    pub(crate) fn page_up_view(&mut self, view_id: &BufferViewId) {
+        self.view_mut(view_id).page_up();
+        self.move_view_cursor_to_first_non_blank(view_id);
     }
 }

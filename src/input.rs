@@ -485,6 +485,19 @@ impl InputState {
                         VirtualKeyCode::Right => bed.edit_view().move_cursor_right(act_rep),
                         VirtualKeyCode::Home => bed.edit_view().move_cursor_to_line_start(1),
                         VirtualKeyCode::End => bed.edit_view().move_cursor_to_line_end(1),
+                        // Page up/down
+                        VirtualKeyCode::F if self.modifiers == ModifiersState::CTRL => {
+                            bed.edit_view().page_down()
+                        }
+                        VirtualKeyCode::B if self.modifiers == ModifiersState::CTRL => {
+                            bed.edit_view().page_up()
+                        }
+                        VirtualKeyCode::D if self.modifiers == ModifiersState::CTRL => {
+                            bed.edit_view().half_page_down()
+                        }
+                        VirtualKeyCode::U if self.modifiers == ModifiersState::CTRL => {
+                            bed.edit_view().half_page_up()
+                        }
                         // Pane update mode
                         VirtualKeyCode::W if self.modifiers == ModifiersState::CTRL => {
                             next_mode = Some(Mode::PaneUpdate)
@@ -683,6 +696,26 @@ impl<'a> ViewEditCtx<'a> {
 
     fn move_back_extended(&mut self, n: usize) {
         self.view.move_cursor_back_extended(n);
+        self.update_global_x = true;
+    }
+
+    fn half_page_down(&mut self) {
+        self.view.half_page_down();
+        self.update_global_x = true;
+    }
+
+    fn half_page_up(&mut self) {
+        self.view.half_page_up();
+        self.update_global_x = true;
+    }
+
+    fn page_down(&mut self) {
+        self.view.page_down();
+        self.update_global_x = true;
+    }
+
+    fn page_up(&mut self) {
+        self.view.page_up();
         self.update_global_x = true;
     }
 
