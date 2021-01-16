@@ -19,25 +19,27 @@ pub(crate) const CURSOR_WIDTH: f32 = 2.0;
 
 pub(crate) enum StyleType<'a, S: SliceRange> {
     Range(StyleSubRanges<'a, S>),
-    Const(Range<usize>, TextStyle, Color, bool),
+    Const(Range<usize>, TextStyle, Color, bool, f64),
 }
 
 impl<'a, S: SliceRange> StyleType<'a, S> {
     fn iter(self) -> StyleTypeIter<'a, S> {
         match self {
             StyleType::Range(r) => StyleTypeIter::Range(r),
-            StyleType::Const(r, s, c, u) => StyleTypeIter::Const(Some((S::from_raw(r), s, c, u))),
+            StyleType::Const(r, st, c, u, sc) => {
+                StyleTypeIter::Const(Some((S::from_raw(r), st, c, u, sc)))
+            }
         }
     }
 }
 
 enum StyleTypeIter<'a, S: SliceRange> {
     Range(StyleSubRanges<'a, S>),
-    Const(Option<(S, TextStyle, Color, bool)>),
+    Const(Option<(S, TextStyle, Color, bool, f64)>),
 }
 
 impl<'a, S: SliceRange> Iterator for StyleTypeIter<'a, S> {
-    type Item = (S, TextStyle, Color, bool);
+    type Item = (S, TextStyle, Color, bool, f64);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -75,7 +77,7 @@ pub(crate) struct TextCursor {
 // Internal enum used when drawing line of text
 enum SpanOrSpace {
     Span(ShapedSpan, Color),
-    Space(usize),
+    Space(f32),
 }
 
 // Use a font collection to render text
@@ -101,6 +103,7 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         S: RopeOrStr,
     {
         let mut style = TextStyle::default();
+        let mut scale = 1.0;
         let mut space_metrics = self.fc.space_metrics(text_size, style);
         let mut sp_awidth = space_metrics.advance.width.to_f32();
         let mut ascender = space_metrics.ascender;
@@ -115,15 +118,17 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         let fc = &mut self.fc;
         let spans = RefCell::new(Vec::new());
 
-        for (range, cur_style, color, _) in styles.iter() {
-            if cur_style != style {
+        for (range, cur_style, color, _, cur_scale) in styles.iter() {
+            let text_size = text_size.scale(cur_scale);
+            if cur_style != style || cur_scale != scale {
                 space_metrics = fc.space_metrics(text_size, style);
                 sp_awidth = space_metrics.advance.width.to_f32();
                 style = cur_style;
+                scale = cur_scale;
             }
 
             split_text(
-                &line.slice(range),
+                &line.slice_with(range),
                 tab_width,
                 |n| {
                     if let Some(cursor) = cursor.as_ref() {
@@ -131,11 +136,14 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                             cursor_x.set(Some(
                                 current_x.get() + sp_awidth * (cursor.gidx - gidx.get()) as f32,
                             ));
+                            cursor_block_width.set(sp_awidth);
                         }
                     }
                     gidx.set(gidx.get() + n);
                     current_x.set(current_x.get() + sp_awidth * n as f32);
-                    spans.borrow_mut().push(SpanOrSpace::Space(n));
+                    spans
+                        .borrow_mut()
+                        .push(SpanOrSpace::Space(sp_awidth * (n as f32)));
                     if current_x.get() >= width {
                         SplitCbRes::Stop
                     } else {
@@ -227,8 +235,8 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                 break;
             }
             match span_or_space {
-                SpanOrSpace::Space(n) => {
-                    pos.x += sp_awidth * (*n as f32);
+                SpanOrSpace::Space(width) => {
+                    pos.x += width;
                 }
                 SpanOrSpace::Span(shaped, color) => {
                     self.draw(shaped, pos, *color);

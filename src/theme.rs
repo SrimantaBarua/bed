@@ -136,6 +136,7 @@ pub(crate) struct ThemeSyntaxElem {
     pub(crate) slant: TextSlant,
     #[serde(default)]
     pub(crate) weight: TextWeight,
+    pub(crate) scale: Option<f64>,
 }
 
 #[derive(Deserialize)]

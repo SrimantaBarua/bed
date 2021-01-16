@@ -484,22 +484,8 @@ impl Buffer {
                     None,
                 )
                 .expect("failed to parse");
-            /*
-            {
-                let mut cursor = tree.walk();
-                walk_recur(&mut cursor, 0);
-            }
-            */
             self.opttree = Some(tree);
-            self.rehighlight_range(tree_sitter::Range {
-                start_byte: 0,
-                end_byte: rope.len_bytes(),
-                start_point: tree_sitter::Point::new(0, 0),
-                end_point: tree_sitter::Point::new(
-                    rope.len_lines(),
-                    rope.len_bytes() - rope.line_to_byte(rope.len_lines()),
-                ),
-            })
+            self.rehighlight_range(0..rope.len_bytes())
         }
     }
 
@@ -508,13 +494,13 @@ impl Buffer {
         if let Some(mut old_tree) = self.opttree.take() {
             let start_byte = old_rope.char_to_byte(old_crange.start);
             let old_end_byte = old_rope.char_to_byte(old_crange.end);
-            let new_end_byte = old_rope.char_to_byte(old_crange.start + new_clen);
+            let new_end_byte = rope.char_to_byte(old_crange.start + new_clen);
             let start_linum = old_rope.byte_to_line(start_byte);
             let start_linoff = start_byte - old_rope.line_to_byte(start_linum);
             let old_end_linum = old_rope.byte_to_line(old_end_byte);
             let old_end_linoff = old_end_byte - old_rope.line_to_byte(old_end_linum);
-            let new_end_linum = old_rope.byte_to_line(new_end_byte);
-            let new_end_linoff = new_end_byte - old_rope.line_to_byte(new_end_linum);
+            let new_end_linum = rope.byte_to_line(new_end_byte);
+            let new_end_linoff = new_end_byte - rope.line_to_byte(new_end_linum);
             old_tree.edit(&InputEdit {
                 start_byte,
                 old_end_byte,
@@ -539,28 +525,39 @@ impl Buffer {
                     )
                     .expect("failed to parse");
                 self.opttree = Some(new_tree.clone());
+                let start = rope.line_to_byte(start_linum);
+                let end = rope.line_to_byte(new_end_linum) + rope.line(new_end_linum).len_bytes();
+                self.rehighlight_range(start..end);
                 for range in old_tree.changed_ranges(&new_tree) {
-                    self.rehighlight_range(range);
+                    self.rehighlight_range(range.start_byte..range.end_byte);
                 }
+                /*
+                {
+                    eprint!("\n\n******** NEW TREE ********");
+                    let mut cursor = new_tree.walk();
+                    walk_recur(&mut cursor, 0);
+                }
+                */
             }
         }
     }
 
-    fn rehighlight_range(&mut self, range: tree_sitter::Range) {
+    fn rehighlight_range(&mut self, byte_range: Range<usize>) {
         if self.opttree.is_none() || self.opttslang.is_none() {
             return;
         }
+        eprintln!("rehighlight_range: {:?}", byte_range);
         let shared = &mut *self.shared.borrow_mut();
         let tree = self.opttree.as_ref().unwrap();
         let tslang = self.opttslang.as_ref().unwrap();
         let rope = &shared.rope;
         let theme = self.bed_handle.theme();
         // Reset highlighting
-        let crange = rope.byte_to_char(range.start_byte)..rope.byte_to_char(range.end_byte);
+        let crange = rope.byte_to_char(byte_range.start)..rope.byte_to_char(byte_range.end);
         shared.styles.set_default(crange, theme.textview.foreground);
         // Add new highlighting
         let mut cursor = QueryCursor::new();
-        cursor.set_byte_range(range.start_byte, range.end_byte);
+        cursor.set_byte_range(byte_range.start, byte_range.end);
         let iter = cursor.captures(&tslang.hl_query, tree.root_node(), |node| {
             let range = node.byte_range();
             let range = rope.byte_to_char(range.start)..rope.byte_to_char(range.end);
@@ -574,6 +571,14 @@ impl Buffer {
                 buf.clear();
                 let mut elem = None;
                 let capture_name = &tslang.hl_query.capture_names()[capture.index as usize];
+                if capture_name.starts_with("_") {
+                    continue;
+                }
+                eprintln!(
+                    "capture: {:?} -> {}",
+                    capture_name,
+                    rope.slice(crange.clone())
+                );
                 for split in capture_name.split('.') {
                     if buf.len() > 0 {
                         buf.push('.');
@@ -586,7 +591,10 @@ impl Buffer {
                 if let Some(elem) = elem {
                     let style = TextStyle::new(elem.weight, elem.slant);
                     shared.styles.set_style(crange.clone(), style);
-                    shared.styles.set_color(crange, elem.foreground);
+                    shared.styles.set_color(crange.clone(), elem.foreground);
+                    if let Some(scale) = elem.scale {
+                        shared.styles.set_scale(crange, scale);
+                    }
                 }
             }
         }

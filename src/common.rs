@@ -84,7 +84,7 @@ pub(crate) trait RopeOrStr: std::fmt::Display {
     fn blen(&self) -> usize;
     fn string(&self) -> String;
     fn grapheme_idxs(&self) -> Self::GraphemeIter;
-    fn slice(&self, range: Self::SliceRange) -> Self;
+    fn slice_with(&self, range: Self::SliceRange) -> Self;
 }
 
 impl<'a> RopeOrStr for RopeSlice<'a> {
@@ -108,7 +108,7 @@ impl<'a> RopeOrStr for RopeSlice<'a> {
         RopeGraphemeIndices(RopeGraphemes::new(self))
     }
 
-    fn slice(&self, range: RopeSliceRange) -> RopeSlice<'a> {
+    fn slice_with(&self, range: RopeSliceRange) -> RopeSlice<'a> {
         self.slice(range.0)
     }
 }
@@ -169,7 +169,7 @@ impl<'a> RopeOrStr for &'a str {
         StringGraphemeIndices(self.grapheme_indices(true))
     }
 
-    fn slice(&self, range: StrSliceRange) -> &'a str {
+    fn slice_with(&self, range: StrSliceRange) -> &'a str {
         &self[range.0]
     }
 }
@@ -231,7 +231,7 @@ where
             '\n' | '\r' | '\x0b' | '\x0c' | '\u{85}' | '\u{2028}' | '\u{2029}' => break,
             ' ' => {
                 if !range.is_empty() {
-                    if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
+                    if run_cb(&line.slice_with(range.clone())) == SplitCbRes::Stop {
                         return;
                     }
                     range.clear();
@@ -243,7 +243,7 @@ where
             }
             '\t' => {
                 if !range.is_empty() {
-                    if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
+                    if run_cb(&line.slice_with(range.clone())) == SplitCbRes::Stop {
                         return;
                     }
                     range.clear();
@@ -267,7 +267,7 @@ where
                 if script_here != Script::Unknown && script_here != Script::Common {
                     if let Some(script) = last_script {
                         if script != script_here {
-                            if run_cb(&line.slice(range.clone())) == SplitCbRes::Stop {
+                            if run_cb(&line.slice_with(range.clone())) == SplitCbRes::Stop {
                                 return;
                             }
                             range.clear();
@@ -284,7 +284,7 @@ where
     if num_spaces > 0 {
         space_cb(num_spaces);
     } else if range.len() > 0 {
-        run_cb(&line.slice(range.clone()));
+        run_cb(&line.slice_with(range.clone()));
     }
 }
 

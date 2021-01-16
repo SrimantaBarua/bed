@@ -6,11 +6,11 @@ use std::ops::Range;
 use take_mut::take;
 
 #[derive(Debug)]
-pub(crate) struct RangeTree<T: Clone + Eq> {
+pub(crate) struct RangeTree<T: Clone + PartialEq> {
     root: Option<Box<Node<T>>>,
 }
 
-impl<T: Clone + Eq> RangeTree<T> {
+impl<T: Clone + PartialEq> RangeTree<T> {
     pub(crate) fn new() -> RangeTree<T> {
         RangeTree { root: None }
     }
@@ -52,30 +52,30 @@ impl<T: Clone + Eq> RangeTree<T> {
 }
 
 #[derive(Debug)]
-struct LeafNode<T: Clone + Eq> {
+struct LeafNode<T: Clone + PartialEq> {
     data: T,
 }
 
 #[derive(Debug)]
-struct InnerNode<T: Clone + Eq> {
+struct InnerNode<T: Clone + PartialEq> {
     left: Box<Node<T>>,
     right: Box<Node<T>>,
     height: usize,
 }
 
 #[derive(Debug)]
-enum NodeTyp<T: Clone + Eq> {
+enum NodeTyp<T: Clone + PartialEq> {
     Leaf(LeafNode<T>),
     Inner(InnerNode<T>),
 }
 
 #[derive(Debug)]
-struct Node<T: Clone + Eq> {
+struct Node<T: Clone + PartialEq> {
     len: usize,
     typ: NodeTyp<T>,
 }
 
-impl<T: Clone + Eq> Node<T> {
+impl<T: Clone + PartialEq> Node<T> {
     fn new_leaf(len: usize, data: T) -> Node<T> {
         assert!(len > 0);
         Node {
@@ -238,7 +238,7 @@ impl<T: Clone + Eq> Node<T> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct RangeTreeIter<'a, T: Clone + Eq> {
+pub(crate) struct RangeTreeIter<'a, T: Clone + PartialEq> {
     stack: Vec<&'a InnerNode<T>>,
     cur_start: usize,
     cur_end: usize,
@@ -246,7 +246,7 @@ pub(crate) struct RangeTreeIter<'a, T: Clone + Eq> {
     cur_node: Option<&'a LeafNode<T>>,
 }
 
-impl<'a, T: Clone + Eq> RangeTreeIter<'a, T> {
+impl<'a, T: Clone + PartialEq> RangeTreeIter<'a, T> {
     fn new(root: &'a Node<T>, mut range: Range<usize>) -> RangeTreeIter<'a, T> {
         if range.is_empty() {
             return RangeTreeIter {
@@ -291,7 +291,7 @@ impl<'a, T: Clone + Eq> RangeTreeIter<'a, T> {
     }
 }
 
-impl<'a, T: Clone + Eq> Iterator for RangeTreeIter<'a, T> {
+impl<'a, T: Clone + PartialEq> Iterator for RangeTreeIter<'a, T> {
     type Item = (Range<usize>, &'a T);
 
     fn next(&mut self) -> Option<(Range<usize>, &'a T)> {

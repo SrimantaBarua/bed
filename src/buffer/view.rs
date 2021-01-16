@@ -193,6 +193,9 @@ impl View {
 
             // Check cursor position on the line
             let mut text_font = self.bed_handle.text_font();
+            let mut style = TextStyle::default();
+            let mut scale = 1.0;
+            let mut space_metrics = text_font.space_metrics(self.text_size, style);
             let cursor_x = Cell::new(-self.off.x as f32);
             let gidx = Cell::new(0);
             let point = point.cast::<f32>();
@@ -201,13 +204,17 @@ impl View {
             let start_cidx = data.line_to_char(self.cursor.line_num);
             let end_cidx = start_cidx + line.len_chars();
 
-            if let Some(iter) = styles.style.iter_range(start_cidx..end_cidx) {
-                for (range, &style) in iter {
-                    let range = range.start - start_cidx..range.end - start_cidx;
-                    let space_metrics = text_font.space_metrics(self.text_size, style);
+            if end_cidx > start_cidx {
+                for (range, cur_style, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
+                    let text_size = self.text_size.scale(cur_scale);
+                    if cur_style != style || cur_scale != scale {
+                        space_metrics = text_font.space_metrics(text_size, style);
+                        style = cur_style;
+                        scale = cur_scale;
+                    }
                     let sp_awidth = space_metrics.advance.width.to_f32();
                     split_text(
-                        &line.slice(range),
+                        &line.slice_with(range),
                         tab_width,
                         |n| {
                             let start = cursor_x.get();
@@ -224,7 +231,7 @@ impl View {
                             }
                         },
                         |text| {
-                            let shaped = text_font.shape(text, self.text_size, style);
+                            let shaped = text_font.shape(text, text_size, style);
                             let mut gis = shaped.glyph_infos.iter().peekable();
                             for j in text.grapheme_idxs() {
                                 while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
@@ -277,7 +284,9 @@ impl View {
         let tab_width = shared.tab_width;
 
         let mut text_font = self.bed_handle.text_font();
-        let space_metrics = text_font.space_metrics(self.text_size, TextStyle::default());
+        let mut style = TextStyle::default();
+        let mut scale = 1.0;
+        let mut space_metrics = text_font.space_metrics(self.text_size, style);
         let cursor_x = Cell::new(0.0);
         let cursor_block_width = Cell::new(space_metrics.advance.width.to_f32());
         let line_gidx = self.cursor.line_gidx;
@@ -287,13 +296,17 @@ impl View {
         let start_cidx = data.line_to_char(self.cursor.line_num);
         let end_cidx = start_cidx + line.len_chars();
 
-        if let Some(iter) = styles.style.iter_range(start_cidx..end_cidx) {
-            for (range, &style) in iter {
-                let range = range.start - start_cidx..range.end - start_cidx;
-                let space_metrics = text_font.space_metrics(self.text_size, style);
+        if end_cidx > start_cidx {
+            for (range, cur_style, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
+                let text_size = self.text_size.scale(scale);
+                if cur_style != style || cur_scale != scale {
+                    space_metrics = text_font.space_metrics(text_size, style);
+                    style = cur_style;
+                    scale = cur_scale;
+                }
                 let sp_awidth = space_metrics.advance.width.to_f32();
                 split_text(
-                    &line.slice(range),
+                    &line.slice_with(range),
                     tab_width,
                     |n| {
                         if (gidx.get()..gidx.get() + n).contains(&line_gidx) {
@@ -307,7 +320,7 @@ impl View {
                         }
                     },
                     |text| {
-                        let shaped = text_font.shape(text, self.text_size, style);
+                        let shaped = text_font.shape(text, text_size, style);
                         let mut gis = shaped.glyph_infos.iter().peekable();
                         for j in text.grapheme_idxs() {
                             while let Some(cluster) = gis.peek().map(|gi| gi.cluster) {
@@ -467,7 +480,13 @@ impl View {
             for rope_line in data.lines_at(self.start_line) {
                 let end_cidx = start_cidx + rope_line.len_chars();
                 let style_type = if start_cidx == end_cidx {
-                    StyleType::Const(0..0, TextStyle::default(), theme.textview.foreground, false)
+                    StyleType::Const(
+                        0..0,
+                        TextStyle::default(),
+                        theme.textview.foreground,
+                        false,
+                        1.0,
+                    )
                 } else {
                     StyleType::Range(styles.sub_range(start_cidx..end_cidx))
                 };
@@ -529,7 +548,7 @@ impl View {
                 let origin = point2(gutter_padding, base - ascender);
                 text_ctx.draw_line(
                     &buf.as_str(),
-                    StyleType::Const(0..buf.len(), TextStyle::default(), fgcol, false),
+                    StyleType::Const(0..buf.len(), TextStyle::default(), fgcol, false, 1.0),
                     tab_width,
                     origin,
                     gutter_rect.width() - gutter_padding,
@@ -557,7 +576,13 @@ impl View {
 
             text_ctx.draw_line(
                 &status_left.as_str(),
-                StyleType::Const(0..status_left.len(), TextStyle::default(), fgcol, false),
+                StyleType::Const(
+                    0..status_left.len(),
+                    TextStyle::default(),
+                    fgcol,
+                    false,
+                    1.0,
+                ),
                 tab_width,
                 origin,
                 status_rect.width() - hor_padding,
@@ -567,7 +592,13 @@ impl View {
             );
             text_ctx.draw_line(
                 &status_right.as_str(),
-                StyleType::Const(0..status_right.len(), TextStyle::default(), fgcol, false),
+                StyleType::Const(
+                    0..status_right.len(),
+                    TextStyle::default(),
+                    fgcol,
+                    false,
+                    1.0,
+                ),
                 tab_width,
                 origin,
                 status_rect.width() - hor_padding,
@@ -622,18 +653,24 @@ impl View {
         let tab_width = shared.tab_width;
 
         let mut text_font = self.bed_handle.text_font();
+        let mut style = TextStyle::default();
+        let mut scale = 1.0;
+        let mut space_metrics = text_font.space_metrics(self.text_size, style);
         let line = data.line(linum);
         let start_cidx = data.line_to_char(linum);
         let end_cidx = start_cidx + line.len_chars();
-        let space_metrics = text_font.space_metrics(self.text_size, TextStyle::default());
         let state = RefCell::new((space_metrics.ascender, space_metrics.descender, 0.0));
         let line_pad = f26_6::from(self.bed_handle.text_line_pad() as f32);
-        if let Some(iter) = styles.style.iter_range(start_cidx..end_cidx) {
-            for (range, &style) in iter {
-                let range = range.start - start_cidx..range.end - start_cidx;
-                let space_metrics = text_font.space_metrics(self.text_size, style);
+        if end_cidx > start_cidx {
+            for (range, cur_style, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
+                let text_size = self.text_size.scale(scale);
+                if cur_style != style || cur_scale != scale {
+                    space_metrics = text_font.space_metrics(text_size, style);
+                    style = cur_style;
+                    scale = cur_scale;
+                }
                 split_text(
-                    &line.slice(range),
+                    &line.slice_with(range),
                     tab_width,
                     |n| {
                         state.borrow_mut().2 += space_metrics.advance.width.to_f32() * n as f32;
@@ -641,7 +678,7 @@ impl View {
                     },
                     |text| {
                         let mut inner = state.borrow_mut();
-                        let shaped = text_font.shape(text, self.text_size, style);
+                        let shaped = text_font.shape(text, text_size, style);
                         if shaped.ascender > inner.0 {
                             inner.0 = shaped.ascender;
                         }
