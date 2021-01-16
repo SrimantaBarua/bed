@@ -93,7 +93,14 @@ impl Prompt {
                 let fgcol = theme.prompt.foreground;
                 text_ctx.draw_line(
                     &self.text.as_str(),
-                    StyleType::Const(0..self.text.len(), TextStyle::default(), fgcol, false, 1.0),
+                    StyleType::Const(
+                        0..self.text.len(),
+                        TextStyle::default(),
+                        fgcol,
+                        false,
+                        false,
+                        1.0,
+                    ),
                     TAB_WIDTH,
                     origin,
                     width,

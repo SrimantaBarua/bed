@@ -570,6 +570,12 @@ impl Buffer {
                 buf.clear();
                 let mut elem = None;
                 let capture_name = &tslang.hl_query.capture_names()[capture.index as usize];
+                if capture_name == "conceal" {
+                    shared.styles.set_conceal(crange.clone(), true);
+                    continue;
+                } else {
+                    shared.styles.set_conceal(crange.clone(), false);
+                }
                 if capture_name.starts_with("_") {
                     continue;
                 }

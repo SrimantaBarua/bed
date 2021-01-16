@@ -19,15 +19,15 @@ pub(crate) const CURSOR_WIDTH: f32 = 2.0;
 
 pub(crate) enum StyleType<'a, S: SliceRange> {
     Range(StyleSubRanges<'a, S>),
-    Const(Range<usize>, TextStyle, Color, bool, f64),
+    Const(Range<usize>, TextStyle, Color, bool, bool, f64),
 }
 
 impl<'a, S: SliceRange> StyleType<'a, S> {
     fn iter(self) -> StyleTypeIter<'a, S> {
         match self {
             StyleType::Range(r) => StyleTypeIter::Range(r),
-            StyleType::Const(r, st, c, u, sc) => {
-                StyleTypeIter::Const(Some((S::from_raw(r), st, c, u, sc)))
+            StyleType::Const(r, st, cl, u, cn, sc) => {
+                StyleTypeIter::Const(Some((S::from_raw(r), st, cl, u, cn, sc)))
             }
         }
     }
@@ -35,11 +35,11 @@ impl<'a, S: SliceRange> StyleType<'a, S> {
 
 enum StyleTypeIter<'a, S: SliceRange> {
     Range(StyleSubRanges<'a, S>),
-    Const(Option<(S, TextStyle, Color, bool, f64)>),
+    Const(Option<(S, TextStyle, Color, bool, bool, f64)>),
 }
 
 impl<'a, S: SliceRange> Iterator for StyleTypeIter<'a, S> {
-    type Item = (S, TextStyle, Color, bool, f64);
+    type Item = (S, TextStyle, Color, bool, bool, f64);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -126,7 +126,7 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         let fc = &mut self.fc;
         let spans = RefCell::new(Vec::new());
 
-        for (range, cur_style, color, under, cur_scale) in styles.iter() {
+        for (range, cur_style, color, under, conceal, cur_scale) in styles.iter() {
             let text_size = text_size.scale(cur_scale);
             if cur_scale != scale {
                 font_metrics = fc.metrics(text_size);
@@ -136,6 +136,9 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                 sp_awidth = space_metrics.advance.width.to_f32();
                 style = cur_style;
                 scale = cur_scale;
+            }
+            if conceal && cursor.is_none() {
+                continue;
             }
 
             split_text(
