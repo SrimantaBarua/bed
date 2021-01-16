@@ -546,7 +546,6 @@ impl Buffer {
         if self.opttree.is_none() || self.opttslang.is_none() {
             return;
         }
-        eprintln!("rehighlight_range: {:?}", byte_range);
         let shared = &mut *self.shared.borrow_mut();
         let tree = self.opttree.as_ref().unwrap();
         let tslang = self.opttslang.as_ref().unwrap();
@@ -574,11 +573,6 @@ impl Buffer {
                 if capture_name.starts_with("_") {
                     continue;
                 }
-                eprintln!(
-                    "capture: {:?} -> {}",
-                    capture_name,
-                    rope.slice(crange.clone())
-                );
                 for split in capture_name.split('.') {
                     if buf.len() > 0 {
                         buf.push('.');
@@ -592,6 +586,7 @@ impl Buffer {
                     let style = TextStyle::new(elem.weight, elem.slant);
                     shared.styles.set_style(crange.clone(), style);
                     shared.styles.set_color(crange.clone(), elem.foreground);
+                    shared.styles.set_under(crange.clone(), elem.underline);
                     if let Some(scale) = elem.scale {
                         shared.styles.set_scale(crange, scale);
                     }

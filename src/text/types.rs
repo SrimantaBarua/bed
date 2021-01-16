@@ -15,11 +15,11 @@ impl From<f32> for f26_6 {
 }
 
 impl f26_6 {
-    pub(super) fn from_raw(raw: i32) -> f26_6 {
+    pub(super) const fn from_raw(raw: i32) -> f26_6 {
         f26_6(raw >> 3)
     }
 
-    pub(super) fn to_raw(self) -> i32 {
+    pub(super) const fn to_raw(self) -> i32 {
         self.0 << 3
     }
 
@@ -27,7 +27,7 @@ impl f26_6 {
         (self.0 as f32) / 8.0
     }
 
-    pub(crate) fn floor(self) -> f26_6 {
+    pub(crate) const fn floor(self) -> f26_6 {
         f26_6(self.0 & !7)
     }
 }

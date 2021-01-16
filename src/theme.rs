@@ -136,6 +136,8 @@ pub(crate) struct ThemeSyntaxElem {
     pub(crate) slant: TextSlant,
     #[serde(default)]
     pub(crate) weight: TextWeight,
+    #[serde(default)]
+    pub(crate) underline: bool,
     pub(crate) scale: Option<f64>,
 }
 

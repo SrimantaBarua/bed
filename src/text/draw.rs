@@ -74,10 +74,17 @@ pub(crate) struct TextCursor {
     pub(crate) color: Color,
 }
 
+// Underline position and thickness
+struct Underline {
+    position: f32,
+    thickness: f32,
+    color: Color,
+}
+
 // Internal enum used when drawing line of text
 enum SpanOrSpace {
-    Span(ShapedSpan, Color),
-    Space(f32),
+    Span(ShapedSpan, Color, Option<Underline>),
+    Space(f32, Option<Underline>),
 }
 
 // Use a font collection to render text
@@ -105,6 +112,7 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         let mut style = TextStyle::default();
         let mut scale = 1.0;
         let mut space_metrics = self.fc.space_metrics(text_size, style);
+        let mut font_metrics = self.fc.metrics(text_size);
         let mut sp_awidth = space_metrics.advance.width.to_f32();
         let mut ascender = space_metrics.ascender;
         let mut descender = space_metrics.descender;
@@ -118,8 +126,11 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
         let fc = &mut self.fc;
         let spans = RefCell::new(Vec::new());
 
-        for (range, cur_style, color, _, cur_scale) in styles.iter() {
+        for (range, cur_style, color, under, cur_scale) in styles.iter() {
             let text_size = text_size.scale(cur_scale);
+            if cur_scale != scale {
+                font_metrics = fc.metrics(text_size);
+            }
             if cur_style != style || cur_scale != scale {
                 space_metrics = fc.space_metrics(text_size, style);
                 sp_awidth = space_metrics.advance.width.to_f32();
@@ -141,9 +152,18 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                     }
                     gidx.set(gidx.get() + n);
                     current_x.set(current_x.get() + sp_awidth * n as f32);
+                    let underline = if under {
+                        Some(Underline {
+                            position: font_metrics.underline_pos.to_f32(),
+                            thickness: font_metrics.underline_thickness.to_f32(),
+                            color,
+                        })
+                    } else {
+                        None
+                    };
                     spans
                         .borrow_mut()
-                        .push(SpanOrSpace::Space(sp_awidth * (n as f32)));
+                        .push(SpanOrSpace::Space(sp_awidth * (n as f32), underline));
                     if current_x.get() >= width {
                         SplitCbRes::Stop
                     } else {
@@ -182,7 +202,18 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                     if shaped.descender > descender {
                         descender = shaped.descender;
                     }
-                    spans.borrow_mut().push(SpanOrSpace::Span(shaped, color));
+                    let underline = if under {
+                        Some(Underline {
+                            position: shaped.underline_pos.to_f32(),
+                            thickness: shaped.underline_thickness.to_f32(),
+                            color,
+                        })
+                    } else {
+                        None
+                    };
+                    spans
+                        .borrow_mut()
+                        .push(SpanOrSpace::Span(shaped, color, underline));
                     if current_x.get() >= width {
                         SplitCbRes::Stop
                     } else {
@@ -235,11 +266,25 @@ impl<'a, 'b> TextRenderCtx<'a, 'b> {
                 break;
             }
             match span_or_space {
-                SpanOrSpace::Space(width) => {
+                SpanOrSpace::Space(width, opt_under) => {
+                    if let Some(under) = opt_under {
+                        let rect = Rect::new(
+                            point2(pos.x, pos.y - under.position),
+                            size2(*width, under.thickness),
+                        );
+                        self.ctx.color_quad(rect, under.color, false);
+                    }
                     pos.x += width;
                 }
-                SpanOrSpace::Span(shaped, color) => {
+                SpanOrSpace::Span(shaped, color, opt_under) => {
                     self.draw(shaped, pos, *color);
+                    if let Some(under) = opt_under {
+                        let rect = Rect::new(
+                            point2(pos.x, pos.y - under.position),
+                            size2(shaped.width.to_f32(), under.thickness),
+                        );
+                        self.ctx.color_quad(rect, under.color, false);
+                    }
                     pos.x += shaped.width.to_f32();
                 }
             }
