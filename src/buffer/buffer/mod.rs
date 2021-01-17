@@ -593,9 +593,7 @@ impl Buffer {
                     shared.styles.set_style(crange.clone(), style);
                     shared.styles.set_color(crange.clone(), elem.foreground);
                     shared.styles.set_under(crange.clone(), elem.underline);
-                    if let Some(scale) = elem.scale {
-                        shared.styles.set_scale(crange, scale);
-                    }
+                    shared.styles.set_scale(crange, elem.scale);
                 }
             }
         }

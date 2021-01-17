@@ -100,11 +100,14 @@ impl View {
         let linum = self.line_idx_below(npix);
         let shared = self.shared.borrow();
         let len_lines = shared.rope.len_lines();
-        if linum == len_lines - 1 {
-            self.cursor.line_num = linum;
+        if linum >= len_lines - 1 {
+            self.cursor.line_num = len_lines - 1;
         } else {
             let diff = linum - self.start_line;
             self.cursor.line_num += diff;
+            if self.cursor.line_num >= len_lines {
+                self.cursor.line_num = len_lines - 1;
+            }
             self.start_line += diff;
             self.off.y = 0;
         }
