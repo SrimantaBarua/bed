@@ -117,6 +117,8 @@ impl Bed {
     }
 
     fn quit(&mut self) {
-        self.quitting = true;
+        if self.text_tree.close_active() {
+            self.quitting = true;
+        }
     }
 }

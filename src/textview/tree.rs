@@ -20,7 +20,7 @@ use super::view::TextView;
 pub(crate) struct TextTree {
     theme_set: Rc<ThemeSet>,
     config: Rc<RefCell<Config>>,
-    root: Node,
+    root: Option<Node>,
 }
 
 impl TextTree {
@@ -32,32 +32,51 @@ impl TextTree {
         theme_set: Rc<ThemeSet>,
     ) -> TextTree {
         TextTree {
-            root: Node::new_leaf(rect, buffer, view_id),
+            root: Some(Node::new_leaf(rect, buffer, view_id)),
             config,
             theme_set,
         }
     }
 
     pub(crate) fn set_rect(&mut self, rect: Rect<u32, PixelSize>) {
-        self.root.set_rect(rect, self.border_width())
+        let border_width = self.border_width();
+        let root = self.root.as_mut().expect("should have exited");
+        root.set_rect(rect, border_width)
     }
 
     pub(crate) fn draw(&mut self, painter: &mut Painter) {
-        painter.widget_ctx(self.root.rect().cast(), self.border_color(), false);
-        self.root.draw(painter);
+        let border_color = self.border_color();
+        let root = self.root.as_mut().expect("should have exited");
+        painter.widget_ctx(root.rect().cast(), border_color, false);
+        root.draw(painter);
     }
 
     pub(crate) fn active_mut(&mut self) -> &mut TextView {
-        self.root.active_mut()
+        self.root.as_mut().expect("should have exited").active_mut()
     }
 
     pub(crate) fn active(&self) -> &TextView {
-        self.root.active()
+        self.root.as_ref().expect("should have exited").active()
+    }
+
+    pub(crate) fn close_active(&mut self) -> bool {
+        let root = self.root.take().expect("should have exited");
+        if let Some(mut root) = root.close_active() {
+            root.set_rect(root.rect(), self.border_width());
+            self.root = Some(root);
+            self.set_active_cursor_block(true);
+            false
+        } else {
+            true
+        }
     }
 
     pub(crate) fn move_cursor_to_point(&mut self, point: Point2D<i32, PixelSize>) {
         self.set_active_cursor_underline(false);
-        self.root.move_cursor_to_point(point);
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .move_cursor_to_point(point);
         self.set_active_cursor_block(true);
     }
 
@@ -66,85 +85,106 @@ impl TextTree {
         acc: Vector2D<f32, PixelSize>,
         duration: Duration,
     ) {
-        self.root.scroll_with_active_acc(acc, duration);
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .scroll_with_active_acc(acc, duration);
     }
 
     pub(crate) fn split_horizontal(&mut self, buffer: BufferHandle, view_id: BufferViewId) {
         self.set_active_cursor_underline(true);
-        take(&mut self.root, |root| {
-            root.split(buffer, view_id, SplitDir::Horizontal)
-        });
-        self.root.set_rect(self.root.rect(), self.border_width());
+        let root = self.root.take().expect("should have exited");
+        let mut root = root.split(buffer, view_id, SplitDir::Horizontal);
+        root.set_rect(root.rect(), self.border_width());
+        self.root = Some(root);
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn split_vertical(&mut self, buffer: BufferHandle, view_id: BufferViewId) {
         self.set_active_cursor_underline(true);
-        take(&mut self.root, |root| {
-            root.split(buffer, view_id, SplitDir::Vertical)
-        });
-        self.root.set_rect(self.root.rect(), self.border_width());
+        let root = self.root.take().expect("should have exited");
+        let mut root = root.split(buffer, view_id, SplitDir::Vertical);
+        root.set_rect(root.rect(), self.border_width());
+        self.root = Some(root);
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_left_active(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.set_left_active();
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .set_left_active();
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_right_active(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.set_right_active();
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .set_right_active();
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_up_active(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.set_up_active();
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .set_up_active();
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn set_down_active(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.set_down_active();
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .set_down_active();
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn move_left(&mut self) {
-        self.root.move_left();
+        self.root.as_mut().expect("should have exited").move_left();
     }
 
     pub(crate) fn move_right(&mut self) {
-        self.root.move_right();
+        self.root.as_mut().expect("should have exited").move_right();
     }
 
     pub(crate) fn move_up(&mut self) {
-        self.root.move_up();
+        self.root.as_mut().expect("should have exited").move_up();
     }
 
     pub(crate) fn move_down(&mut self) {
-        self.root.move_down();
+        self.root.as_mut().expect("should have exited").move_down();
     }
 
     pub(crate) fn cycle_prev(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.cycle_prev();
+        self.root.as_mut().expect("should have exited").cycle_prev();
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn cycle_next(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.cycle_next();
+        self.root.as_mut().expect("should have exited").cycle_next();
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn grow_active(&mut self) {
-        self.root.grow_active();
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .grow_active();
     }
 
     pub(crate) fn shrink_active(&mut self) {
-        self.root.shrink_active();
+        self.root
+            .as_mut()
+            .expect("should have exited")
+            .shrink_active();
     }
 
     fn border_color(&self) -> Color {
@@ -209,6 +249,40 @@ impl Node {
         match self {
             Node::Leaf { .. } => true,
             Node::Inner { .. } => false,
+        }
+    }
+
+    fn close_active(self) -> Option<Node> {
+        match self {
+            Node::Leaf { .. } => None,
+            Node::Inner {
+                rect,
+                mut children,
+                mut active,
+                split_dir,
+            } => {
+                if let Some(new) = children.remove(active).close_active() {
+                    children.insert(active, new);
+                    Some(Node::Inner {
+                        rect,
+                        children,
+                        active,
+                        split_dir,
+                    })
+                } else if children.is_empty() {
+                    None
+                } else {
+                    if active >= children.len() {
+                        active = children.len() - 1;
+                    }
+                    Some(Node::Inner {
+                        rect,
+                        children,
+                        active,
+                        split_dir,
+                    })
+                }
+            }
         }
     }
 
