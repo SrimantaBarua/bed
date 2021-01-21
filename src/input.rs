@@ -418,8 +418,6 @@ impl InputState {
                     'K' => tree.move_up(),
                     'l' => tree.set_right_active(),
                     'L' => tree.move_right(),
-                    'w' => tree.cycle_next(),
-                    'W' => tree.cycle_prev(),
                     '>' => tree.grow_active(),
                     '<' => tree.shrink_active(),
                     _ => valid_input = false,
@@ -573,6 +571,14 @@ impl InputState {
                 }
                 Mode::PaneUpdate => match vkey {
                     VirtualKeyCode::Escape => self.mode = Mode::Normal { action_mul: None },
+                    VirtualKeyCode::W => {
+                        if self.modifiers.shift() {
+                            bed.edit_text_tree().cycle_prev();
+                        } else {
+                            bed.edit_text_tree().cycle_next();
+                        }
+                        self.mode = Mode::Normal { action_mul: None };
+                    }
                     _ => {}
                 },
             }

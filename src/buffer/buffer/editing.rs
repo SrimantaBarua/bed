@@ -76,6 +76,9 @@ impl Buffer {
         let view = self.views.get(view_id).unwrap();
         let mut cidx = view.cursor.cidx;
         let pre_len_chars = self.shared.borrow().rope.len_chars();
+        if pre_len_chars == 0 {
+            return;
+        }
         assert!(cidx <= pre_len_chars);
         if cidx == pre_len_chars {
             cidx = pre_len_chars - 1;

@@ -163,13 +163,19 @@ impl TextTree {
 
     pub(crate) fn cycle_prev(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.as_mut().expect("should have exited").cycle_prev();
+        let root = self.root.as_mut().expect("should have exited");
+        if !root.cycle_prev() {
+            root.set_last_active();
+        }
         self.set_active_cursor_block(true);
     }
 
     pub(crate) fn cycle_next(&mut self) {
         self.set_active_cursor_underline(false);
-        self.root.as_mut().expect("should have exited").cycle_next();
+        let root = self.root.as_mut().expect("should have exited");
+        if !root.cycle_next() {
+            root.set_first_active();
+        }
         self.set_active_cursor_block(true);
     }
 
@@ -547,6 +553,7 @@ impl Node {
                 if *split_dir == SplitDir::Vertical && *active > 0 {
                     *active = *active - 1;
                     children[*active].set_rightmost_active();
+                    children[*active].set_topmost_active();
                     return true;
                 }
                 false
@@ -569,6 +576,7 @@ impl Node {
                 if *split_dir == SplitDir::Vertical && *active < children.len() - 1 {
                     *active = *active + 1;
                     children[*active].set_leftmost_active();
+                    children[*active].set_topmost_active();
                     return true;
                 }
                 false
@@ -591,6 +599,7 @@ impl Node {
                 if *split_dir == SplitDir::Horizontal && *active > 0 {
                     *active = *active - 1;
                     children[*active].set_bottommost_active();
+                    children[*active].set_leftmost_active();
                     return true;
                 }
                 false
@@ -613,6 +622,7 @@ impl Node {
                 if *split_dir == SplitDir::Horizontal && *active < children.len() - 1 {
                     *active = *active + 1;
                     children[*active].set_topmost_active();
+                    children[*active].set_leftmost_active();
                     return true;
                 }
                 false
@@ -636,12 +646,66 @@ impl Node {
         unimplemented!()
     }
 
-    fn cycle_prev(&mut self) {
-        unimplemented!()
+    fn set_first_active(&mut self) {
+        match self {
+            Node::Leaf { .. } => {}
+            Node::Inner {
+                children, active, ..
+            } => {
+                *active = 0;
+                children[*active].set_first_active()
+            }
+        }
     }
 
-    fn cycle_next(&mut self) {
-        unimplemented!()
+    fn set_last_active(&mut self) {
+        match self {
+            Node::Leaf { .. } => {}
+            Node::Inner {
+                children, active, ..
+            } => {
+                *active = children.len() - 1;
+                children[*active].set_last_active()
+            }
+        }
+    }
+
+    fn cycle_prev(&mut self) -> bool {
+        match self {
+            Node::Leaf { .. } => false,
+            Node::Inner {
+                children, active, ..
+            } => {
+                if children[*active].cycle_prev() {
+                    return true;
+                }
+                if *active > 0 {
+                    *active = *active - 1;
+                    children[*active].set_last_active();
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
+    fn cycle_next(&mut self) -> bool {
+        match self {
+            Node::Leaf { .. } => false,
+            Node::Inner {
+                children, active, ..
+            } => {
+                if children[*active].cycle_next() {
+                    return true;
+                }
+                if *active < children.len() - 1 {
+                    *active = *active + 1;
+                    children[*active].set_first_active();
+                    return true;
+                }
+                false
+            }
+        }
     }
 
     fn grow_active(&mut self) {
