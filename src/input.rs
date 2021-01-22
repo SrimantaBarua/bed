@@ -17,6 +17,25 @@ use crate::text::CursorStyle;
 use crate::textview::{TextTree, TextViewEditCtx};
 use crate::{Bed, BedHandle};
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(crate) enum MoveObj {
+    Left(usize),
+    Right(usize),
+    Up(usize),
+    Down(usize),
+    ToLine(usize),
+    ToLastLine,
+    ToViewFirstLine,
+    ToViewLastLine,
+    ToViewMiddleLine,
+    LineStart(usize),
+    LineEnd(usize),
+    LineFirstNonBlank,
+    WordBeg(usize, bool),
+    WordEnd(usize, bool),
+    Back(usize, bool),
+}
+
 #[derive(Debug, Eq, PartialEq)]
 enum Mode {
     Command,
@@ -106,8 +125,8 @@ impl InputState {
         };
         match &mut self.mode {
             Mode::Insert => match c as u32 {
-                8 /* backspace */ => bed.edit_view().delete_left(1),
-                127 /* delete */  => bed.edit_view().delete_right(1),
+                8 /* backspace */ => bed.edit_view().delete(MoveObj::Left(1)),
+                127 /* delete */  => bed.edit_view().delete(MoveObj::Right(1)),
                 _ => bed.edit_view().insert_char(c),
             },
             Mode::Normal { action_mul } => {
@@ -125,26 +144,32 @@ impl InputState {
                         is_num = true;
                     }
                     // Basic movement
-                    'h' => bed.edit_view().move_cursor_left(act_rep),
-                    'j' => bed.edit_view().move_cursor_down(act_rep),
-                    'k' => bed.edit_view().move_cursor_up(act_rep),
-                    'l' => bed.edit_view().move_cursor_right(act_rep),
+                    'h' => bed.edit_view().move_cursor(MoveObj::Left(act_rep)),
+                    'j' => bed.edit_view().move_cursor(MoveObj::Down(act_rep)),
+                    'k' => bed.edit_view().move_cursor(MoveObj::Up(act_rep)),
+                    'l' => bed.edit_view().move_cursor(MoveObj::Right(act_rep)),
                     // Move to line
                     'g' => {
                         let linum = action_mul.unwrap_or(1);
-                        bed.edit_view().move_cursor_to_line(linum - 1);
+                        bed.edit_view().move_cursor(MoveObj::ToLine(linum - 1));
                     }
-                    'G' => bed.edit_view().move_cursor_to_last_line(),
-                    'H' => bed.edit_view().move_cursor_to_view_first_line(),
-                    'L' => bed.edit_view().move_cursor_to_view_last_line(),
-                    'M' => bed.edit_view().move_cursor_to_view_middle_line(),
+                    'G' => bed.edit_view().move_cursor(MoveObj::ToLastLine),
+                    'H' => bed.edit_view().move_cursor(MoveObj::ToViewFirstLine),
+                    'L' => bed.edit_view().move_cursor(MoveObj::ToViewLastLine),
+                    'M' => bed.edit_view().move_cursor(MoveObj::ToViewMiddleLine),
                     // Object movement
-                    'w' => bed.edit_view().move_word(act_rep),
-                    'W' => bed.edit_view().move_word_extended(act_rep),
-                    'e' => bed.edit_view().move_word_end(act_rep),
-                    'E' => bed.edit_view().move_word_end_extended(act_rep),
-                    'b' => bed.edit_view().move_back(act_rep),
-                    'B' => bed.edit_view().move_back_extended(act_rep),
+                    'w' => bed
+                        .edit_view()
+                        .move_cursor(MoveObj::WordBeg(act_rep, false)),
+                    'W' => bed.edit_view().move_cursor(MoveObj::WordBeg(act_rep, true)),
+                    'e' => bed
+                        .edit_view()
+                        .move_cursor(MoveObj::WordEnd(act_rep, false)),
+                    'E' => bed.edit_view().move_cursor(MoveObj::WordEnd(act_rep, true)),
+                    'b' => bed
+                        .edit_view()
+                        .move_cursor(MoveObj::WordBeg(act_rep, false)),
+                    'B' => bed.edit_view().move_cursor(MoveObj::WordBeg(act_rep, true)),
                     // Move to start/end of line
                     '0' => {
                         *action_mul = match action_mul {
@@ -153,13 +178,13 @@ impl InputState {
                                 Some(*x * 10)
                             }
                             None => {
-                                bed.edit_view().move_cursor_to_line_start(1);
+                                bed.edit_view().move_cursor(MoveObj::LineStart(1));
                                 None
                             }
                         };
                     }
-                    '$' => bed.edit_view().move_cursor_to_line_end(act_rep),
-                    '^' => bed.edit_view().move_cursor_to_first_non_blank(),
+                    '$' => bed.edit_view().move_cursor(MoveObj::LineEnd(act_rep)),
+                    '^' => bed.edit_view().move_cursor(MoveObj::LineFirstNonBlank),
                     // Entering insert mode
                     'i' => {
                         next_mode = Some(Mode::Insert);
@@ -171,27 +196,27 @@ impl InputState {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.move_cursor_to_line_start(1);
+                        ctx.move_cursor(MoveObj::LineStart(1));
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'a' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.move_cursor_right(1);
+                        ctx.move_cursor(MoveObj::Right(1));
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'A' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.move_cursor_to_line_end(1);
+                        ctx.move_cursor(MoveObj::LineEnd(1));
                     }
                     'o' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.move_cursor_to_line_end(1);
+                        ctx.move_cursor(MoveObj::LineEnd(1));
                         ctx.insert_char('\n');
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
@@ -199,24 +224,24 @@ impl InputState {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.move_cursor_to_line_start(1);
+                        ctx.move_cursor(MoveObj::LineStart(1));
                         ctx.insert_char('\n');
-                        ctx.move_cursor_up(1);
+                        ctx.move_cursor(MoveObj::Up(1));
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     's' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.delete_right(act_rep);
+                        ctx.delete(MoveObj::Right(act_rep));
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'S' => {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.move_cursor_to_line_start(1);
-                        ctx.delete_to_line_end(act_rep);
+                        ctx.move_cursor(MoveObj::LineStart(1));
+                        ctx.delete(MoveObj::LineEnd(act_rep));
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     // Entering other modes
@@ -245,7 +270,7 @@ impl InputState {
                         bed.edit_prompt().set_prompt(":");
                     }
                     // Delete
-                    'x' => bed.edit_view().delete_right(act_rep),
+                    'x' => bed.edit_view().delete(MoveObj::Right(act_rep)),
                     _ => {}
                 }
                 if let Some(next) = next_mode {
@@ -280,74 +305,74 @@ impl InputState {
                     // Basic movement
                     'h' => {
                         for _ in 0..act_rep {
-                            ctx.delete_left(move_rep)
+                            ctx.delete(MoveObj::Left(move_rep))
                         }
                     }
                     'j' => {
                         for _ in 0..act_rep {
-                            ctx.delete_down(move_rep)
+                            ctx.delete(MoveObj::Down(move_rep))
                         }
                     }
                     'k' => {
                         for _ in 0..act_rep {
-                            ctx.delete_up(move_rep)
+                            ctx.delete(MoveObj::Up(move_rep))
                         }
                     }
                     'l' => {
                         for _ in 0..act_rep {
-                            ctx.delete_right(move_rep)
+                            ctx.delete(MoveObj::Right(move_rep))
                         }
                     }
                     // Delete to line
                     'g' => {
                         let linum = action_mul.unwrap_or(1);
-                        ctx.delete_to_line(linum - 1);
+                        ctx.delete(MoveObj::ToLine(linum - 1));
                     }
                     'G' => {
                         for _ in 0..act_rep {
-                            ctx.delete_to_last_line()
+                            ctx.delete(MoveObj::ToLastLine)
                         }
                     }
                     // Object
                     'c' if is_change_mode => {
                         for _ in 0..act_rep {
-                            ctx.delete_down(move_rep - 1)
+                            ctx.delete(MoveObj::Down(move_rep - 1))
                         }
                     }
                     'd' if !is_change_mode => {
                         for _ in 0..act_rep {
-                            ctx.delete_down(move_rep - 1)
+                            ctx.delete(MoveObj::Down(move_rep - 1))
                         }
                     }
                     // Object movement
                     'w' => {
                         for _ in 0..act_rep {
-                            ctx.delete_word(move_rep)
+                            ctx.delete(MoveObj::WordBeg(move_rep, false))
                         }
                     }
                     'W' => {
                         for _ in 0..act_rep {
-                            ctx.delete_word_extended(move_rep)
+                            ctx.delete(MoveObj::WordBeg(move_rep, true))
                         }
                     }
                     'e' => {
                         for _ in 0..act_rep {
-                            ctx.delete_word_end(move_rep)
+                            ctx.delete(MoveObj::WordEnd(move_rep, false))
                         }
                     }
                     'E' => {
                         for _ in 0..act_rep {
-                            ctx.delete_word_end_extended(move_rep)
+                            ctx.delete(MoveObj::WordEnd(move_rep, true))
                         }
                     }
                     'b' => {
                         for _ in 0..act_rep {
-                            ctx.delete_back(move_rep)
+                            ctx.delete(MoveObj::Back(move_rep, false))
                         }
                     }
                     'B' => {
                         for _ in 0..act_rep {
-                            ctx.delete_back_extended(move_rep)
+                            ctx.delete(MoveObj::Back(move_rep, true))
                         }
                     }
                     // Delete to start/end of line
@@ -358,17 +383,17 @@ impl InputState {
                                 Some(*x * 10)
                             }
                             None => {
-                                ctx.delete_to_line_start(1);
+                                ctx.delete(MoveObj::LineStart(1));
                                 None
                             }
                         };
                     }
                     '$' => {
                         for _ in 0..act_rep {
-                            ctx.delete_to_line_end(move_rep)
+                            ctx.delete(MoveObj::LineEnd(move_rep))
                         }
                     }
-                    '^' => ctx.delete_to_first_non_blank(),
+                    '^' => ctx.delete(MoveObj::LineFirstNonBlank),
                     _ => next_mode = Mode::Normal { action_mul: None },
                 }
                 if !is_num {
@@ -455,17 +480,17 @@ impl InputState {
             match &mut self.mode {
                 Mode::Insert => match vkey {
                     // Basic movement
-                    VirtualKeyCode::Up => bed.edit_view().move_cursor_up(1),
-                    VirtualKeyCode::Down => bed.edit_view().move_cursor_down(1),
-                    VirtualKeyCode::Left => bed.edit_view().move_cursor_left(1),
-                    VirtualKeyCode::Right => bed.edit_view().move_cursor_right(1),
-                    VirtualKeyCode::Home => bed.edit_view().move_cursor_to_line_start(1),
-                    VirtualKeyCode::End => bed.edit_view().move_cursor_to_line_end(1),
+                    VirtualKeyCode::Up => bed.edit_view().move_cursor(MoveObj::Up(1)),
+                    VirtualKeyCode::Down => bed.edit_view().move_cursor(MoveObj::Down(1)),
+                    VirtualKeyCode::Left => bed.edit_view().move_cursor(MoveObj::Left(1)),
+                    VirtualKeyCode::Right => bed.edit_view().move_cursor(MoveObj::Right(1)),
+                    VirtualKeyCode::Home => bed.edit_view().move_cursor(MoveObj::LineStart(1)),
+                    VirtualKeyCode::End => bed.edit_view().move_cursor(MoveObj::LineEnd(1)),
                     // Exiting insert mode
                     VirtualKeyCode::Escape => {
                         self.mode = Mode::Normal { action_mul: None };
                         let mut ctx = bed.edit_view();
-                        ctx.move_cursor_left(1);
+                        ctx.move_cursor(MoveObj::Left(1));
                         ctx.set_cursor_style(CursorStyle::Block);
                         ctx.set_buffer_mode(BufferMode::Normal);
                     }
@@ -477,12 +502,14 @@ impl InputState {
                     let mut next_mode = None;
                     match vkey {
                         // Basic movement
-                        VirtualKeyCode::Up => bed.edit_view().move_cursor_up(act_rep),
-                        VirtualKeyCode::Down => bed.edit_view().move_cursor_down(act_rep),
-                        VirtualKeyCode::Left => bed.edit_view().move_cursor_left(act_rep),
-                        VirtualKeyCode::Right => bed.edit_view().move_cursor_right(act_rep),
-                        VirtualKeyCode::Home => bed.edit_view().move_cursor_to_line_start(1),
-                        VirtualKeyCode::End => bed.edit_view().move_cursor_to_line_end(1),
+                        VirtualKeyCode::Up => bed.edit_view().move_cursor(MoveObj::Up(act_rep)),
+                        VirtualKeyCode::Down => bed.edit_view().move_cursor(MoveObj::Down(act_rep)),
+                        VirtualKeyCode::Left => bed.edit_view().move_cursor(MoveObj::Left(act_rep)),
+                        VirtualKeyCode::Right => {
+                            bed.edit_view().move_cursor(MoveObj::Right(act_rep))
+                        }
+                        VirtualKeyCode::Home => bed.edit_view().move_cursor(MoveObj::LineStart(1)),
+                        VirtualKeyCode::End => bed.edit_view().move_cursor(MoveObj::LineEnd(1)),
                         // Page up/down
                         VirtualKeyCode::F if self.modifiers == ModifiersState::CTRL => {
                             bed.edit_view().page_down()
@@ -524,12 +551,12 @@ impl InputState {
                     for _ in 0..act_rep {
                         match vkey {
                             // Basic movement
-                            VirtualKeyCode::Up => ctx.delete_up(move_rep),
-                            VirtualKeyCode::Down => ctx.delete_down(move_rep),
-                            VirtualKeyCode::Left => ctx.delete_left(move_rep),
-                            VirtualKeyCode::Right => ctx.delete_right(move_rep),
-                            VirtualKeyCode::Home => ctx.delete_to_line_start(1),
-                            VirtualKeyCode::End => ctx.delete_to_line_end(1),
+                            VirtualKeyCode::Up => ctx.delete(MoveObj::Up(move_rep)),
+                            VirtualKeyCode::Down => ctx.delete(MoveObj::Down(move_rep)),
+                            VirtualKeyCode::Left => ctx.delete(MoveObj::Left(move_rep)),
+                            VirtualKeyCode::Right => ctx.delete(MoveObj::Right(move_rep)),
+                            VirtualKeyCode::Home => ctx.delete(MoveObj::LineStart(1)),
+                            VirtualKeyCode::End => ctx.delete(MoveObj::LineEnd(1)),
                             _ => reset_mode = false,
                         }
                     }
@@ -617,91 +644,21 @@ impl<'a> Drop for ViewEditCtx<'a> {
 }
 
 impl<'a> ViewEditCtx<'a> {
-    fn move_cursor_up(&mut self, n: usize) {
-        self.view.move_cursor_up(n);
+    fn move_cursor(&mut self, move_obj: MoveObj) {
+        match move_obj {
+            MoveObj::Up(_) | MoveObj::Down(_) => {}
+            _ => self.update_global_x = true,
+        }
+        self.view.move_cursor(move_obj);
     }
 
-    fn move_cursor_down(&mut self, n: usize) {
-        self.view.move_cursor_down(n);
-    }
-
-    fn move_cursor_left(&mut self, n: usize) {
-        self.view.move_cursor_left(n);
+    fn insert_char(&mut self, c: char) {
+        self.view.insert_char(c);
         self.update_global_x = true;
     }
 
-    fn move_cursor_right(&mut self, n: usize) {
-        self.view.move_cursor_right(n);
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_line_start(&mut self, n: usize) {
-        self.view.move_cursor_to_line_start(n);
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_line_end(&mut self, n: usize) {
-        self.view.move_cursor_to_line_end(n);
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_first_non_blank(&mut self) {
-        self.view.move_cursor_to_first_non_blank();
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_line(&mut self, linum: usize) {
-        self.view.move_cursor_to_line(linum);
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_last_line(&mut self) {
-        self.view.move_cursor_to_last_line();
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_view_first_line(&mut self) {
-        self.view.move_cursor_to_view_first_line();
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_view_middle_line(&mut self) {
-        self.view.move_cursor_to_view_middle_line();
-        self.update_global_x = true;
-    }
-
-    fn move_cursor_to_view_last_line(&mut self) {
-        self.view.move_cursor_to_view_last_line();
-        self.update_global_x = true;
-    }
-
-    fn move_word(&mut self, n: usize) {
-        self.view.move_cursor_word(n);
-        self.update_global_x = true;
-    }
-
-    fn move_word_extended(&mut self, n: usize) {
-        self.view.move_cursor_word_extended(n);
-        self.update_global_x = true;
-    }
-
-    fn move_word_end(&mut self, n: usize) {
-        self.view.move_cursor_word_end(n);
-        self.update_global_x = true;
-    }
-
-    fn move_word_end_extended(&mut self, n: usize) {
-        self.view.move_cursor_word_end_extended(n);
-        self.update_global_x = true;
-    }
-
-    fn move_back(&mut self, n: usize) {
-        self.view.move_cursor_back(n);
-        self.update_global_x = true;
-    }
-
-    fn move_back_extended(&mut self, n: usize) {
-        self.view.move_cursor_back_extended(n);
+    fn delete(&mut self, move_obj: MoveObj) {
+        self.view.delete(move_obj);
         self.update_global_x = true;
     }
 
@@ -727,86 +684,6 @@ impl<'a> ViewEditCtx<'a> {
 
     fn set_cursor_style(&mut self, style: CursorStyle) {
         self.view.set_cursor_style(style);
-        self.update_global_x = true;
-    }
-
-    fn insert_char(&mut self, c: char) {
-        self.view.insert_char(c);
-        self.update_global_x = true;
-    }
-
-    fn delete_left(&mut self, n: usize) {
-        self.view.delete_left(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_right(&mut self, n: usize) {
-        self.view.delete_right(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_up(&mut self, n: usize) {
-        self.view.delete_up(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_down(&mut self, n: usize) {
-        self.view.delete_down(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_to_line(&mut self, n: usize) {
-        self.view.delete_to_line(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_to_last_line(&mut self) {
-        self.view.delete_to_last_line();
-        self.update_global_x = true;
-    }
-
-    fn delete_word(&mut self, n: usize) {
-        self.view.delete_word(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_word_extended(&mut self, n: usize) {
-        self.view.delete_word_extended(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_word_end(&mut self, n: usize) {
-        self.view.delete_word_end(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_word_end_extended(&mut self, n: usize) {
-        self.view.delete_word_end_extended(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_back(&mut self, n: usize) {
-        self.view.delete_back(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_back_extended(&mut self, n: usize) {
-        self.view.delete_back_extended(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_to_line_start(&mut self, n: usize) {
-        self.view.delete_to_line_start(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_to_line_end(&mut self, n: usize) {
-        self.view.delete_to_line_end(n);
-        self.update_global_x = true;
-    }
-
-    fn delete_to_first_non_blank(&mut self) {
-        self.view.delete_to_first_non_blank();
         self.update_global_x = true;
     }
 

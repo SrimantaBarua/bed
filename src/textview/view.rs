@@ -8,6 +8,7 @@ use euclid::{vec2, Point2D, Rect, Vector2D};
 
 use crate::buffer::{Buffer, BufferHandle, BufferViewId, Mode};
 use crate::common::PixelSize;
+use crate::input::MoveObj;
 use crate::painter::Painter;
 use crate::text::CursorStyle;
 use crate::TARGET_DELTA;
@@ -23,80 +24,16 @@ pub(crate) struct TextViewEditCtx<'a> {
 }
 
 impl<'a> TextViewEditCtx<'a> {
-    pub(crate) fn move_cursor_up(&mut self, n: usize) {
-        self.buffer.move_view_cursor_up(self.view_id, n);
+    pub(crate) fn move_cursor(&mut self, move_obj: MoveObj) {
+        self.buffer.move_cursor(self.view_id, move_obj);
     }
 
-    pub(crate) fn move_cursor_down(&mut self, n: usize) {
-        self.buffer.move_view_cursor_down(self.view_id, n);
+    pub(crate) fn delete(&mut self, move_obj: MoveObj) {
+        self.buffer.delete(self.view_id, move_obj);
     }
 
-    pub(crate) fn move_cursor_left(&mut self, n: usize) {
-        self.buffer.move_view_cursor_left(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_right(&mut self, n: usize) {
-        self.buffer.move_view_cursor_right(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_to_line_start(&mut self, n: usize) {
-        self.buffer.move_view_cursor_to_line_start(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_to_line_end(&mut self, n: usize) {
-        self.buffer.move_view_cursor_to_line_end(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_to_first_non_blank(&mut self) {
-        self.buffer
-            .move_view_cursor_to_first_non_blank(self.view_id);
-    }
-
-    pub(crate) fn move_cursor_to_line(&mut self, linum: usize) {
-        self.buffer.move_view_cursor_to_line(self.view_id, linum);
-    }
-
-    pub(crate) fn move_cursor_to_last_line(&mut self) {
-        self.buffer.move_view_cursor_to_last_line(self.view_id);
-    }
-
-    pub(crate) fn move_cursor_to_view_first_line(&mut self) {
-        self.buffer
-            .move_view_cursor_to_view_first_line(self.view_id);
-    }
-
-    pub(crate) fn move_cursor_to_view_middle_line(&mut self) {
-        self.buffer
-            .move_view_cursor_to_view_middle_line(self.view_id);
-    }
-
-    pub(crate) fn move_cursor_to_view_last_line(&mut self) {
-        self.buffer.move_view_cursor_to_view_last_line(self.view_id);
-    }
-
-    pub(crate) fn move_cursor_word(&mut self, n: usize) {
-        self.buffer.move_view_cursor_word(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_word_extended(&mut self, n: usize) {
-        self.buffer.move_view_cursor_word_extended(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_word_end(&mut self, n: usize) {
-        self.buffer.move_view_cursor_word_end(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_word_end_extended(&mut self, n: usize) {
-        self.buffer
-            .move_view_cursor_word_end_extended(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_back(&mut self, n: usize) {
-        self.buffer.move_view_cursor_back(self.view_id, n);
-    }
-
-    pub(crate) fn move_cursor_back_extended(&mut self, n: usize) {
-        self.buffer.move_view_cursor_back_extended(self.view_id, n);
+    pub(crate) fn insert_char(&mut self, c: char) {
+        self.buffer.insert_char(self.view_id, c);
     }
 
     pub(crate) fn half_page_down(&mut self) {
@@ -117,70 +54,6 @@ impl<'a> TextViewEditCtx<'a> {
 
     pub(crate) fn set_cursor_style(&mut self, style: CursorStyle) {
         self.buffer.set_view_cursor_style(self.view_id, style);
-    }
-
-    pub(crate) fn insert_char(&mut self, c: char) {
-        self.buffer.insert_char(self.view_id, c);
-    }
-
-    pub(crate) fn delete_left(&mut self, n: usize) {
-        self.buffer.delete_left(self.view_id, n);
-    }
-
-    pub(crate) fn delete_right(&mut self, n: usize) {
-        self.buffer.delete_right(self.view_id, n);
-    }
-
-    pub(crate) fn delete_up(&mut self, n: usize) {
-        self.buffer.delete_up(self.view_id, n);
-    }
-
-    pub(crate) fn delete_down(&mut self, n: usize) {
-        self.buffer.delete_down(self.view_id, n);
-    }
-
-    pub(crate) fn delete_to_line(&mut self, n: usize) {
-        self.buffer.delete_to_line(self.view_id, n);
-    }
-
-    pub(crate) fn delete_to_last_line(&mut self) {
-        self.buffer.delete_to_last_line(self.view_id);
-    }
-
-    pub(crate) fn delete_word(&mut self, n: usize) {
-        self.buffer.delete_word(self.view_id, n);
-    }
-
-    pub(crate) fn delete_word_extended(&mut self, n: usize) {
-        self.buffer.delete_word_extended(self.view_id, n);
-    }
-
-    pub(crate) fn delete_word_end(&mut self, n: usize) {
-        self.buffer.delete_word_end(self.view_id, n);
-    }
-
-    pub(crate) fn delete_word_end_extended(&mut self, n: usize) {
-        self.buffer.delete_word_end_extended(self.view_id, n);
-    }
-
-    pub(crate) fn delete_back(&mut self, n: usize) {
-        self.buffer.delete_back(self.view_id, n);
-    }
-
-    pub(crate) fn delete_back_extended(&mut self, n: usize) {
-        self.buffer.delete_back_extended(self.view_id, n);
-    }
-
-    pub(crate) fn delete_to_line_start(&mut self, n: usize) {
-        self.buffer.delete_to_line_start(self.view_id, n);
-    }
-
-    pub(crate) fn delete_to_line_end(&mut self, n: usize) {
-        self.buffer.delete_to_line_end(self.view_id, n);
-    }
-
-    pub(crate) fn delete_to_first_non_blank(&mut self) {
-        self.buffer.delete_to_first_non_blank(self.view_id);
     }
 
     pub(crate) fn replace_repeated(&mut self, c: char, n: usize) {

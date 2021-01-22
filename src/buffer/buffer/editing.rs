@@ -4,6 +4,7 @@ use std::cmp::min;
 use std::ops::Range;
 
 use crate::common::rope_trim_newlines;
+use crate::input::MoveObj;
 
 use super::{Buffer, BufferViewId};
 
@@ -39,6 +40,30 @@ impl Buffer {
         self.bed_handle.request_redraw();
     }
 
+    pub(crate) fn delete(&mut self, view_id: &BufferViewId, move_obj: MoveObj) {
+        match move_obj {
+            MoveObj::Left(n) => self.delete_left(view_id, n),
+            MoveObj::Right(n) => self.delete_right(view_id, n),
+            MoveObj::Up(n) => self.delete_up(view_id, n),
+            MoveObj::Down(n) => self.delete_down(view_id, n),
+            MoveObj::ToLine(linum) => self.delete_to_line(view_id, linum),
+            MoveObj::ToLastLine => self.delete_to_last_line(view_id),
+            //MoveObj::ToViewFirstLine => self.delete_to_view_first_line(view_id),
+            //MoveObj::ToViewLastLine => self.delete_to_view_last_line(view_id),
+            //MoveObj::ToViewMiddleLine => self.delete_to_view_middle_line(view_id),
+            MoveObj::LineStart(n) => self.delete_to_line_start(view_id, n),
+            MoveObj::LineEnd(n) => self.delete_to_line_end(view_id, n),
+            MoveObj::LineFirstNonBlank => self.delete_to_first_non_blank(view_id),
+            MoveObj::WordBeg(n, false) => self.delete_word(view_id, n),
+            MoveObj::WordBeg(n, true) => self.delete_word_extended(view_id, n),
+            MoveObj::WordEnd(n, false) => self.delete_word_end(view_id, n),
+            MoveObj::WordEnd(n, true) => self.delete_word_end_extended(view_id, n),
+            MoveObj::Back(n, false) => self.delete_back(view_id, n),
+            MoveObj::Back(n, true) => self.delete_back_extended(view_id, n),
+            _ => unimplemented!(),
+        }
+    }
+
     fn delete_range(&mut self, range: Range<usize>) {
         let (old_rope, range) = {
             let mut shared = self.shared.borrow_mut();
@@ -62,7 +87,7 @@ impl Buffer {
         self.bed_handle.request_redraw();
     }
 
-    pub(crate) fn delete_left(&mut self, view_id: &BufferViewId, mut n: usize) {
+    fn delete_left(&mut self, view_id: &BufferViewId, mut n: usize) {
         let view = self.views.get(view_id).unwrap();
         let cidx = view.cursor.cidx;
         if cidx < n {
@@ -72,7 +97,7 @@ impl Buffer {
         self.delete_range(start_cidx..cidx);
     }
 
-    pub(crate) fn delete_right(&mut self, view_id: &BufferViewId, mut n: usize) {
+    fn delete_right(&mut self, view_id: &BufferViewId, mut n: usize) {
         let view = self.views.get(view_id).unwrap();
         let mut cidx = view.cursor.cidx;
         let pre_len_chars = self.shared.borrow().rope.len_chars();
@@ -90,16 +115,16 @@ impl Buffer {
         self.delete_range(cidx..end_cidx);
     }
 
-    pub(crate) fn delete_up(&mut self, view_id: &BufferViewId, mut n: usize) {
+    fn delete_up(&mut self, view_id: &BufferViewId, mut n: usize) {
         let view = self.views.get(view_id).unwrap();
         if view.cursor.line_num < n {
             n = view.cursor.line_num;
         }
-        self.move_view_cursor_up(view_id, n);
+        self.move_cursor_up(view_id, n);
         self.delete_down(view_id, n);
     }
 
-    pub(crate) fn delete_down(&mut self, view_id: &BufferViewId, mut n: usize) {
+    fn delete_down(&mut self, view_id: &BufferViewId, mut n: usize) {
         let view = self.views.get(view_id).unwrap();
         let range = {
             let shared = self.shared.borrow();
@@ -117,7 +142,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_to_line_start(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let view = self.view(view_id);
             let dest = self.cursor_line_start(&view.cursor, n);
@@ -126,7 +151,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_to_line_end(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let shared = self.shared.borrow();
             let view = self.view(view_id);
@@ -136,7 +161,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_to_first_non_blank(&mut self, view_id: &BufferViewId) {
+    fn delete_to_first_non_blank(&mut self, view_id: &BufferViewId) {
         let range = {
             let view = self.view(view_id);
             let dest = self.cursor_first_non_blank(&view.cursor);
@@ -145,7 +170,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
+    fn delete_to_line(&mut self, view_id: &BufferViewId, linum: usize) {
         let view = self.view(view_id);
         if view.cursor.line_num < linum {
             let diff = linum - view.cursor.line_num;
@@ -156,12 +181,12 @@ impl Buffer {
         }
     }
 
-    pub(crate) fn delete_to_last_line(&mut self, view_id: &BufferViewId) {
+    fn delete_to_last_line(&mut self, view_id: &BufferViewId) {
         let len_lines = self.shared.borrow().rope.len_lines();
         self.delete_down(view_id, len_lines - self.view(view_id).cursor.line_num);
     }
 
-    pub(crate) fn delete_word(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_word(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let view = self.view(view_id);
             let dest = self.cursor_word(&view.cursor, n, false);
@@ -170,7 +195,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_word_extended(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_word_extended(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let view = self.view(view_id);
             let dest = self.cursor_word(&view.cursor, n, true);
@@ -179,7 +204,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_word_end(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_word_end(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let shared = self.shared.borrow();
             let view = self.view(view_id);
@@ -189,7 +214,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_word_end_extended(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_word_end_extended(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let shared = self.shared.borrow();
             let view = self.view(view_id);
@@ -199,7 +224,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_back(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_back(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let view = self.view(view_id);
             let dest = self.cursor_back(&view.cursor, n, false);
@@ -208,7 +233,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
-    pub(crate) fn delete_back_extended(&mut self, view_id: &BufferViewId, n: usize) {
+    fn delete_back_extended(&mut self, view_id: &BufferViewId, n: usize) {
         let range = {
             let view = self.view(view_id);
             let dest = self.cursor_back(&view.cursor, n, true);
@@ -217,6 +242,7 @@ impl Buffer {
         self.delete_range(range);
     }
 
+    // -------- Misc updates --------
     pub(crate) fn replace_repeated(&mut self, view_id: &BufferViewId, c: char, n: usize) {
         assert!(n > 0);
         let mut cursor = self.view(view_id).cursor.clone();
