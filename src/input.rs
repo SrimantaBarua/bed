@@ -5,13 +5,14 @@ use std::ops::Drop;
 use std::time::Duration;
 
 use euclid::{point2, vec2, Point2D, Vector2D};
+use fnv::FnvHashMap;
 use glutin::dpi::PhysicalPosition;
 use glutin::event::{
     ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode,
 };
 
 use crate::buffer::Mode as BufferMode;
-use crate::common::PixelSize;
+use crate::common::{is_ropey_newline, PixelSize};
 use crate::prompt::Prompt;
 use crate::text::CursorStyle;
 use crate::textview::{TextTree, TextViewEditCtx};
@@ -36,6 +37,8 @@ pub(crate) enum MoveObj {
     Back(usize, bool),
 }
 
+const CUR_REG: Option<char> = None;
+
 #[derive(Debug, Eq, PartialEq)]
 enum Mode {
     Command,
@@ -57,11 +60,17 @@ enum Mode {
     PaneUpdate,
 }
 
+enum RegText {
+    Line(String),
+    Text(String),
+}
+
 pub(crate) struct InputState {
     mode: Mode,
     scroll_amount: Vector2D<f32, PixelSize>,
     bed_handle: BedHandle,
     modifiers: ModifiersState,
+    registers: FnvHashMap<Option<char>, RegText>,
     // Mouse
     cursor_pos: Point2D<f32, PixelSize>,
     cursor_click_pos: Option<Point2D<f32, PixelSize>>,
@@ -74,6 +83,7 @@ impl InputState {
             scroll_amount: vec2(0.0, 0.0),
             bed_handle,
             modifiers: ModifiersState::empty(),
+            registers: FnvHashMap::default(),
             cursor_pos: point2(0.0, 0.0),
             cursor_click_pos: None,
         }
@@ -125,9 +135,10 @@ impl InputState {
         };
         match &mut self.mode {
             Mode::Insert => match c as u32 {
-                8 /* backspace */ => bed.edit_view().delete(MoveObj::Left(1)),
-                127 /* delete */  => bed.edit_view().delete(MoveObj::Right(1)),
-                _ => bed.edit_view().insert_char(c),
+                8 /* backspace */ =>{ bed.edit_view().delete(MoveObj::Left(1)); },
+                9 | 10 | 13 /* tab, nl, cr */ => bed.edit_view().insert_char(c),
+                127 /* delete */  => {bed.edit_view().delete(MoveObj::Right(1)); },
+                _ => if !c.is_control() { bed.edit_view().insert_char(c) },
             },
             Mode::Normal { action_mul } => {
                 let act_rep = action_mul.unwrap_or(1);
@@ -233,7 +244,8 @@ impl InputState {
                         next_mode = Some(Mode::Insert);
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
-                        ctx.delete(MoveObj::Right(act_rep));
+                        self.registers
+                            .insert(CUR_REG, RegText::Text(ctx.delete(MoveObj::Right(act_rep))));
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     'S' => {
@@ -241,7 +253,10 @@ impl InputState {
                         let mut ctx = bed.edit_view();
                         ctx.set_cursor_style(CursorStyle::Line);
                         ctx.move_cursor(MoveObj::LineStart(1));
-                        ctx.delete(MoveObj::LineEnd(act_rep));
+                        self.registers.insert(
+                            CUR_REG,
+                            RegText::Line(ctx.delete(MoveObj::LineEnd(act_rep))),
+                        );
                         ctx.set_buffer_mode(BufferMode::Insert);
                     }
                     // Entering other modes
@@ -270,7 +285,53 @@ impl InputState {
                         bed.edit_prompt().set_prompt(":");
                     }
                     // Delete
-                    'x' => bed.edit_view().delete(MoveObj::Right(act_rep)),
+                    'x' => {
+                        self.registers.insert(
+                            CUR_REG,
+                            RegText::Text(bed.edit_view().delete(MoveObj::Right(act_rep))),
+                        );
+                    }
+                    // Paste
+                    'p' => match self.registers.get(&CUR_REG) {
+                        Some(RegText::Text(s)) => {
+                            let mut ctx = bed.edit_view();
+                            ctx.set_cursor_style(CursorStyle::Line);
+                            ctx.move_cursor(MoveObj::Right(1));
+                            ctx.insert_str(s);
+                            if s.len() > 0 {
+                                ctx.move_cursor(MoveObj::Left(1));
+                            }
+                            ctx.set_cursor_style(CursorStyle::Block);
+                        }
+                        Some(RegText::Line(s)) => {
+                            let mut ctx = bed.edit_view();
+                            ctx.set_cursor_style(CursorStyle::Line);
+                            ctx.move_cursor(MoveObj::LineEnd(1));
+                            ctx.insert_char('\n');
+                            let s = match s.chars().rev().next() {
+                                Some(c) if is_ropey_newline(c) => &s[..s.len() - c.len_utf8()],
+                                _ => s
+                            };
+                            ctx.insert_str(s);
+                            ctx.set_cursor_style(CursorStyle::Block);
+                            ctx.move_cursor(MoveObj::LineFirstNonBlank);
+                        }
+                        _ => {}
+                    },
+                    'P' => /*match self.registers.get(&CUR_REG) {
+                        Some(RegText::Text(s)) => {
+                            bed.edit_view().insert_str(s);
+                        }
+                        Some(RegText::Line(s)) => {
+                            let mut ctx = bed.edit_view();
+                            ctx.set_cursor_style(CursorStyle::Line);
+                            ctx.move_cursor(MoveObj::LineStart(1));
+                            ctx.insert_char('\n');
+                            ctx.move_cursor(MoveObj::Up(1));
+                            ctx.set_buffer_mode(BufferMode::Insert);
+                        }
+                        _ => {}
+                    }*/{},
                     _ => {}
                 }
                 if let Some(next) = next_mode {
@@ -292,6 +353,7 @@ impl InputState {
                 let mut next_mode = Mode::Insert;
                 let mut is_num = false;
                 let mut ctx = bed.edit_view();
+                let mut del_text = None;
                 match c {
                     // Numbers
                     '1'..='9' => {
@@ -304,76 +366,102 @@ impl InputState {
                     }
                     // Basic movement
                     'h' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Left(move_rep))
+                            text += ctx.delete(MoveObj::Left(move_rep)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     'j' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Down(move_rep))
+                            text += ctx.delete(MoveObj::Down(move_rep)).as_str();
                         }
+                        del_text = Some(RegText::Line(text));
                     }
                     'k' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Up(move_rep))
+                            text += ctx.delete(MoveObj::Up(move_rep)).as_str();
                         }
+                        del_text = Some(RegText::Line(text));
                     }
                     'l' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Right(move_rep))
+                            text += ctx.delete(MoveObj::Right(move_rep)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     // Delete to line
                     'g' => {
                         let linum = action_mul.unwrap_or(1);
-                        ctx.delete(MoveObj::ToLine(linum - 1));
+                        del_text = Some(RegText::Line(ctx.delete(MoveObj::ToLine(linum - 1))));
                     }
                     'G' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::ToLastLine)
+                            text += ctx.delete(MoveObj::ToLastLine).as_str();
                         }
+                        del_text = Some(RegText::Line(text));
                     }
                     // Object
                     'c' if is_change_mode => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Down(move_rep - 1))
+                            text += ctx.delete(MoveObj::Down(move_rep - 1)).as_str();
                         }
+                        del_text = Some(RegText::Line(text));
                     }
                     'd' if !is_change_mode => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Down(move_rep - 1))
+                            text += ctx.delete(MoveObj::Down(move_rep - 1)).as_str();
                         }
+                        del_text = Some(RegText::Line(text));
                     }
                     // Object movement
                     'w' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::WordBeg(move_rep, false))
+                            text += ctx.delete(MoveObj::WordBeg(move_rep, false)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     'W' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::WordBeg(move_rep, true))
+                            text += ctx.delete(MoveObj::WordBeg(move_rep, true)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     'e' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::WordEnd(move_rep, false))
+                            text += ctx.delete(MoveObj::WordEnd(move_rep, false)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     'E' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::WordEnd(move_rep, true))
+                            text += ctx.delete(MoveObj::WordEnd(move_rep, true)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     'b' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Back(move_rep, false))
+                            text += ctx.delete(MoveObj::Back(move_rep, false)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     'B' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::Back(move_rep, true))
+                            text += ctx.delete(MoveObj::Back(move_rep, true)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
                     // Delete to start/end of line
                     '0' => {
@@ -383,17 +471,19 @@ impl InputState {
                                 Some(*x * 10)
                             }
                             None => {
-                                ctx.delete(MoveObj::LineStart(1));
+                                del_text = Some(RegText::Text(ctx.delete(MoveObj::LineStart(1))));
                                 None
                             }
                         };
                     }
                     '$' => {
+                        let mut text = String::new();
                         for _ in 0..act_rep {
-                            ctx.delete(MoveObj::LineEnd(move_rep))
+                            text += ctx.delete(MoveObj::LineEnd(move_rep)).as_str();
                         }
+                        del_text = Some(RegText::Text(text));
                     }
-                    '^' => ctx.delete(MoveObj::LineFirstNonBlank),
+                    '^' => del_text = Some(RegText::Text(ctx.delete(MoveObj::LineFirstNonBlank))),
                     _ => next_mode = Mode::Normal { action_mul: None },
                 }
                 if !is_num {
@@ -409,6 +499,9 @@ impl InputState {
                         _ => unreachable!(),
                     }
                     self.mode = next_mode;
+                }
+                if let Some(text) = del_text {
+                    self.registers.insert(CUR_REG, text);
                 }
             }
             Mode::Replace { action_mul } => {
@@ -546,19 +639,54 @@ impl InputState {
                 } => {
                     let act_rep = action_mul.unwrap_or(1);
                     let move_rep = move_mul.unwrap_or(1);
+                    let mut del_text = None;
                     let mut reset_mode = true;
                     let mut ctx = bed.edit_view();
-                    for _ in 0..act_rep {
-                        match vkey {
-                            // Basic movement
-                            VirtualKeyCode::Up => ctx.delete(MoveObj::Up(move_rep)),
-                            VirtualKeyCode::Down => ctx.delete(MoveObj::Down(move_rep)),
-                            VirtualKeyCode::Left => ctx.delete(MoveObj::Left(move_rep)),
-                            VirtualKeyCode::Right => ctx.delete(MoveObj::Right(move_rep)),
-                            VirtualKeyCode::Home => ctx.delete(MoveObj::LineStart(1)),
-                            VirtualKeyCode::End => ctx.delete(MoveObj::LineEnd(1)),
-                            _ => reset_mode = false,
+                    match vkey {
+                        // Basic movement
+                        VirtualKeyCode::Up => {
+                            let mut text = String::new();
+                            for _ in 0..act_rep {
+                                text += &ctx.delete(MoveObj::Up(move_rep));
+                            }
+                            del_text = Some(RegText::Line(text));
                         }
+                        VirtualKeyCode::Down => {
+                            let mut text = String::new();
+                            for _ in 0..act_rep {
+                                text += &ctx.delete(MoveObj::Down(move_rep));
+                            }
+                            del_text = Some(RegText::Line(text));
+                        }
+                        VirtualKeyCode::Left => {
+                            let mut text = String::new();
+                            for _ in 0..act_rep {
+                                text += &ctx.delete(MoveObj::Left(move_rep));
+                            }
+                            del_text = Some(RegText::Text(text));
+                        }
+                        VirtualKeyCode::Right => {
+                            let mut text = String::new();
+                            for _ in 0..act_rep {
+                                text += &ctx.delete(MoveObj::Right(move_rep));
+                            }
+                            del_text = Some(RegText::Text(text));
+                        }
+                        VirtualKeyCode::Home => {
+                            let mut text = String::new();
+                            for _ in 0..act_rep {
+                                text += &ctx.delete(MoveObj::LineStart(1));
+                            }
+                            del_text = Some(RegText::Text(text));
+                        }
+                        VirtualKeyCode::End => {
+                            let mut text = String::new();
+                            for _ in 0..act_rep {
+                                text += &ctx.delete(MoveObj::LineEnd(1));
+                            }
+                            del_text = Some(RegText::Text(text));
+                        }
+                        _ => reset_mode = false,
                     }
                     if reset_mode {
                         if is_change_mode {
@@ -568,6 +696,9 @@ impl InputState {
                         } else {
                             self.mode = Mode::Normal { action_mul: None };
                             ctx.set_cursor_style(CursorStyle::Block);
+                        }
+                        if let Some(text) = del_text {
+                            self.registers.insert(CUR_REG, text);
                         }
                     }
                 }
@@ -653,13 +784,19 @@ impl<'a> ViewEditCtx<'a> {
     }
 
     fn insert_char(&mut self, c: char) {
-        self.view.insert_char(c);
+        let mut buf = [0; 4];
+        self.view.insert(c.encode_utf8(&mut buf));
         self.update_global_x = true;
     }
 
-    fn delete(&mut self, move_obj: MoveObj) {
-        self.view.delete(move_obj);
+    fn insert_str(&mut self, s: &str) {
+        self.view.insert(s);
         self.update_global_x = true;
+    }
+
+    fn delete(&mut self, move_obj: MoveObj) -> String {
+        self.update_global_x = true;
+        self.view.delete(move_obj)
     }
 
     fn half_page_down(&mut self) {

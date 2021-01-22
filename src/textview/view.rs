@@ -28,12 +28,12 @@ impl<'a> TextViewEditCtx<'a> {
         self.buffer.move_cursor(self.view_id, move_obj);
     }
 
-    pub(crate) fn delete(&mut self, move_obj: MoveObj) {
-        self.buffer.delete(self.view_id, move_obj);
+    pub(crate) fn delete(&mut self, move_obj: MoveObj) -> String {
+        self.buffer.delete(self.view_id, move_obj)
     }
 
-    pub(crate) fn insert_char(&mut self, c: char) {
-        self.buffer.insert_char(self.view_id, c);
+    pub(crate) fn insert(&mut self, s: &str) {
+        self.buffer.insert(self.view_id, s);
     }
 
     pub(crate) fn half_page_down(&mut self) {

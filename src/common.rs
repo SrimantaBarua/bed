@@ -51,13 +51,21 @@ impl AbsPath {
 
 // -------- Rope stuff --------
 
+pub(crate) fn is_ropey_newline(c: char) -> bool {
+    match c {
+        '\n' | '\x0b' | '\x0c' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}' => true,
+        _ => false,
+    }
+}
+
 pub(crate) fn rope_trim_newlines<'a>(line: RopeSlice<'a>) -> RopeSlice<'a> {
     let mut nchars = line.len_chars();
     let mut chars = line.chars_at(line.len_chars());
     while let Some(c) = chars.prev() {
-        match c {
-            '\n' | '\x0b' | '\x0c' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}' => nchars -= 1,
-            _ => break,
+        if is_ropey_newline(c) {
+            nchars -= 1;
+        } else {
+            break;
         }
     }
     line.slice(..nchars)
@@ -228,7 +236,7 @@ where
     let mut num_spaces = 0;
     for c in line.char_iter() {
         match c {
-            '\n' | '\r' | '\x0b' | '\x0c' | '\u{85}' | '\u{2028}' | '\u{2029}' => break,
+            c if is_ropey_newline(c) => break,
             ' ' => {
                 if !range.is_empty() {
                     if run_cb(&line.slice_with(range.clone())) == SplitCbRes::Stop {

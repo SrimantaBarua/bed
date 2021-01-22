@@ -5,7 +5,6 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use euclid::{size2, vec2, Point2D, Rect, Vector2D};
-use take_mut::take;
 
 use crate::buffer::{BufferHandle, BufferViewId};
 use crate::common::PixelSize;
