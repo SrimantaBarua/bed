@@ -22,7 +22,7 @@ impl Buffer {
                 match c {
                     c if is_ropey_newline(c) => {
                         x = 0;
-                        shared.rope.insert_char(cidx + num_chars, c);
+                        shared.rope.insert_char(cidx + num_chars, '\n');
                         num_chars += 1;
                     }
                     '\t' => {
@@ -263,8 +263,11 @@ impl Buffer {
     }
 
     // -------- Misc updates --------
-    pub(crate) fn replace_repeated(&mut self, view_id: &BufferViewId, c: char, n: usize) {
+    pub(crate) fn replace_repeated(&mut self, view_id: &BufferViewId, mut c: char, n: usize) {
         assert!(n > 0);
+        if is_ropey_newline(c) {
+            c = '\n';
+        }
         let mut cursor = self.view(view_id).cursor.clone();
         let range = cursor.cidx..cursor.cidx + n;
         let (old_rope, cursor) = {
