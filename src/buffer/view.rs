@@ -208,8 +208,7 @@ impl View {
             let end_cidx = start_cidx + line.len_chars();
 
             if end_cidx > start_cidx {
-                for (range, cur_style, _, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx)
-                {
+                for (range, cur_style, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
                     let text_size = self.text_size.scale(cur_scale);
                     if cur_style != style || cur_scale != scale {
                         space_metrics = text_font.space_metrics(text_size, style);
@@ -301,7 +300,7 @@ impl View {
         let end_cidx = start_cidx + line.len_chars();
 
         if end_cidx > start_cidx {
-            for (range, cur_style, _, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
+            for (range, cur_style, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
                 let text_size = self.text_size.scale(cur_scale);
                 if cur_style != style || cur_scale != scale {
                     space_metrics = text_font.space_metrics(text_size, style);
@@ -489,7 +488,6 @@ impl View {
                         TextStyle::default(),
                         theme.textview.foreground,
                         false,
-                        false,
                         1.0,
                     )
                 } else {
@@ -553,7 +551,7 @@ impl View {
                 let origin = point2(gutter_padding, base - ascender);
                 text_ctx.draw_line(
                     &buf.as_str(),
-                    StyleType::Const(0..buf.len(), TextStyle::default(), fgcol, false, false, 1.0),
+                    StyleType::Const(0..buf.len(), TextStyle::default(), fgcol, false, 1.0),
                     tab_width,
                     origin,
                     gutter_rect.width() - gutter_padding,
@@ -586,7 +584,6 @@ impl View {
                     TextStyle::default(),
                     fgcol,
                     false,
-                    false,
                     1.0,
                 ),
                 tab_width,
@@ -602,7 +599,6 @@ impl View {
                     0..status_right.len(),
                     TextStyle::default(),
                     fgcol,
-                    false,
                     false,
                     1.0,
                 ),
@@ -669,7 +665,7 @@ impl View {
         let state = RefCell::new((space_metrics.ascender, space_metrics.descender, 0.0));
         let line_pad = f26_6::from(self.bed_handle.text_line_pad() as f32);
         if end_cidx > start_cidx {
-            for (range, cur_style, _, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
+            for (range, cur_style, _, _, cur_scale) in styles.sub_range(start_cidx..end_cidx) {
                 let text_size = self.text_size.scale(cur_scale);
                 if cur_style != style || cur_scale != scale {
                     space_metrics = text_font.space_metrics(text_size, style);

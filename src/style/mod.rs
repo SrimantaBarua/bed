@@ -17,14 +17,12 @@ pub(crate) use text::{TextSize, TextSlant, TextStyle, TextWeight};
 pub(crate) type TextStyleRanges = RangeTree<TextStyle>;
 pub(crate) type ColorRanges = RangeTree<Color>;
 pub(crate) type UnderlineRanges = RangeTree<bool>;
-pub(crate) type ConcealRanges = RangeTree<bool>;
 pub(crate) type ScaleRanges = RangeTree<f64>;
 
 pub(crate) struct StyleRanges {
     style: TextStyleRanges,
     color: ColorRanges,
     under: UnderlineRanges,
-    conceal: ConcealRanges,
     scale: ScaleRanges,
 }
 
@@ -34,7 +32,6 @@ impl StyleRanges {
             style: TextStyleRanges::new(),
             color: ColorRanges::new(),
             under: UnderlineRanges::new(),
-            conceal: ConcealRanges::new(),
             scale: ScaleRanges::new(),
         }
     }
@@ -44,7 +41,6 @@ impl StyleRanges {
             self.style.insert(point..point, len, TextStyle::default());
             self.color.insert(point..point, len, color);
             self.under.insert(point..point, len, false);
-            self.conceal.insert(point..point, len, false);
             self.scale.insert(point..point, len, 1.0);
         }
     }
@@ -55,7 +51,6 @@ impl StyleRanges {
             self.style.insert(range.clone(), len, TextStyle::default());
             self.color.insert(range.clone(), len, color);
             self.under.insert(range.clone(), len, false);
-            self.conceal.insert(range.clone(), len, false);
             self.scale.insert(range, len, 1.0);
         }
     }
@@ -64,7 +59,6 @@ impl StyleRanges {
             self.style.remove(range.clone());
             self.color.remove(range.clone());
             self.under.remove(range.clone());
-            self.conceal.remove(range.clone());
             self.scale.remove(range);
         }
     }
@@ -90,13 +84,6 @@ impl StyleRanges {
         }
     }
 
-    pub(crate) fn set_conceal(&mut self, range: Range<usize>, conceal: bool) {
-        let len = range.len();
-        if len > 0 {
-            self.conceal.insert(range, len, conceal);
-        }
-    }
-
     pub(crate) fn set_scale(&mut self, range: Range<usize>, scale: f64) {
         let len = range.len();
         if len > 0 {
@@ -109,13 +96,11 @@ impl StyleRanges {
         let styles = self.style.iter_range(range.clone()).unwrap().peekable();
         let colors = self.color.iter_range(range.clone()).unwrap().peekable();
         let unders = self.under.iter_range(range.clone()).unwrap().peekable();
-        let conceals = self.conceal.iter_range(range.clone()).unwrap().peekable();
         let scales = self.scale.iter_range(range.clone()).unwrap().peekable();
         StyleSubRanges {
             styles,
             colors,
             unders,
-            conceals,
             scales,
             phantom: PhantomData,
             offset: range.start,
@@ -129,7 +114,6 @@ pub(crate) struct StyleSubRanges<'a, S: SliceRange> {
     styles: Peekable<RangeTreeIter<'a, TextStyle>>,
     colors: Peekable<RangeTreeIter<'a, Color>>,
     unders: Peekable<RangeTreeIter<'a, bool>>,
-    conceals: Peekable<RangeTreeIter<'a, bool>>,
     scales: Peekable<RangeTreeIter<'a, f64>>,
     phantom: PhantomData<S>,
     offset: usize,
@@ -137,31 +121,20 @@ pub(crate) struct StyleSubRanges<'a, S: SliceRange> {
 }
 
 impl<'a, S: SliceRange> Iterator for StyleSubRanges<'a, S> {
-    type Item = (S, TextStyle, Color, bool, bool, f64);
+    type Item = (S, TextStyle, Color, bool, f64);
 
-    fn next(&mut self) -> Option<(S, TextStyle, Color, bool, bool, f64)> {
+    fn next(&mut self) -> Option<(S, TextStyle, Color, bool, f64)> {
         if let Some((style_range, style)) = self.styles.peek() {
             let (color_range, color) = self.colors.peek().unwrap();
             let (under_range, under) = self.unders.peek().unwrap();
-            let (conceal_range, conceal) = self.conceals.peek().unwrap();
             let (scale_range, scale) = self.scales.peek().unwrap();
             let min_end = min(
                 style_range.end,
-                min(
-                    color_range.end,
-                    min(under_range.end, min(conceal_range.end, scale_range.end)),
-                ),
+                min(color_range.end, min(under_range.end, scale_range.end)),
             );
             let range = self.cur_start..min_end - self.offset;
             self.cur_start = min_end - self.offset;
-            let ret = (
-                S::from_raw(range),
-                **style,
-                **color,
-                **under,
-                **conceal,
-                **scale,
-            );
+            let ret = (S::from_raw(range), **style, **color, **under, **scale);
             if style_range.end == min_end {
                 self.styles.next();
             }
@@ -170,9 +143,6 @@ impl<'a, S: SliceRange> Iterator for StyleSubRanges<'a, S> {
             }
             if under_range.end == min_end {
                 self.unders.next();
-            }
-            if conceal_range.end == min_end {
-                self.conceals.next();
             }
             if scale_range.end == min_end {
                 self.scales.next();

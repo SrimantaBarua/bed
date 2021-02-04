@@ -21,6 +21,3 @@
 (atx_heading
  ((atx_heading_marker) @_markdown.h6.marker
   (#eq? @_markdown.h6.marker "######"))) @markdown.h6
-
-(emphasis (text) @markdown.emphasis) @conceal
-(strong_emphasis (text) @markdown.strong) @conceal
