@@ -31,7 +31,9 @@ impl Buffer {
                             shared.rope.insert_char(cidx + num_chars, '\t');
                             num_chars += 1;
                         } else {
-                            shared.rope.insert(cidx + num_chars, &" ".repeat(num_chars));
+                            shared
+                                .rope
+                                .insert(cidx + num_chars, &" ".repeat(next_stop - x));
                             num_chars += next_stop - x;
                         }
                         x = next_stop;

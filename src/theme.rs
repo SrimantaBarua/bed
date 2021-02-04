@@ -168,7 +168,7 @@ impl ThemeSet {
     }
 
     pub(crate) fn get(&self, theme: &str) -> &Theme {
-        self.0.get(theme).expect("failed to get theme")
+        self.0.get(theme).unwrap_or_else(|| self.0.get("default").unwrap())
     }
 }
 

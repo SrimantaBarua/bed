@@ -212,6 +212,7 @@ struct ConfigInner {
     #[serde(rename(deserialize = "hover.line_padding"), default)]
     hover_line_padding: u32,
     // Language-specific
+    #[serde(default)]
     language: FnvHashMap<Language, ConfigLanguageInner>,
 }
 

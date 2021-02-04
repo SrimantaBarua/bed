@@ -179,8 +179,8 @@ impl InputState {
                     'E' => bed.edit_view().move_cursor(MoveObj::WordEnd(act_rep, true)),
                     'b' => bed
                         .edit_view()
-                        .move_cursor(MoveObj::WordBeg(act_rep, false)),
-                    'B' => bed.edit_view().move_cursor(MoveObj::WordBeg(act_rep, true)),
+                        .move_cursor(MoveObj::Back(act_rep, false)),
+                    'B' => bed.edit_view().move_cursor(MoveObj::Back(act_rep, true)),
                     // Move to start/end of line
                     '0' => {
                         *action_mul = match action_mul {

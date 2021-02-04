@@ -827,7 +827,11 @@ pub(super) struct ViewCursor {
 
 impl ViewCursor {
     pub(super) fn reset(&mut self) {
-        *self = ViewCursor::default();
+        self.cidx = 0;
+        self.line_num = 0;
+        self.line_cidx = 0;
+        self.line_gidx = 0;
+        self.line_global_x = 0;
     }
 
     pub(super) fn sync_and_update_char_idx_left(&mut self, data: &Rope, tab_width: usize) {
