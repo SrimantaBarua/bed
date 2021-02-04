@@ -164,8 +164,7 @@ impl FontCollection {
     fn metrics(&mut self, size: TextSize) -> FontMetrics {
         self.families[0].borrow_mut().fonts[&TextStyle::default()]
             .borrow_mut()
-            .raster
-            .get_metrics(size)
+            .metrics(size)
     }
 
     fn space_metrics(&mut self, size: TextSize, style: TextStyle) -> GlyphMetrics {
@@ -189,11 +188,8 @@ impl FontCollection {
                 .unwrap_or_else(|| family.get(TextStyle::default()).unwrap())
         });
         let font = &mut *font.borrow_mut();
-        let gid = font.raster.get_glyph_for_char(' ');
-        assert!(gid != 0, "Failed to get glyph for space");
-        font.raster
-            .get_glyph_metrics(gid, size)
-            .expect("Failed to get glyph metrics for space")
+        font.space_metrics(size)
+            .expect("failed to get space metrics")
     }
 
     fn shape<S>(&mut self, text: &S, size: TextSize, style: TextStyle) -> ShapedSpan
@@ -322,6 +318,8 @@ struct Font {
     num: u16,
     raster: RasterFont,
     shaper: HbFont,
+    metrics: FnvHashMap<TextSize, FontMetrics>,
+    space_metrics: FnvHashMap<TextSize, GlyphMetrics>,
 }
 
 impl Font {
@@ -332,7 +330,37 @@ impl Font {
             raster,
             shaper,
             num,
+            metrics: FnvHashMap::default(),
+            space_metrics: FnvHashMap::default(),
         })
+    }
+
+    fn metrics(&mut self, size: TextSize) -> FontMetrics {
+        if let Some(metrics) = self.metrics.get(&size) {
+            metrics.clone()
+        } else {
+            let metrics = self.raster.get_metrics(size);
+            self.metrics.insert(size, metrics.clone());
+            metrics
+        }
+    }
+
+    fn space_metrics(&mut self, size: TextSize) -> Option<GlyphMetrics> {
+        if let Some(metrics) = self.space_metrics.get(&size) {
+            Some(metrics.clone())
+        } else {
+            let gid = self.raster.get_glyph_for_char(' ');
+            if gid == 0 {
+                None
+            } else {
+                if let Some(metrics) = self.raster.get_glyph_metrics(gid, size) {
+                    self.space_metrics.insert(size, metrics.clone());
+                    Some(metrics)
+                } else {
+                    None
+                }
+            }
+        }
     }
 }
 

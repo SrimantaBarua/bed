@@ -188,6 +188,7 @@ pub(super) struct RasterizedGlyph<'a> {
     pub(super) metrics: GlyphMetrics,
 }
 
+#[derive(Clone)]
 pub(crate) struct FontMetrics {
     pub(crate) ascender: f26_6,
     pub(crate) descender: f26_6,
