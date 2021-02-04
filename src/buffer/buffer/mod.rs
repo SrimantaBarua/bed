@@ -563,6 +563,8 @@ impl Buffer {
             rope.slice(range).to_string()
         });
         let mut buf = String::new();
+        let mut conceal_ranges = Vec::new();
+        let mut unconceal_ranges = Vec::new();
         for (query_match, _) in iter {
             for capture in query_match.captures {
                 let range = capture.node.byte_range();
@@ -570,14 +572,14 @@ impl Buffer {
                 buf.clear();
                 let mut elem = None;
                 let capture_name = &tslang.hl_query.capture_names()[capture.index as usize];
-                if capture_name == "conceal" {
-                    shared.styles.set_conceal(crange.clone(), true);
-                    continue;
-                } else {
-                    shared.styles.set_conceal(crange.clone(), false);
-                }
                 if capture_name.starts_with("_") {
                     continue;
+                }
+                if capture_name == "conceal" {
+                    conceal_ranges.push(crange.clone());
+                    continue;
+                } else {
+                    unconceal_ranges.push(crange.clone());
                 }
                 for split in capture_name.split('.') {
                     if buf.len() > 0 {
@@ -596,6 +598,12 @@ impl Buffer {
                     shared.styles.set_scale(crange, elem.scale);
                 }
             }
+        }
+        for range in conceal_ranges {
+            shared.styles.set_conceal(range, true);
+        }
+        for range in unconceal_ranges {
+            shared.styles.set_conceal(range, false);
         }
     }
 }
