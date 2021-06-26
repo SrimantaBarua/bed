@@ -4,4 +4,5 @@ members = [
     "bed",
     "bed_core",
     "rope",
+    "utf8",
 ]

@@ -88,6 +88,17 @@ impl<T: Clone + fmt::Debug> fmt::Debug for CowBox<T> {
     }
 }
 
+impl<T: Clone + PartialEq> PartialEq for CowBox<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.0 == other.0 {
+            return true;
+        }
+        self.data().eq(other.data())
+    }
+}
+
+impl<T: Clone + Eq> Eq for CowBox<T> {}
+
 struct CowBoxInner<T: Clone> {
     refcount: usize,
     data: T,
@@ -98,7 +109,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cowbox_refcounts() {
+    fn refcounts() {
         let cow_box = CowBox::new(1);
         assert_eq!(cow_box.refcount(), 1);
         assert_eq!(*cow_box.data(), 1);
@@ -114,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn cowbox_single_mutation() {
+    fn single_mutation() {
         let mut cow_box = CowBox::new(1);
         *cow_box = 2;
         assert_eq!(cow_box.refcount(), 1);
@@ -122,7 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn cowbox_copied_mutation() {
+    fn copied_mutation() {
         let mut cow_box = CowBox::new(1);
         let mut cloned_box1 = cow_box.clone();
         assert_eq!(cow_box.refcount(), 2);
