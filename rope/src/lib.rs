@@ -34,6 +34,10 @@ impl Rope {
         self.whole_slice().to_string()
     }
 
+    pub fn chunks<'a>(&'a self) -> Chunks<'a> {
+        self.whole_slice().chunks()
+    }
+
     fn whole_slice<'a>(&'a self) -> RopeSlice<'a> {
         RopeSlice {
             rope: self,
@@ -76,7 +80,95 @@ impl<'a> RopeSlice<'a> {
     }
 
     pub fn to_string(&self) -> String {
-        unimplemented!()
+        let mut ret = String::new();
+        ret.reserve(self.len());
+        for chunk in self.chunks() {
+            ret.push_str(chunk);
+        }
+        ret
+    }
+
+    pub fn chunks(&self) -> Chunks<'a> {
+        Chunks::new(self)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Chunks<'a> {
+    stack: Vec<&'a InnerNode>,
+    next_leaf: Option<&'a LeafNode>,
+    start_offset: usize,
+    remaining: usize,
+}
+
+impl<'a> Chunks<'a> {
+    fn new(rope_slice: &RopeSlice<'a>) -> Chunks<'a> {
+        if rope_slice.len() == 0 {
+            return Chunks {
+                stack: vec![],
+                next_leaf: None,
+                start_offset: 0,
+                remaining: 0,
+            };
+        }
+        let mut stack = Vec::new();
+        let mut start_offset = rope_slice.start_offset;
+        let mut cur_node = &*rope_slice.rope.root;
+        let next_leaf = loop {
+            match &cur_node.typ {
+                NodeTyp::Inner(inner) => {
+                    let left_len = inner.left.len();
+                    if start_offset > left_len {
+                        start_offset -= left_len;
+                        cur_node = &*inner.right;
+                    } else {
+                        cur_node = &*inner.left;
+                        stack.push(inner);
+                    }
+                }
+                NodeTyp::Leaf(leaf) => {
+                    break Some(leaf);
+                }
+            }
+        };
+        Chunks {
+            stack,
+            next_leaf,
+            start_offset,
+            remaining: rope_slice.len(),
+        }
+    }
+}
+
+impl<'a> Iterator for Chunks<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+        let next_leaf = self.next_leaf.take()?;
+        let ret = if self.start_offset + self.remaining < next_leaf.len() {
+            &next_leaf.data[self.start_offset..self.start_offset + self.remaining]
+        } else {
+            &next_leaf.data[self.start_offset..]
+        };
+        self.remaining -= ret.len();
+        self.start_offset = 0;
+        if self.remaining > 0 {
+            self.next_leaf = self.stack.pop().map(|inner| {
+                let mut cur_node = &*inner.right;
+                loop {
+                    match &cur_node.typ {
+                        NodeTyp::Inner(inner) => {
+                            self.stack.push(inner);
+                            cur_node = &*inner.left;
+                        }
+                        NodeTyp::Leaf(leaf) => {
+                            break leaf;
+                        }
+                    }
+                }
+            });
+        }
+        Some(ret)
     }
 }
 
@@ -185,5 +277,28 @@ mod tests {
         let rope = Rope::from_reader(open_file("/res/test1.txt")).unwrap();
         assert_eq!(rope.len(), 2412);
         rope.slice(..2413);
+    }
+
+    #[test]
+    fn compare_string() {
+        let mut buf = String::new();
+        let mut do_it = |path| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            assert_eq!(Rope::from_reader(open_file(path)).unwrap().to_string(), buf);
+            buf.clear();
+        };
+        do_it("/res/test1.txt");
+        do_it("/res/test2.txt");
+        do_it("/res/test3.txt");
+    }
+
+    #[test]
+    fn compare_slice_string() {
+        let mut buf = String::new();
+        let rope = Rope::from_reader(open_file("/res/test3.txt")).unwrap();
+        open_file("/res/test3.txt").read_to_string(&mut buf).unwrap();
+        let slice = rope.slice(1000..8002);
+        let buf_slice = &buf[1000..8002];
+        assert_eq!(&slice.to_string(), buf_slice);
     }
 }
