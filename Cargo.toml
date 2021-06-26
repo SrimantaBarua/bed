@@ -3,4 +3,5 @@
 members = [
     "bed",
     "bed_core",
+    "rope",
 ]

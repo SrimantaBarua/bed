@@ -2,8 +2,12 @@
 # It is not intended for manual editing.
 [[package]]
 name = "bed"
-version = "0.1.0"
+version = "0.0.1"
 
 [[package]]
 name = "bed_core"
-version = "0.1.0"
+version = "0.0.1"
+
+[[package]]
+name = "rope"
+version = "0.0.1"
