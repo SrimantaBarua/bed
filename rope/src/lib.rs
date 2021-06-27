@@ -1,5 +1,5 @@
 use std::io::{Read, Result as IOResult};
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound, Range, RangeBounds};
 
 mod builder;
 mod cow_box;
@@ -30,6 +30,26 @@ impl Rope {
     pub fn insert_char(&mut self, index: usize, c: char) {
         let mut buf = [0; 6];
         self.insert(index, c.encode_utf8(&mut buf));
+    }
+
+    pub fn remove<R: RangeBounds<usize>>(&mut self, range: R) {
+        let start = match range.start_bound() {
+            Bound::Unbounded => 0,
+            Bound::Included(start) => *start,
+            Bound::Excluded(start) => start + 1,
+        };
+        let end = match range.end_bound() {
+            Bound::Unbounded => self.len(),
+            Bound::Included(end) => end + 1,
+            Bound::Excluded(end) => *end,
+        };
+        assert!(start <= end, "start cannot be after end");
+        assert!(end <= self.len(), "index out of bounds");
+        if start == 0 && end == self.len() {
+            self.root = CowBox::new(Node::new_leaf(LeafNode::new(String::new())));
+        } else {
+            self.root.remove(start..end);
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -167,6 +187,44 @@ impl Node {
                     inner.update_len();
                 } else {
                     inner.right.insert(index - inner.left.len(), data);
+                    inner.update_len();
+                }
+            }
+        };
+    }
+
+    fn remove(&mut self, range: Range<usize>) {
+        assert!(range.start <= range.end, "start cannot be after end");
+        assert!(range.end <= self.len(), "index out of bounds");
+        assert!(
+            range.start > 0 || range.end < self.len(),
+            "full range deletion should be handled earlier"
+        );
+        match &mut self.typ {
+            NodeTyp::Leaf(leaf) => {
+                leaf.data.replace_range(range.clone(), "");
+            }
+            NodeTyp::Inner(inner) => {
+                let left_len = inner.left.len();
+                if range.end <= left_len {
+                    if range.start == 0 && range.end == left_len {
+                        self.typ = inner.right.typ.clone();
+                    } else {
+                        inner.left.remove(range.clone());
+                        inner.update_len();
+                    }
+                } else if range.start >= left_len {
+                    if range.start == left_len && range.end == inner.len() {
+                        self.typ = inner.left.typ.clone();
+                    } else {
+                        inner
+                            .right
+                            .remove(range.start - left_len..range.end - left_len);
+                        inner.update_len();
+                    }
+                } else {
+                    inner.left.remove(range.start..left_len);
+                    inner.right.remove(0..range.end - left_len);
                     inner.update_len();
                 }
             }
@@ -355,5 +413,23 @@ mod tests {
         rope.insert_char(8014, 'x');
         buf.insert(8014, 'x');
         assert_eq!(rope.to_string(), buf);
+    }
+
+    #[test]
+    fn remove() {
+        let mut buf = String::new();
+        let mut do_it = |path, range: Range<usize>| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            let mut rope = Rope::from_reader(open_file(path)).unwrap();
+            buf.replace_range(range.clone(), "");
+            rope.remove(range);
+            assert!(rope.chars().eq(buf.chars()));
+            assert!(rope.char_indices().eq(buf.char_indices()));
+            assert!(rope.lines().map(|line| line.to_string()).eq(buf.lines()));
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 10..20);
+        do_it("/res/test2.txt", 0..4096);
+        do_it("/res/test3.txt", 1000..8002);
     }
 }
