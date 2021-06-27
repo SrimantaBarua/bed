@@ -88,6 +88,14 @@ impl Rope {
         self.whole_slice().line(index)
     }
 
+    pub fn line_to_byte(&self, linum: usize) -> usize {
+        self.whole_slice().line_to_byte(linum)
+    }
+
+    pub fn byte_to_line(&self, index: usize) -> usize {
+        self.whole_slice().byte_to_line(index)
+    }
+
     fn whole_slice<'a>(&'a self) -> RopeSlice<'a> {
         RopeSlice {
             rope: self,
@@ -195,6 +203,22 @@ impl<'a> RopeSlice<'a> {
             newlines_before: self.newlines_before + index,
             num_newlines,
         }
+    }
+
+    pub fn line_to_byte(&self, linum: usize) -> usize {
+        if linum == 0 {
+            0
+        } else {
+            self.rope
+                .root
+                .offset_for_newline(self.newlines_before + linum - 1)
+                + 1
+                - self.start_offset
+        }
+    }
+
+    pub fn byte_to_line(&self, index: usize) -> usize {
+        self.rope.root.num_newlines_upto(self.start_offset + index)
     }
 }
 
@@ -306,7 +330,12 @@ impl Node {
     }
 
     fn num_newlines_upto(&self, index: usize) -> usize {
-        assert!(index <= self.len());
+        assert!(
+            index <= self.len(),
+            "index ({}) <= self.len() ({})",
+            index,
+            self.len()
+        );
         if index == self.len() {
             return self.num_newlines;
         }
@@ -329,7 +358,12 @@ impl Node {
     }
 
     fn offset_for_newline(&self, newline_idx: usize) -> usize {
-        assert!(newline_idx < self.num_newlines);
+        assert!(
+            newline_idx < self.num_newlines,
+            "newline_idx ({}) < self.num_newlines ({})",
+            newline_idx,
+            self.num_newlines
+        );
         match &self.typ {
             NodeTyp::Leaf(leaf) => leaf
                 .data
@@ -461,6 +495,27 @@ mod tests {
             }
             None
         }
+    }
+
+    fn line_to_byte(s: &str, linum: usize) -> usize {
+        let mut cur_line = 0;
+        let bytes = s.as_bytes();
+        for i in 0..bytes.len() {
+            if cur_line == linum {
+                return i;
+            }
+            if bytes[i] == b'\n' {
+                cur_line += 1;
+                if cur_line == linum {
+                    return i + 1;
+                }
+            }
+        }
+        panic!("line index out of bounds");
+    }
+
+    fn byte_to_line(s: &str, bidx: usize) -> usize {
+        s.bytes().take(bidx).filter(|b| *b == b'\n').count()
     }
 
     #[test]
@@ -678,5 +733,95 @@ mod tests {
         do_it("/res/test1.txt", 10..20, 5..200);
         do_it("/res/test2.txt", 0..4096, 0..5);
         do_it("/res/test3.txt", 1000..8002, 5..2006);
+    }
+
+    #[test]
+    fn line_byte_indices() {
+        let mut buf = String::new();
+        let mut do_it =
+            |path, range: Range<usize>, byte_indices: &[usize], line_indices: &[usize]| {
+                open_file(path).read_to_string(&mut buf).unwrap();
+                let mut rope = Rope::from_reader(open_file(path)).unwrap();
+                for &li in line_indices.iter() {
+                    if li < rope.len_lines() {
+                        assert_eq!(rope.line_to_byte(li), line_to_byte(&buf, li));
+                    }
+                }
+                for &bi in byte_indices.iter() {
+                    if bi < rope.len() {
+                        assert_eq!(rope.byte_to_line(bi), byte_to_line(&buf, bi));
+                    }
+                }
+                buf.replace_range(range.clone(), "");
+                rope.remove(range);
+                for &li in line_indices.iter() {
+                    if li < rope.len_lines() {
+                        assert_eq!(rope.line_to_byte(li), line_to_byte(&buf, li));
+                    }
+                }
+                for &bi in byte_indices.iter() {
+                    if bi < rope.len() {
+                        assert_eq!(rope.byte_to_line(bi), byte_to_line(&buf, bi));
+                    }
+                }
+                buf.clear();
+            };
+        do_it("/res/test1.txt", 10..20, &[20, 100, 1000], &[2, 10]);
+        do_it("/res/test2.txt", 0..4096, &[50, 100], &[5, 10]);
+        do_it(
+            "/res/test3.txt",
+            1000..8002,
+            &[300, 2000, 4000],
+            &[10, 300, 500],
+        );
+    }
+
+    #[test]
+    fn slice_byte_indices() {
+        let mut buf = String::new();
+        let mut do_it = |path,
+                         del_range: Range<usize>,
+                         slice_range: Range<usize>,
+                         byte_indices: &[usize],
+                         line_indices: &[usize]| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            let mut rope = Rope::from_reader(open_file(path)).unwrap();
+            let bufslice = &buf[slice_range.clone()];
+            let ropeslice = rope.slice(slice_range.clone());
+            for &li in line_indices.iter() {
+                if li < ropeslice.len_lines() {
+                    assert_eq!(ropeslice.line_to_byte(li), line_to_byte(&bufslice, li));
+                }
+            }
+            for &bi in byte_indices.iter() {
+                if bi < ropeslice.len() {
+                    assert_eq!(ropeslice.byte_to_line(bi), byte_to_line(&bufslice, bi));
+                }
+            }
+            buf.replace_range(del_range.clone(), "");
+            rope.remove(del_range);
+            let bufslice = &buf[slice_range.clone()];
+            let ropeslice = rope.slice(slice_range.clone());
+            for &li in line_indices.iter() {
+                if li < ropeslice.len_lines() {
+                    assert_eq!(ropeslice.line_to_byte(li), line_to_byte(&bufslice, li));
+                }
+            }
+            for &bi in byte_indices.iter() {
+                if bi < ropeslice.len() {
+                    assert_eq!(ropeslice.byte_to_line(bi), byte_to_line(&bufslice, bi));
+                }
+            }
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 10..20, 5..200, &[20, 100, 1000], &[2, 10]);
+        do_it("/res/test2.txt", 0..4096, 0..5, &[50, 100], &[5, 10]);
+        do_it(
+            "/res/test3.txt",
+            1000..8002,
+            5..2006,
+            &[20, 100, 1000],
+            &[20, 100],
+        );
     }
 }
