@@ -84,6 +84,10 @@ impl Rope {
         self.whole_slice().lines()
     }
 
+    pub fn line<'a>(&'a self, index: usize) -> RopeSlice<'a> {
+        self.whole_slice().line(index)
+    }
+
     fn whole_slice<'a>(&'a self) -> RopeSlice<'a> {
         RopeSlice {
             rope: self,
@@ -161,6 +165,36 @@ impl<'a> RopeSlice<'a> {
 
     pub fn len_lines(&self) -> usize {
         self.num_newlines + 1
+    }
+
+    pub fn line(&self, index: usize) -> RopeSlice<'a> {
+        assert!(index < self.len_lines(), "line index out of bounds");
+        let start_offset = if index == 0 {
+            self.start_offset
+        } else {
+            self.rope
+                .root
+                .offset_for_newline(self.newlines_before + index - 1)
+                + 1
+        };
+        let (num_newlines, end_offset) = if index == self.len_lines() - 1 {
+            (0, self.end_offset)
+        } else {
+            (
+                1,
+                self.rope
+                    .root
+                    .offset_for_newline(self.newlines_before + index)
+                    + 1,
+            )
+        };
+        RopeSlice {
+            rope: self.rope,
+            start_offset,
+            end_offset,
+            newlines_before: self.newlines_before + index,
+            num_newlines,
+        }
     }
 }
 
@@ -293,6 +327,29 @@ impl Node {
             }
         }
     }
+
+    fn offset_for_newline(&self, newline_idx: usize) -> usize {
+        assert!(newline_idx < self.num_newlines);
+        match &self.typ {
+            NodeTyp::Leaf(leaf) => leaf
+                .data
+                .bytes()
+                .enumerate()
+                .filter_map(|(i, b)| if b == b'\n' { Some(i) } else { None })
+                .nth(newline_idx)
+                .unwrap(),
+            NodeTyp::Inner(inner) => {
+                if newline_idx < inner.left.num_newlines {
+                    inner.left.offset_for_newline(newline_idx)
+                } else {
+                    inner.left.len()
+                        + inner
+                            .right
+                            .offset_for_newline(newline_idx - inner.left.num_newlines)
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -374,7 +431,7 @@ mod tests {
     }
 
     struct StrLines<'a> {
-        lines: std::str::Lines<'a>,
+        lines: std::iter::Peekable<std::str::Lines<'a>>,
         has_last_line: bool,
     }
 
@@ -382,7 +439,7 @@ mod tests {
         fn new(s: &'a str) -> StrLines<'a> {
             let has_last_line = s.ends_with('\n');
             StrLines {
-                lines: s.lines(),
+                lines: s.lines().peekable(),
                 has_last_line,
             }
         }
@@ -393,6 +450,9 @@ mod tests {
 
         fn next(&mut self) -> Option<String> {
             if let Some(line) = self.lines.next() {
+                if !self.has_last_line && self.lines.peek().is_none() {
+                    return Some(line.to_owned());
+                }
                 return Some(line.to_owned() + "\n");
             }
             if self.has_last_line {
@@ -542,6 +602,7 @@ mod tests {
             assert_eq!(rope.len_lines() - diff, buf.lines().count());
             buf.replace_range(range.clone(), "");
             rope.remove(range);
+            let diff = if buf.ends_with('\n') { 1 } else { 0 };
             assert_eq!(rope.len_lines() - diff, buf.lines().count());
             buf.clear();
         };
@@ -556,26 +617,62 @@ mod tests {
         let mut do_it = |path, del_range: Range<usize>, slice_range: Range<usize>| {
             open_file(path).read_to_string(&mut buf).unwrap();
             let mut rope = Rope::from_reader(open_file(path)).unwrap();
-            let diff = if buf[slice_range.clone()].ends_with('\n') {
-                1
-            } else {
-                0
-            };
-            assert_eq!(
-                rope.slice(slice_range.clone()).len_lines() - diff,
-                buf[slice_range.clone()].lines().count(),
-            );
+            let bufslice = &buf[slice_range.clone()];
+            let ropeslice = rope.slice(slice_range.clone());
+            let diff = if bufslice.ends_with('\n') { 1 } else { 0 };
+            assert_eq!(ropeslice.len_lines() - diff, bufslice.lines().count());
             buf.replace_range(del_range.clone(), "");
             rope.remove(del_range);
-            let diff = if buf[slice_range.clone()].ends_with('\n') {
-                1
-            } else {
-                0
-            };
-            assert_eq!(
-                rope.slice(slice_range.clone()).len_lines() - diff,
-                buf[slice_range.clone()].lines().count(),
-            );
+            let bufslice = &buf[slice_range.clone()];
+            let ropeslice = rope.slice(slice_range.clone());
+            let diff = if bufslice.ends_with('\n') { 1 } else { 0 };
+            assert_eq!(ropeslice.len_lines() - diff, bufslice.lines().count());
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 10..20, 5..200);
+        do_it("/res/test2.txt", 0..4096, 0..5);
+        do_it("/res/test3.txt", 1000..8002, 5..2006);
+    }
+
+    #[test]
+    fn line_indices() {
+        let mut buf = String::new();
+        let mut do_it = |path, range: Range<usize>| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            let mut rope = Rope::from_reader(open_file(path)).unwrap();
+            assert!((0..rope.len_lines())
+                .map(|i| rope.line(i).to_string())
+                .eq(StrLines::new(&buf)));
+            buf.replace_range(range.clone(), "");
+            rope.remove(range);
+            assert!((0..rope.len_lines())
+                .map(|i| rope.line(i).to_string())
+                .eq(StrLines::new(&buf)));
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 10..20);
+        do_it("/res/test2.txt", 0..4096);
+        do_it("/res/test3.txt", 1000..8002);
+    }
+
+    #[test]
+    fn slice_line_indices() {
+        let mut buf = String::new();
+        let mut do_it = |path, del_range: Range<usize>, slice_range: Range<usize>| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            let mut rope = Rope::from_reader(open_file(path)).unwrap();
+            let bufslice = &buf[slice_range.clone()];
+            let ropeslice = rope.slice(slice_range.clone());
+            assert!((0..ropeslice.len_lines())
+                .map(|i| ropeslice.line(i).to_string())
+                .eq(StrLines::new(bufslice)));
+            buf.replace_range(del_range.clone(), "");
+            rope.remove(del_range);
+            let bufslice = &buf[slice_range.clone()];
+            let ropeslice = rope.slice(slice_range.clone());
+            assert!((0..ropeslice.len_lines())
+                .map(|i| ropeslice.line(i).to_string())
+                .eq(StrLines::new(bufslice)));
             buf.clear();
         };
         do_it("/res/test1.txt", 10..20, 5..200);
