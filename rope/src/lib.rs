@@ -495,4 +495,21 @@ mod tests {
         do_it("/res/test2.txt", 0..4096);
         do_it("/res/test3.txt", 1000..8002);
     }
+
+    #[test]
+    fn len_lines() {
+        let mut buf = String::new();
+        let mut do_it = |path, range: Range<usize>| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            let mut rope = Rope::from_reader(open_file(path)).unwrap();
+            assert_eq!(rope.len_lines() - 1, buf.lines().count());
+            buf.replace_range(range.clone(), "");
+            rope.remove(range);
+            assert_eq!(rope.len_lines() - 1, buf.lines().count());
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 10..20);
+        do_it("/res/test2.txt", 0..4096);
+        do_it("/res/test3.txt", 1000..8002);
+    }
 }
