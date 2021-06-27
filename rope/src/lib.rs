@@ -3,6 +3,7 @@ use std::ops::{Bound, RangeBounds};
 
 mod builder;
 mod cow_box;
+mod take_mut;
 
 use cow_box::CowBox;
 
@@ -20,6 +21,15 @@ impl Rope {
 
     pub fn from_reader<R: Read>(reader: R) -> IOResult<Rope> {
         builder::RopeBuilder::from_reader(reader).map(|builder| builder.build())
+    }
+
+    pub fn insert(&mut self, index: usize, data: &str) {
+        self.root.insert(index, data);
+    }
+
+    pub fn insert_char(&mut self, index: usize, c: char) {
+        let mut buf = [0; 6];
+        self.insert(index, c.encode_utf8(&mut buf));
     }
 
     pub fn len(&self) -> usize {
@@ -190,6 +200,33 @@ impl Node {
         }
     }
 
+    fn insert(&mut self, index: usize, data: &str) {
+        assert!(index <= self.len(), "index out of bounds");
+        take_mut::take_mut(&mut self.typ, |typ| match typ {
+            NodeTyp::Leaf(mut leaf) => {
+                if leaf.len() + data.len() <= MAX_NODE_SIZE {
+                    leaf.data.insert_str(index, data);
+                    NodeTyp::Leaf(leaf)
+                } else {
+                    leaf.data.insert_str(index, data);
+                    NodeTyp::Inner(InnerNode::new_from_str(&leaf.data))
+                }
+            }
+            NodeTyp::Inner(mut inner) => {
+                if index < inner.left.len()
+                    || (index == inner.left.len() && inner.left.len() < inner.right.len())
+                {
+                    inner.left.insert(index, data);
+                    inner.update_len();
+                } else {
+                    inner.right.insert(index - inner.left.len(), data);
+                    inner.update_len();
+                }
+                NodeTyp::Inner(inner)
+            }
+        });
+    }
+
     fn len(&self) -> usize {
         match &self.typ {
             NodeTyp::Inner(inner) => inner.len(),
@@ -221,8 +258,28 @@ impl InnerNode {
         }
     }
 
+    fn new_from_str(s: &str) -> InnerNode {
+        let midpoint = s.len() / 2;
+        let utf8_mid = utf8::last_utf8_boundary(&s.as_bytes()[..midpoint]);
+        let left = if utf8_mid <= MAX_NODE_SIZE {
+            Node::new_leaf(LeafNode::new(s[..utf8_mid].to_owned()))
+        } else {
+            Node::new_inner(InnerNode::new_from_str(&s[..utf8_mid]))
+        };
+        let right = if s.len() - utf8_mid <= MAX_NODE_SIZE {
+            Node::new_leaf(LeafNode::new(s[utf8_mid..].to_owned()))
+        } else {
+            Node::new_inner(InnerNode::new_from_str(&s[utf8_mid..]))
+        };
+        InnerNode::new(left, right)
+    }
+
     fn len(&self) -> usize {
         self.length
+    }
+
+    fn update_len(&mut self) {
+        self.length = self.left.len() + self.right.len();
     }
 }
 
@@ -296,9 +353,27 @@ mod tests {
     fn compare_slice_string() {
         let mut buf = String::new();
         let rope = Rope::from_reader(open_file("/res/test3.txt")).unwrap();
-        open_file("/res/test3.txt").read_to_string(&mut buf).unwrap();
+        open_file("/res/test3.txt")
+            .read_to_string(&mut buf)
+            .unwrap();
         let slice = rope.slice(1000..8002);
         let buf_slice = &buf[1000..8002];
         assert_eq!(&slice.to_string(), buf_slice);
+    }
+
+    #[test]
+    fn insertion() {
+        let mut buf = String::new();
+        let mut rope = Rope::from_reader(open_file("/res/test2.txt")).unwrap();
+        open_file("/res/test2.txt")
+            .read_to_string(&mut buf)
+            .unwrap();
+        assert_eq!(rope.to_string(), buf);
+        rope.insert(10, "====XYZA====");
+        buf.insert_str(10, "====XYZA====");
+        assert_eq!(rope.to_string(), buf);
+        rope.insert_char(200, 'x');
+        buf.insert(200, 'x');
+        assert_eq!(rope.to_string(), buf);
     }
 }
