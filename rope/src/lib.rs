@@ -56,6 +56,10 @@ impl Rope {
         self.root.len()
     }
 
+    pub fn len_lines(&self) -> usize {
+        self.root.num_newlines + 1
+    }
+
     pub fn slice<'a, R: RangeBounds<usize>>(&'a self, range: R) -> RopeSlice<'a> {
         self.whole_slice().slice(range)
     }
@@ -150,19 +154,26 @@ impl<'a> RopeSlice<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Node {
     typ: NodeTyp,
+    num_newlines: usize,
 }
 
 impl Node {
     fn new_inner(inner_node: InnerNode) -> Node {
-        Node {
+        let mut ret = Node {
             typ: NodeTyp::Inner(inner_node),
-        }
+            num_newlines: 0,
+        };
+        ret.update_metadata();
+        ret
     }
 
     fn new_leaf(leaf_node: LeafNode) -> Node {
-        Node {
+        let mut ret = Node {
             typ: NodeTyp::Leaf(leaf_node),
-        }
+            num_newlines: 0,
+        };
+        ret.update_metadata();
+        ret
     }
 
     fn insert(&mut self, index: usize, data: &str) {
@@ -184,13 +195,12 @@ impl Node {
                     || (index == inner.left.len() && inner.left.len() < inner.right.len())
                 {
                     inner.left.insert(index, data);
-                    inner.update_len();
                 } else {
                     inner.right.insert(index - inner.left.len(), data);
-                    inner.update_len();
                 }
             }
         };
+        self.update_metadata();
     }
 
     fn remove(&mut self, range: Range<usize>) {
@@ -211,7 +221,6 @@ impl Node {
                         self.typ = inner.right.typ.clone();
                     } else {
                         inner.left.remove(range.clone());
-                        inner.update_len();
                     }
                 } else if range.start >= left_len {
                     if range.start == left_len && range.end == inner.len() {
@@ -220,15 +229,26 @@ impl Node {
                         inner
                             .right
                             .remove(range.start - left_len..range.end - left_len);
-                        inner.update_len();
                     }
                 } else {
                     inner.left.remove(range.start..left_len);
                     inner.right.remove(0..range.end - left_len);
-                    inner.update_len();
                 }
             }
         };
+        self.update_metadata();
+    }
+
+    fn update_metadata(&mut self) {
+        match &mut self.typ {
+            NodeTyp::Inner(inner) => {
+                inner.update_len();
+                self.num_newlines = inner.left.num_newlines + inner.right.num_newlines;
+            }
+            NodeTyp::Leaf(leaf) => {
+                self.num_newlines = leaf.count_newlines();
+            }
+        }
     }
 
     fn len(&self) -> usize {
@@ -297,6 +317,10 @@ impl LeafNode {
         LeafNode { data }
     }
 
+    fn count_newlines(&self) -> usize {
+        self.data.bytes().filter(|b| *b == b'\n').count()
+    }
+
     fn len(&self) -> usize {
         self.data.len()
     }
@@ -311,6 +335,36 @@ mod tests {
 
     fn open_file(path: &str) -> File {
         File::open(env!("CARGO_MANIFEST_DIR").to_owned() + path).unwrap()
+    }
+
+    struct StrLines<'a> {
+        lines: std::str::Lines<'a>,
+        has_last_line: bool,
+    }
+
+    impl<'a> StrLines<'a> {
+        fn new(s: &'a str) -> StrLines<'a> {
+            let has_last_line = s.ends_with('\n');
+            StrLines {
+                lines: s.lines(),
+                has_last_line,
+            }
+        }
+    }
+
+    impl<'a> Iterator for StrLines<'a> {
+        type Item = String;
+
+        fn next(&mut self) -> Option<String> {
+            if let Some(line) = self.lines.next() {
+                return Some(line.to_owned() + "\n");
+            }
+            if self.has_last_line {
+                self.has_last_line = false;
+                return Some("".to_owned());
+            }
+            None
+        }
     }
 
     #[test]
@@ -370,7 +424,10 @@ mod tests {
         let rope = Rope::new();
         assert!(rope.chars().eq("".chars()));
         assert!(rope.char_indices().eq("".char_indices()));
-        assert!(rope.lines().map(|line| line.to_string()).eq("".lines()));
+        assert!(rope
+            .lines()
+            .map(|line| line.to_string())
+            .eq(StrLines::new("")));
     }
 
     #[test]
@@ -381,7 +438,10 @@ mod tests {
             let rope = Rope::from_reader(open_file(path)).unwrap();
             assert!(rope.chars().eq(buf.chars()));
             assert!(rope.char_indices().eq(buf.char_indices()));
-            assert!(rope.lines().map(|line| line.to_string()).eq(buf.lines()));
+            assert!(rope
+                .lines()
+                .map(|line| line.to_string())
+                .eq(StrLines::new(&buf)));
             buf.clear();
         };
         do_it("/res/test1.txt");
@@ -425,7 +485,10 @@ mod tests {
             rope.remove(range);
             assert!(rope.chars().eq(buf.chars()));
             assert!(rope.char_indices().eq(buf.char_indices()));
-            assert!(rope.lines().map(|line| line.to_string()).eq(buf.lines()));
+            assert!(rope
+                .lines()
+                .map(|line| line.to_string())
+                .eq(StrLines::new(&buf)));
             buf.clear();
         };
         do_it("/res/test1.txt", 10..20);

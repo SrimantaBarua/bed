@@ -164,11 +164,8 @@ impl<'a> Iterator for Lines<'a> {
             Some(char_indices) => {
                 while let Some((i, c)) = char_indices.next() {
                     if c == '\n' {
-                        let ret = self.rope.slice(self.start_offset..i);
+                        let ret = self.rope.slice(self.start_offset..i + 1);
                         self.start_offset = i + 1;
-                        if self.start_offset == self.end_offset {
-                            self.char_indices = None;
-                        }
                         return Some(ret);
                     }
                 }
