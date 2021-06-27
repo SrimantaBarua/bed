@@ -57,6 +57,10 @@ impl Rope {
         self.whole_slice().char_indices()
     }
 
+    pub fn lines<'a>(&'a self) -> iter::Lines<'a> {
+        self.whole_slice().lines()
+    }
+
     fn whole_slice<'a>(&'a self) -> RopeSlice<'a> {
         RopeSlice {
             rope: self,
@@ -117,6 +121,10 @@ impl<'a> RopeSlice<'a> {
 
     pub fn char_indices(&self) -> iter::CharIndices<'a> {
         iter::CharIndices::new(self)
+    }
+
+    pub fn lines(&self) -> iter::Lines<'a> {
+        iter::Lines::new(self)
     }
 }
 
@@ -300,14 +308,37 @@ mod tests {
     }
 
     #[test]
+    fn compare_iterators_empty() {
+        let rope = Rope::new();
+        assert!(rope.chars().eq("".chars()));
+        assert!(rope.char_indices().eq("".char_indices()));
+        assert!(rope.lines().map(|line| line.to_string()).eq("".lines()));
+    }
+
+    #[test]
     fn compare_iterators() {
         let mut buf = String::new();
-        let rope = Rope::from_reader(open_file("/res/test3.txt")).unwrap();
-        open_file("/res/test3.txt")
-            .read_to_string(&mut buf)
-            .unwrap();
-        assert!(rope.chars().eq(buf.chars()));
-        assert!(rope.char_indices().eq(buf.char_indices()));
+        let mut do_it = |path| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            let rope = Rope::from_reader(open_file(path)).unwrap();
+            assert!(rope.chars().eq(buf.chars()));
+            assert!(rope.char_indices().eq(buf.char_indices()));
+            assert!(rope.lines().map(|line| line.to_string()).eq(buf.lines()));
+            buf.clear();
+        };
+        do_it("/res/test1.txt");
+        do_it("/res/test2.txt");
+        do_it("/res/test3.txt");
+    }
+
+    #[test]
+    fn insertion_empty() {
+        let mut rope = Rope::new();
+        assert_eq!(rope.to_string(), "".to_owned());
+        rope.insert(0, "====XYZA====");
+        assert_eq!(rope.to_string(), "====XYZA====");
+        rope.insert_char(4, 'x');
+        assert_eq!(rope.to_string(), "====xXYZA====");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use super::{InnerNode, LeafNode, NodeTyp, RopeSlice};
+use super::{InnerNode, LeafNode, NodeTyp, Rope, RopeSlice};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Chunks<'a> {
@@ -90,9 +90,13 @@ impl<'a> CharIndices<'a> {
     pub(crate) fn new(slice: &RopeSlice<'a>) -> CharIndices<'a> {
         let mut chunks = slice.chunks();
         let mut next = 0;
-        let char_indices = chunks.next().map(|s| {
-            next += s.len();
-            s.char_indices()
+        let char_indices = chunks.next().and_then(|s| {
+            if s.len() > 0 {
+                next += s.len();
+                Some(s.char_indices())
+            } else {
+                None
+            }
         });
         CharIndices {
             chunks,
@@ -126,6 +130,52 @@ impl<'a> Iterator for CharIndices<'a> {
                     None
                 }
             }
+        }
+    }
+}
+
+pub struct Lines<'a> {
+    rope: &'a Rope,
+    char_indices: Option<CharIndices<'a>>,
+    start_offset: usize,
+    end_offset: usize,
+}
+
+impl<'a> Lines<'a> {
+    pub(crate) fn new(slice: &RopeSlice<'a>) -> Lines<'a> {
+        Lines {
+            rope: slice.rope,
+            char_indices: if slice.len() == 0 {
+                None
+            } else {
+                Some(slice.char_indices())
+            },
+            start_offset: slice.start_offset,
+            end_offset: slice.end_offset,
+        }
+    }
+}
+
+impl<'a> Iterator for Lines<'a> {
+    type Item = RopeSlice<'a>;
+
+    fn next(&mut self) -> Option<RopeSlice<'a>> {
+        match &mut self.char_indices {
+            Some(char_indices) => {
+                while let Some((i, c)) = char_indices.next() {
+                    if c == '\n' {
+                        let ret = self.rope.slice(self.start_offset..i);
+                        self.start_offset = i + 1;
+                        if self.start_offset == self.end_offset {
+                            self.char_indices = None;
+                        }
+                        return Some(ret);
+                    }
+                }
+                self.char_indices = None;
+                Some(self.rope.slice(self.start_offset..self.end_offset))
+            }
+            None => None,
         }
     }
 }
