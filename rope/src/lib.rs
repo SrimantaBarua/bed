@@ -4,7 +4,6 @@ use std::ops::{Bound, RangeBounds};
 mod builder;
 mod cow_box;
 mod iter;
-mod take_mut;
 
 use cow_box::CowBox;
 
@@ -148,17 +147,19 @@ impl Node {
 
     fn insert(&mut self, index: usize, data: &str) {
         assert!(index <= self.len(), "index out of bounds");
-        take_mut::take_mut(&mut self.typ, |typ| match typ {
-            NodeTyp::Leaf(mut leaf) => {
+        match &mut self.typ {
+            NodeTyp::Leaf(leaf) => {
+                if utf8::last_utf8_boundary(&leaf.data.as_bytes()[..index]) != index {
+                    panic!("indexing in the middle of a UTF-8 character");
+                }
                 if leaf.len() + data.len() <= MAX_NODE_SIZE {
                     leaf.data.insert_str(index, data);
-                    NodeTyp::Leaf(leaf)
                 } else {
                     leaf.data.insert_str(index, data);
-                    NodeTyp::Inner(InnerNode::new_from_str(&leaf.data))
+                    self.typ = NodeTyp::Inner(InnerNode::new_from_str(&leaf.data));
                 }
             }
-            NodeTyp::Inner(mut inner) => {
+            NodeTyp::Inner(inner) => {
                 if index < inner.left.len()
                     || (index == inner.left.len() && inner.left.len() < inner.right.len())
                 {
@@ -168,9 +169,8 @@ impl Node {
                     inner.right.insert(index - inner.left.len(), data);
                     inner.update_len();
                 }
-                NodeTyp::Inner(inner)
             }
-        });
+        };
     }
 
     fn len(&self) -> usize {
@@ -344,16 +344,16 @@ mod tests {
     #[test]
     fn insertion() {
         let mut buf = String::new();
-        let mut rope = Rope::from_reader(open_file("/res/test2.txt")).unwrap();
-        open_file("/res/test2.txt")
+        let mut rope = Rope::from_reader(open_file("/res/test3.txt")).unwrap();
+        open_file("/res/test3.txt")
             .read_to_string(&mut buf)
             .unwrap();
         assert_eq!(rope.to_string(), buf);
-        rope.insert(10, "====XYZA====");
-        buf.insert_str(10, "====XYZA====");
+        rope.insert(1000, "====XYZA====");
+        buf.insert_str(1000, "====XYZA====");
         assert_eq!(rope.to_string(), buf);
-        rope.insert_char(200, 'x');
-        buf.insert(200, 'x');
+        rope.insert_char(8014, 'x');
+        buf.insert(8014, 'x');
         assert_eq!(rope.to_string(), buf);
     }
 }
