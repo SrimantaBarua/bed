@@ -89,6 +89,8 @@ impl Rope {
             rope: self,
             start_offset: 0,
             end_offset: self.len(),
+            newlines_before: 0,
+            num_newlines: self.root.num_newlines,
         }
     }
 }
@@ -98,6 +100,8 @@ pub struct RopeSlice<'a> {
     rope: &'a Rope,
     start_offset: usize,
     end_offset: usize,
+    newlines_before: usize,
+    num_newlines: usize,
 }
 
 impl<'a> RopeSlice<'a> {
@@ -118,10 +122,15 @@ impl<'a> RopeSlice<'a> {
         };
         assert!(start <= end, "slice start cannot be after end");
         assert!(end <= self.len(), "slice index out of bounds");
+        let (start_offset, end_offset) = (self.start_offset + start, self.start_offset + end);
+        let newlines_before = self.rope.root.num_newlines_upto(start_offset);
+        let num_newlines = self.rope.root.num_newlines_upto(end_offset) - newlines_before;
         RopeSlice {
             rope: self.rope,
             start_offset: self.start_offset + start,
             end_offset: self.start_offset + end,
+            newlines_before,
+            num_newlines,
         }
     }
 
@@ -148,6 +157,10 @@ impl<'a> RopeSlice<'a> {
 
     pub fn lines(&self) -> iter::Lines<'a> {
         iter::Lines::new(self)
+    }
+
+    pub fn len_lines(&self) -> usize {
+        self.num_newlines + 1
     }
 }
 
@@ -255,6 +268,29 @@ impl Node {
         match &self.typ {
             NodeTyp::Inner(inner) => inner.len(),
             NodeTyp::Leaf(leaf) => leaf.len(),
+        }
+    }
+
+    fn num_newlines_upto(&self, index: usize) -> usize {
+        assert!(index <= self.len());
+        if index == self.len() {
+            return self.num_newlines;
+        }
+        match &self.typ {
+            NodeTyp::Leaf(leaf) => leaf
+                .data
+                .bytes()
+                .take(index)
+                .filter(|b| *b == b'\n')
+                .count(),
+            NodeTyp::Inner(inner) => {
+                if index <= inner.left.len() {
+                    inner.left.num_newlines_upto(index)
+                } else {
+                    inner.left.num_newlines
+                        + inner.right.num_newlines_upto(index - inner.left.len())
+                }
+            }
         }
     }
 }
@@ -502,14 +538,48 @@ mod tests {
         let mut do_it = |path, range: Range<usize>| {
             open_file(path).read_to_string(&mut buf).unwrap();
             let mut rope = Rope::from_reader(open_file(path)).unwrap();
-            assert_eq!(rope.len_lines() - 1, buf.lines().count());
+            let diff = if buf.ends_with('\n') { 1 } else { 0 };
+            assert_eq!(rope.len_lines() - diff, buf.lines().count());
             buf.replace_range(range.clone(), "");
             rope.remove(range);
-            assert_eq!(rope.len_lines() - 1, buf.lines().count());
+            assert_eq!(rope.len_lines() - diff, buf.lines().count());
             buf.clear();
         };
         do_it("/res/test1.txt", 10..20);
         do_it("/res/test2.txt", 0..4096);
         do_it("/res/test3.txt", 1000..8002);
+    }
+
+    #[test]
+    fn slice_len_lines() {
+        let mut buf = String::new();
+        let mut do_it = |path, del_range: Range<usize>, slice_range: Range<usize>| {
+            open_file(path).read_to_string(&mut buf).unwrap();
+            let mut rope = Rope::from_reader(open_file(path)).unwrap();
+            let diff = if buf[slice_range.clone()].ends_with('\n') {
+                1
+            } else {
+                0
+            };
+            assert_eq!(
+                rope.slice(slice_range.clone()).len_lines() - diff,
+                buf[slice_range.clone()].lines().count(),
+            );
+            buf.replace_range(del_range.clone(), "");
+            rope.remove(del_range);
+            let diff = if buf[slice_range.clone()].ends_with('\n') {
+                1
+            } else {
+                0
+            };
+            assert_eq!(
+                rope.slice(slice_range.clone()).len_lines() - diff,
+                buf[slice_range.clone()].lines().count(),
+            );
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 10..20, 5..200);
+        do_it("/res/test2.txt", 0..4096, 0..5);
+        do_it("/res/test3.txt", 1000..8002, 5..2006);
     }
 }
