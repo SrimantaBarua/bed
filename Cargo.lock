@@ -9,6 +9,13 @@ name = "bed_core"
 version = "0.0.1"
 
 [[package]]
+name = "edit"
+version = "0.0.1"
+dependencies = [
+ "rope",
+]
+
+[[package]]
 name = "rope"
 version = "0.0.1"
 dependencies = [
