@@ -27,7 +27,7 @@ impl Buffer {
     }
 
     pub fn new_view(&self) -> BufferView {
-        let view_id = self.inner.borrow_mut().next_view_id();
+        let view_id = self.inner.borrow_mut().create_view();
         BufferView::new(view_id, self.inner.clone())
     }
 }

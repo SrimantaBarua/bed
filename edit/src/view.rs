@@ -32,6 +32,12 @@ impl PartialEq for BufferView {
 
 impl Eq for BufferView {}
 
+impl Drop for BufferView {
+    fn drop(&mut self) {
+        self.buffer_inner.borrow_mut().delete_view(self.view_id);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,9 +9,14 @@ name = "bed_core"
 version = "0.0.1"
 
 [[package]]
+name = "ds"
+version = "0.0.1"
+
+[[package]]
 name = "edit"
 version = "0.0.1"
 dependencies = [
+ "ds",
  "rope",
 ]
 
