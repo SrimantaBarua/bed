@@ -1,7 +1,9 @@
 use std::cell::RefCell;
+use std::ops::RangeBounds;
 use std::rc::Rc;
 
 use super::inner::BufferInner;
+use super::point::Point;
 
 pub struct BufferView {
     view_id: usize,
@@ -9,6 +11,21 @@ pub struct BufferView {
 }
 
 impl BufferView {
+    pub fn contains_point(&self, point: &Point) -> bool {
+        self.buffer_inner.borrow().contains_point(point)
+    }
+
+    pub fn insert_string(&mut self, point: &Point, s: &str) {
+        self.buffer_inner.borrow_mut().insert_string(point, s)
+    }
+
+    pub fn remove<R>(&mut self, range: R)
+    where
+        R: RangeBounds<Point>,
+    {
+        self.buffer_inner.borrow_mut().remove(range)
+    }
+
     pub(crate) fn new(view_id: usize, buffer_inner: Rc<RefCell<BufferInner>>) -> BufferView {
         BufferView {
             view_id,
