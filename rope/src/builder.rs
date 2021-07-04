@@ -1,7 +1,8 @@
 use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Result as IOResult};
 
 use super::cow_box::CowBox;
-use super::{InnerNode, LeafNode, Node, Rope, MAX_NODE_SIZE};
+use super::node::{Node, MAX_NODE_SIZE};
+use super::Rope;
 
 /// A helper type for building a rope from a reader. This first chunks the input data into a linear
 /// vector. Then the `build` method consumes the `RopeBuilder` and returns a `Rope` with the data.
@@ -52,13 +53,13 @@ impl RopeBuilder {
         let mut stack = Vec::new();
         let mut backup_stack = Vec::new();
         for chunk in self.chunks {
-            stack.push(Node::new_leaf(LeafNode::new(chunk)));
+            stack.push(Node::new_leaf(chunk));
         }
         while stack.len() > 1 {
             while stack.len() > 1 {
                 let right = stack.pop().unwrap();
                 let left = stack.pop().unwrap();
-                backup_stack.push(Node::new_inner(InnerNode::new(left, right)));
+                backup_stack.push(Node::new_inner(left, right));
             }
             while let Some(node) = backup_stack.pop() {
                 stack.push(node);
@@ -92,7 +93,7 @@ mod tests {
         assert_eq!(
             builder.build(),
             Rope {
-                root: CowBox::new(Node::new_leaf(LeafNode::new(buf)))
+                root: CowBox::new(Node::new_leaf(buf))
             }
         );
     }
@@ -110,10 +111,10 @@ mod tests {
         assert_eq!(
             builder.build(),
             Rope {
-                root: CowBox::new(Node::new_inner(InnerNode::new(
-                    Node::new_leaf(LeafNode::new(buf[..MAX_NODE_SIZE].to_owned())),
-                    Node::new_leaf(LeafNode::new(buf[MAX_NODE_SIZE..].to_owned()))
-                )))
+                root: CowBox::new(Node::new_inner(
+                    Node::new_leaf(buf[..MAX_NODE_SIZE].to_owned()),
+                    Node::new_leaf(buf[MAX_NODE_SIZE..].to_owned())
+                ))
             }
         );
     }
@@ -136,20 +137,16 @@ mod tests {
         assert_eq!(
             builder.build(),
             Rope {
-                root: CowBox::new(Node::new_inner(InnerNode::new(
-                    Node::new_inner(InnerNode::new(
-                        Node::new_leaf(LeafNode::new(buf[..MAX_NODE_SIZE].to_owned())),
-                        Node::new_leaf(LeafNode::new(
-                            buf[MAX_NODE_SIZE..MAX_NODE_SIZE * 2].to_owned()
-                        ))
-                    )),
-                    Node::new_inner(InnerNode::new(
-                        Node::new_leaf(LeafNode::new(
-                            buf[MAX_NODE_SIZE * 2..MAX_NODE_SIZE * 3 - 2].to_owned()
-                        )),
-                        Node::new_leaf(LeafNode::new(buf[MAX_NODE_SIZE * 3 - 2..].to_owned()))
-                    )),
-                )))
+                root: CowBox::new(Node::new_inner(
+                    Node::new_inner(
+                        Node::new_leaf(buf[..MAX_NODE_SIZE].to_owned()),
+                        Node::new_leaf(buf[MAX_NODE_SIZE..MAX_NODE_SIZE * 2].to_owned())
+                    ),
+                    Node::new_inner(
+                        Node::new_leaf(buf[MAX_NODE_SIZE * 2..MAX_NODE_SIZE * 3 - 2].to_owned()),
+                        Node::new_leaf(buf[MAX_NODE_SIZE * 3 - 2..].to_owned())
+                    ),
+                ))
             }
         );
     }

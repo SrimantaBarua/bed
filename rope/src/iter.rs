@@ -1,4 +1,5 @@
-use super::{InnerNode, LeafNode, NodeTyp, Rope, RopeSlice};
+use super::node::{InnerNode, LeafNode, NodeTyp};
+use super::{Rope, RopeSlice};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Chunks<'a> {
@@ -24,12 +25,12 @@ impl<'a> Chunks<'a> {
         let next_leaf = loop {
             match &cur_node.typ {
                 NodeTyp::Inner(inner) => {
-                    let left_len = inner.left.len_bytes();
+                    let left_len = inner.left().len_bytes();
                     if start_offset > left_len {
                         start_offset -= left_len;
-                        cur_node = &*inner.right;
+                        cur_node = inner.right();
                     } else {
-                        cur_node = &*inner.left;
+                        cur_node = inner.left();
                         stack.push(inner);
                     }
                 }
@@ -53,20 +54,20 @@ impl<'a> Iterator for Chunks<'a> {
     fn next(&mut self) -> Option<&'a str> {
         let next_leaf = self.next_leaf.take()?;
         let ret = if self.start_offset + self.remaining < next_leaf.len_bytes() {
-            &next_leaf.data[self.start_offset..self.start_offset + self.remaining]
+            &next_leaf.data()[self.start_offset..self.start_offset + self.remaining]
         } else {
-            &next_leaf.data[self.start_offset..]
+            &next_leaf.data()[self.start_offset..]
         };
         self.remaining -= ret.len();
         self.start_offset = 0;
         if self.remaining > 0 {
             self.next_leaf = self.stack.pop().map(|inner| {
-                let mut cur_node = &*inner.right;
+                let mut cur_node = inner.right();
                 loop {
                     match &cur_node.typ {
                         NodeTyp::Inner(inner) => {
                             self.stack.push(inner);
-                            cur_node = &*inner.left;
+                            cur_node = inner.left();
                         }
                         NodeTyp::Leaf(leaf) => {
                             break leaf;
