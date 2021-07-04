@@ -10,7 +10,7 @@ pub struct Chunks<'a> {
 
 impl<'a> Chunks<'a> {
     pub(crate) fn new(rope_slice: &RopeSlice<'a>) -> Chunks<'a> {
-        if rope_slice.len() == 0 {
+        if rope_slice.len_bytes() == 0 {
             return Chunks {
                 stack: vec![],
                 next_leaf: None,
@@ -24,7 +24,7 @@ impl<'a> Chunks<'a> {
         let next_leaf = loop {
             match &cur_node.typ {
                 NodeTyp::Inner(inner) => {
-                    let left_len = inner.left.len();
+                    let left_len = inner.left.len_bytes();
                     if start_offset > left_len {
                         start_offset -= left_len;
                         cur_node = &*inner.right;
@@ -42,7 +42,7 @@ impl<'a> Chunks<'a> {
             stack,
             next_leaf,
             start_offset,
-            remaining: rope_slice.len(),
+            remaining: rope_slice.len_bytes(),
         }
     }
 }
@@ -52,7 +52,7 @@ impl<'a> Iterator for Chunks<'a> {
 
     fn next(&mut self) -> Option<&'a str> {
         let next_leaf = self.next_leaf.take()?;
-        let ret = if self.start_offset + self.remaining < next_leaf.len() {
+        let ret = if self.start_offset + self.remaining < next_leaf.len_bytes() {
             &next_leaf.data[self.start_offset..self.start_offset + self.remaining]
         } else {
             &next_leaf.data[self.start_offset..]
@@ -145,7 +145,7 @@ impl<'a> Lines<'a> {
     pub(crate) fn new(slice: &RopeSlice<'a>) -> Lines<'a> {
         Lines {
             rope: slice.rope,
-            char_indices: if slice.len() == 0 {
+            char_indices: if slice.len_bytes() == 0 {
                 None
             } else {
                 Some(slice.char_indices())

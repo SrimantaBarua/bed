@@ -22,8 +22,8 @@ impl Buffer {
         })
     }
 
-    pub fn len(&self) -> usize {
-        self.inner.borrow().len()
+    pub fn len_bytes(&self) -> usize {
+        self.inner.borrow().len_bytes()
     }
 
     pub fn new_view(&self) -> BufferView {

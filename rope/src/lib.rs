@@ -39,21 +39,21 @@ impl Rope {
             Bound::Excluded(start) => start + 1,
         };
         let end = match range.end_bound() {
-            Bound::Unbounded => self.len(),
+            Bound::Unbounded => self.len_bytes(),
             Bound::Included(end) => end + 1,
             Bound::Excluded(end) => *end,
         };
         assert!(start <= end, "start cannot be after end");
-        assert!(end <= self.len(), "index out of bounds");
-        if start == 0 && end == self.len() {
+        assert!(end <= self.len_bytes(), "index out of bounds");
+        if start == 0 && end == self.len_bytes() {
             self.root = CowBox::new(Node::new_leaf(LeafNode::new(String::new())));
         } else {
             self.root.remove(start..end);
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.root.len()
+    pub fn len_bytes(&self) -> usize {
+        self.root.len_bytes()
     }
 
     pub fn len_lines(&self) -> usize {
@@ -100,7 +100,7 @@ impl Rope {
         RopeSlice {
             rope: self,
             start_offset: 0,
-            end_offset: self.len(),
+            end_offset: self.len_bytes(),
             newlines_before: 0,
             num_newlines: self.root.num_newlines,
         }
@@ -117,7 +117,7 @@ pub struct RopeSlice<'a> {
 }
 
 impl<'a> RopeSlice<'a> {
-    pub fn len(&self) -> usize {
+    pub fn len_bytes(&self) -> usize {
         self.end_offset - self.start_offset
     }
 
@@ -128,12 +128,12 @@ impl<'a> RopeSlice<'a> {
             Bound::Excluded(start) => start + 1,
         };
         let end = match range.end_bound() {
-            Bound::Unbounded => self.len(),
+            Bound::Unbounded => self.len_bytes(),
             Bound::Included(end) => end + 1,
             Bound::Excluded(end) => *end,
         };
         assert!(start <= end, "slice start cannot be after end");
-        assert!(end <= self.len(), "slice index out of bounds");
+        assert!(end <= self.len_bytes(), "slice index out of bounds");
         let (start_offset, end_offset) = (self.start_offset + start, self.start_offset + end);
         let newlines_before = self.rope.root.num_newlines_upto(start_offset);
         let num_newlines = self.rope.root.num_newlines_upto(end_offset) - newlines_before;
@@ -148,7 +148,7 @@ impl<'a> RopeSlice<'a> {
 
     pub fn to_string(&self) -> String {
         let mut ret = String::new();
-        ret.reserve(self.len());
+        ret.reserve(self.len_bytes());
         for chunk in self.chunks() {
             ret.push_str(chunk);
         }
@@ -248,13 +248,13 @@ impl Node {
     }
 
     fn insert(&mut self, index: usize, data: &str) {
-        assert!(index <= self.len(), "index out of bounds");
+        assert!(index <= self.len_bytes(), "index out of bounds");
         match &mut self.typ {
             NodeTyp::Leaf(leaf) => {
                 if utf8::last_utf8_boundary(&leaf.data.as_bytes()[..index]) != index {
                     panic!("indexing in the middle of a UTF-8 character");
                 }
-                if leaf.len() + data.len() <= MAX_NODE_SIZE {
+                if leaf.len_bytes() + data.len() <= MAX_NODE_SIZE {
                     leaf.data.insert_str(index, data);
                 } else {
                     leaf.data.insert_str(index, data);
@@ -262,12 +262,13 @@ impl Node {
                 }
             }
             NodeTyp::Inner(inner) => {
-                if index < inner.left.len()
-                    || (index == inner.left.len() && inner.left.len() < inner.right.len())
+                if index < inner.left.len_bytes()
+                    || (index == inner.left.len_bytes()
+                        && inner.left.len_bytes() < inner.right.len_bytes())
                 {
                     inner.left.insert(index, data);
                 } else {
-                    inner.right.insert(index - inner.left.len(), data);
+                    inner.right.insert(index - inner.left.len_bytes(), data);
                 }
             }
         };
@@ -276,9 +277,9 @@ impl Node {
 
     fn remove(&mut self, range: Range<usize>) {
         assert!(range.start <= range.end, "start cannot be after end");
-        assert!(range.end <= self.len(), "index out of bounds");
+        assert!(range.end <= self.len_bytes(), "index out of bounds");
         assert!(
-            range.start > 0 || range.end < self.len(),
+            range.start > 0 || range.end < self.len_bytes(),
             "full range deletion should be handled earlier"
         );
         match &mut self.typ {
@@ -286,7 +287,7 @@ impl Node {
                 leaf.data.replace_range(range.clone(), "");
             }
             NodeTyp::Inner(inner) => {
-                let left_len = inner.left.len();
+                let left_len = inner.left.len_bytes();
                 if range.end <= left_len {
                     if range.start == 0 && range.end == left_len {
                         self.typ = inner.right.typ.clone();
@@ -294,7 +295,7 @@ impl Node {
                         inner.left.remove(range.clone());
                     }
                 } else if range.start >= left_len {
-                    if range.start == left_len && range.end == inner.len() {
+                    if range.start == left_len && range.end == inner.len_bytes() {
                         self.typ = inner.left.typ.clone();
                     } else {
                         inner
@@ -313,7 +314,7 @@ impl Node {
     fn update_metadata(&mut self) {
         match &mut self.typ {
             NodeTyp::Inner(inner) => {
-                inner.update_len();
+                inner.update_len_bytes();
                 self.num_newlines = inner.left.num_newlines + inner.right.num_newlines;
             }
             NodeTyp::Leaf(leaf) => {
@@ -322,21 +323,21 @@ impl Node {
         }
     }
 
-    fn len(&self) -> usize {
+    fn len_bytes(&self) -> usize {
         match &self.typ {
-            NodeTyp::Inner(inner) => inner.len(),
-            NodeTyp::Leaf(leaf) => leaf.len(),
+            NodeTyp::Inner(inner) => inner.len_bytes(),
+            NodeTyp::Leaf(leaf) => leaf.len_bytes(),
         }
     }
 
     fn num_newlines_upto(&self, index: usize) -> usize {
         assert!(
-            index <= self.len(),
-            "index ({}) <= self.len() ({})",
+            index <= self.len_bytes(),
+            "index ({}) <= self.len_bytes() ({})",
             index,
-            self.len()
+            self.len_bytes()
         );
-        if index == self.len() {
+        if index == self.len_bytes() {
             return self.num_newlines;
         }
         match &self.typ {
@@ -347,11 +348,13 @@ impl Node {
                 .filter(|b| *b == b'\n')
                 .count(),
             NodeTyp::Inner(inner) => {
-                if index <= inner.left.len() {
+                if index <= inner.left.len_bytes() {
                     inner.left.num_newlines_upto(index)
                 } else {
                     inner.left.num_newlines
-                        + inner.right.num_newlines_upto(index - inner.left.len())
+                        + inner
+                            .right
+                            .num_newlines_upto(index - inner.left.len_bytes())
                 }
             }
         }
@@ -376,7 +379,7 @@ impl Node {
                 if newline_idx < inner.left.num_newlines {
                     inner.left.offset_for_newline(newline_idx)
                 } else {
-                    inner.left.len()
+                    inner.left.len_bytes()
                         + inner
                             .right
                             .offset_for_newline(newline_idx - inner.left.num_newlines)
@@ -401,7 +404,7 @@ struct InnerNode {
 
 impl InnerNode {
     fn new(left: Node, right: Node) -> InnerNode {
-        let length = left.len() + right.len();
+        let length = left.len_bytes() + right.len_bytes();
         InnerNode {
             length,
             left: CowBox::new(left),
@@ -425,12 +428,12 @@ impl InnerNode {
         InnerNode::new(left, right)
     }
 
-    fn len(&self) -> usize {
+    fn len_bytes(&self) -> usize {
         self.length
     }
 
-    fn update_len(&mut self) {
-        self.length = self.left.len() + self.right.len();
+    fn update_len_bytes(&mut self) {
+        self.length = self.left.len_bytes() + self.right.len_bytes();
     }
 }
 
@@ -448,7 +451,7 @@ impl LeafNode {
         self.data.bytes().filter(|b| *b == b'\n').count()
     }
 
-    fn len(&self) -> usize {
+    fn len_bytes(&self) -> usize {
         self.data.len()
     }
 }
@@ -519,20 +522,20 @@ mod tests {
     }
 
     #[test]
-    fn len() {
+    fn len_bytes() {
         let rope = Rope::from_reader(open_file("/res/test1.txt")).unwrap();
-        assert_eq!(rope.len(), 2412);
+        assert_eq!(rope.len_bytes(), 2412);
         let slice = rope.slice(2..);
-        assert_eq!(slice.len(), 2410);
+        assert_eq!(slice.len_bytes(), 2410);
         assert_eq!(slice.start_offset, 2);
         assert_eq!(slice.end_offset, 2412);
         let slice = slice.slice(..2408);
         assert_eq!(slice.start_offset, 2);
         assert_eq!(slice.end_offset, 2410);
-        assert_eq!(slice.len(), 2408);
-        assert_eq!(slice.slice(..).len(), 2408);
+        assert_eq!(slice.len_bytes(), 2408);
+        assert_eq!(slice.slice(..).len_bytes(), 2408);
         let slice = slice.slice(5..2400);
-        assert_eq!(slice.len(), 2395);
+        assert_eq!(slice.len_bytes(), 2395);
         assert_eq!(slice.start_offset, 7);
         assert_eq!(slice.end_offset, 2402);
     }
@@ -541,7 +544,7 @@ mod tests {
     #[should_panic(expected = "slice index out of bounds")]
     fn slice_fail() {
         let rope = Rope::from_reader(open_file("/res/test1.txt")).unwrap();
-        assert_eq!(rope.len(), 2412);
+        assert_eq!(rope.len_bytes(), 2412);
         rope.slice(..2413);
     }
 
@@ -748,7 +751,7 @@ mod tests {
                     }
                 }
                 for &bi in byte_indices.iter() {
-                    if bi < rope.len() {
+                    if bi < rope.len_bytes() {
                         assert_eq!(rope.byte_to_line(bi), byte_to_line(&buf, bi));
                     }
                 }
@@ -760,7 +763,7 @@ mod tests {
                     }
                 }
                 for &bi in byte_indices.iter() {
-                    if bi < rope.len() {
+                    if bi < rope.len_bytes() {
                         assert_eq!(rope.byte_to_line(bi), byte_to_line(&buf, bi));
                     }
                 }
@@ -794,7 +797,7 @@ mod tests {
                 }
             }
             for &bi in byte_indices.iter() {
-                if bi < ropeslice.len() {
+                if bi < ropeslice.len_bytes() {
                     assert_eq!(ropeslice.byte_to_line(bi), byte_to_line(&bufslice, bi));
                 }
             }
@@ -808,7 +811,7 @@ mod tests {
                 }
             }
             for &bi in byte_indices.iter() {
-                if bi < ropeslice.len() {
+                if bi < ropeslice.len_bytes() {
                     assert_eq!(ropeslice.byte_to_line(bi), byte_to_line(&bufslice, bi));
                 }
             }
