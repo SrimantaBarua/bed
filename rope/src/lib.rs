@@ -56,6 +56,10 @@ impl Rope {
         self.root.len_bytes()
     }
 
+    pub fn len_chars(&self) -> usize {
+        self.root.num_chars
+    }
+
     pub fn len_lines(&self) -> usize {
         self.root.num_newlines + 1
     }
@@ -117,10 +121,6 @@ pub struct RopeSlice<'a> {
 }
 
 impl<'a> RopeSlice<'a> {
-    pub fn len_bytes(&self) -> usize {
-        self.end_offset - self.start_offset
-    }
-
     pub fn slice<R: RangeBounds<usize>>(&self, range: R) -> RopeSlice<'a> {
         let start = match range.start_bound() {
             Bound::Unbounded => 0,
@@ -169,6 +169,15 @@ impl<'a> RopeSlice<'a> {
 
     pub fn lines(&self) -> iter::Lines<'a> {
         iter::Lines::new(self)
+    }
+
+    pub fn len_bytes(&self) -> usize {
+        self.end_offset - self.start_offset
+    }
+
+    pub fn len_chars(&self) -> usize {
+        self.rope.root.num_chars_upto(self.end_offset)
+            - self.rope.root.num_chars_upto(self.start_offset)
     }
 
     pub fn len_lines(&self) -> usize {
@@ -226,6 +235,7 @@ impl<'a> RopeSlice<'a> {
 struct Node {
     typ: NodeTyp,
     num_newlines: usize,
+    num_chars: usize,
 }
 
 impl Node {
@@ -233,6 +243,7 @@ impl Node {
         let mut ret = Node {
             typ: NodeTyp::Inner(inner_node),
             num_newlines: 0,
+            num_chars: 0,
         };
         ret.update_metadata();
         ret
@@ -242,6 +253,7 @@ impl Node {
         let mut ret = Node {
             typ: NodeTyp::Leaf(leaf_node),
             num_newlines: 0,
+            num_chars: 0,
         };
         ret.update_metadata();
         ret
@@ -316,9 +328,11 @@ impl Node {
             NodeTyp::Inner(inner) => {
                 inner.update_len_bytes();
                 self.num_newlines = inner.left.num_newlines + inner.right.num_newlines;
+                self.num_chars = inner.left.num_chars + inner.right.num_chars;
             }
             NodeTyp::Leaf(leaf) => {
                 self.num_newlines = leaf.count_newlines();
+                self.num_chars = leaf.count_chars();
             }
         }
     }
@@ -341,12 +355,7 @@ impl Node {
             return self.num_newlines;
         }
         match &self.typ {
-            NodeTyp::Leaf(leaf) => leaf
-                .data
-                .bytes()
-                .take(index)
-                .filter(|b| *b == b'\n')
-                .count(),
+            NodeTyp::Leaf(leaf) => leaf.data[..index].bytes().filter(|b| *b == b'\n').count(),
             NodeTyp::Inner(inner) => {
                 if index <= inner.left.len_bytes() {
                     inner.left.num_newlines_upto(index)
@@ -355,6 +364,29 @@ impl Node {
                         + inner
                             .right
                             .num_newlines_upto(index - inner.left.len_bytes())
+                }
+            }
+        }
+    }
+
+    fn num_chars_upto(&self, index: usize) -> usize {
+        assert!(
+            index <= self.len_bytes(),
+            "index ({}) <= self.len_bytes() ({})",
+            index,
+            self.len_bytes()
+        );
+        if index == self.len_bytes() {
+            return self.num_chars;
+        }
+        match &self.typ {
+            NodeTyp::Leaf(leaf) => leaf.data[..index].chars().count(),
+            NodeTyp::Inner(inner) => {
+                if index <= inner.left.len_bytes() {
+                    inner.left.num_chars_upto(index)
+                } else {
+                    inner.left.num_chars
+                        + inner.right.num_chars_upto(index - inner.left.len_bytes())
                 }
             }
         }
@@ -451,6 +483,10 @@ impl LeafNode {
         self.data.bytes().filter(|b| *b == b'\n').count()
     }
 
+    fn count_chars(&self) -> usize {
+        self.data.chars().count()
+    }
+
     fn len_bytes(&self) -> usize {
         self.data.len()
     }
@@ -523,21 +559,36 @@ mod tests {
 
     #[test]
     fn len_bytes() {
-        let rope = Rope::from_reader(open_file("/res/test1.txt")).unwrap();
-        assert_eq!(rope.len_bytes(), 2412);
-        let slice = rope.slice(2..);
-        assert_eq!(slice.len_bytes(), 2410);
-        assert_eq!(slice.start_offset, 2);
-        assert_eq!(slice.end_offset, 2412);
-        let slice = slice.slice(..2408);
-        assert_eq!(slice.start_offset, 2);
-        assert_eq!(slice.end_offset, 2410);
-        assert_eq!(slice.len_bytes(), 2408);
-        assert_eq!(slice.slice(..).len_bytes(), 2408);
-        let slice = slice.slice(5..2400);
-        assert_eq!(slice.len_bytes(), 2395);
-        assert_eq!(slice.start_offset, 7);
-        assert_eq!(slice.end_offset, 2402);
+        let mut buf = String::new();
+        let mut do_it = |path, range: Range<usize>| {
+            let rope = Rope::from_reader(open_file(path)).unwrap();
+            open_file(path).read_to_string(&mut buf).unwrap();
+            assert_eq!(rope.len_bytes(), buf.len());
+            let ropeslice = rope.slice(range.clone());
+            let bufslice = &buf[range];
+            assert_eq!(ropeslice.len_bytes(), bufslice.len());
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 5..2408);
+        do_it("/res/test2.txt", 2000..3094);
+        do_it("/res/test3.txt", 5..8014);
+    }
+
+    #[test]
+    fn len_chars() {
+        let mut buf = String::new();
+        let mut do_it = |path, range: Range<usize>| {
+            let rope = Rope::from_reader(open_file(path)).unwrap();
+            open_file(path).read_to_string(&mut buf).unwrap();
+            assert_eq!(rope.len_chars(), buf.chars().count());
+            let ropeslice = rope.slice(range.clone());
+            let bufslice = &buf[range];
+            assert_eq!(ropeslice.len_chars(), bufslice.chars().count());
+            buf.clear();
+        };
+        do_it("/res/test1.txt", 5..2408);
+        do_it("/res/test2.txt", 2000..3094);
+        do_it("/res/test3.txt", 5..8014);
     }
 
     #[test]
@@ -771,12 +822,7 @@ mod tests {
             };
         do_it("/res/test1.txt", 10..20, &[20, 100, 1000], &[2, 10]);
         do_it("/res/test2.txt", 0..4096, &[50, 100], &[5, 10]);
-        do_it(
-            "/res/test3.txt",
-            1000..8002,
-            &[300, 2000, 4000],
-            &[10, 300, 500],
-        );
+        do_it("/res/test3.txt", 1000..8002, &[300, 4000], &[10, 300, 500]);
     }
 
     #[test]
@@ -822,8 +868,8 @@ mod tests {
         do_it(
             "/res/test3.txt",
             1000..8002,
-            5..2006,
-            &[20, 100, 1000],
+            6..2006,
+            &[20, 1000],
             &[20, 100],
         );
     }
