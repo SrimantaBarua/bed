@@ -1,6 +1,5 @@
 use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Result as IOResult};
 
-use super::cow_box::CowBox;
 use super::node::{Node, MAX_NODE_SIZE};
 use super::Rope;
 
@@ -66,9 +65,7 @@ impl RopeBuilder {
             }
             backup_stack.clear();
         }
-        Rope {
-            root: CowBox::new(stack.remove(0)),
-        }
+        Rope::from(stack.remove(0))
     }
 }
 
@@ -90,12 +87,7 @@ mod tests {
             .read_to_string(&mut buf)
             .unwrap();
         assert_eq!(builder.chunks[0], buf);
-        assert_eq!(
-            builder.build(),
-            Rope {
-                root: CowBox::new(Node::new_leaf(buf))
-            }
-        );
+        assert_eq!(builder.build(), Rope::from(Node::new_leaf(buf)));
     }
 
     #[test]
@@ -110,12 +102,10 @@ mod tests {
         assert_eq!(builder.chunks[1], &buf[MAX_NODE_SIZE..]);
         assert_eq!(
             builder.build(),
-            Rope {
-                root: CowBox::new(Node::new_inner(
-                    Node::new_leaf(buf[..MAX_NODE_SIZE].to_owned()),
-                    Node::new_leaf(buf[MAX_NODE_SIZE..].to_owned())
-                ))
-            }
+            Rope::from(Node::new_inner(
+                Node::new_leaf(buf[..MAX_NODE_SIZE].to_owned()),
+                Node::new_leaf(buf[MAX_NODE_SIZE..].to_owned())
+            ))
         );
     }
 
@@ -136,18 +126,16 @@ mod tests {
         assert_eq!(builder.chunks[3], &buf[MAX_NODE_SIZE * 3 - 2..]);
         assert_eq!(
             builder.build(),
-            Rope {
-                root: CowBox::new(Node::new_inner(
-                    Node::new_inner(
-                        Node::new_leaf(buf[..MAX_NODE_SIZE].to_owned()),
-                        Node::new_leaf(buf[MAX_NODE_SIZE..MAX_NODE_SIZE * 2].to_owned())
-                    ),
-                    Node::new_inner(
-                        Node::new_leaf(buf[MAX_NODE_SIZE * 2..MAX_NODE_SIZE * 3 - 2].to_owned()),
-                        Node::new_leaf(buf[MAX_NODE_SIZE * 3 - 2..].to_owned())
-                    ),
-                ))
-            }
+            Rope::from(Node::new_inner(
+                Node::new_inner(
+                    Node::new_leaf(buf[..MAX_NODE_SIZE].to_owned()),
+                    Node::new_leaf(buf[MAX_NODE_SIZE..MAX_NODE_SIZE * 2].to_owned())
+                ),
+                Node::new_inner(
+                    Node::new_leaf(buf[MAX_NODE_SIZE * 2..MAX_NODE_SIZE * 3 - 2].to_owned()),
+                    Node::new_leaf(buf[MAX_NODE_SIZE * 3 - 2..].to_owned())
+                ),
+            ))
         );
     }
 

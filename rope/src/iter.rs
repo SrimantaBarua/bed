@@ -21,7 +21,7 @@ impl<'a> Chunks<'a> {
         }
         let mut stack = Vec::new();
         let mut start_offset = rope_slice.start_offset;
-        let mut cur_node = &*rope_slice.rope.root;
+        let mut cur_node = &*rope_slice.rope.root();
         let next_leaf = loop {
             match &cur_node.typ {
                 NodeTyp::Inner(inner) => {
