@@ -7,4 +7,5 @@ members = [
     "edit",
     "rope",
     "utf8",
+    "ui_types",
 ]
