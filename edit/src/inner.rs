@@ -30,8 +30,8 @@ impl BufferInner {
         })
     }
 
-    pub(crate) fn len_bytes(&self) -> usize {
-        self.rope.len_bytes()
+    pub(crate) fn len_chars(&self) -> usize {
+        self.rope.len_chars()
     }
 
     pub(crate) fn create_view(&mut self) -> usize {
@@ -50,7 +50,7 @@ impl BufferInner {
             return false;
         }
         let line = self.rope.line(point.line);
-        point.offset < line.len_bytes()
+        point.char_offset < line.len_chars()
     }
 
     pub(crate) fn insert_string(&mut self, point: &Point, s: &str) {
@@ -83,7 +83,7 @@ impl BufferInner {
 
     fn point_to_offset(&self, point: &Point) -> usize {
         assert!(self.contains_point(point));
-        self.rope.line_to_byte(point.line) + point.offset
+        self.rope.line_to_char(point.line) + point.char_offset
     }
 }
 
@@ -108,13 +108,13 @@ mod tests {
     #[test]
     fn buffer_insert() {
         let mut bi = BufferInner::from_reader(open_file("test1.txt")).unwrap();
-        assert_eq!(bi.len_bytes(), 2412);
+        assert_eq!(bi.len_chars(), 2412);
         assert_eq!(
             bi.rope.line(5).to_string(),
             "abcdefghijklmnopqrst".repeat(10) + "\n"
         );
         bi.insert_string(&Point::new(5, 5), "XYZA");
-        assert_eq!(bi.len_bytes(), 2416);
+        assert_eq!(bi.len_chars(), 2416);
         assert_eq!(
             bi.rope.line(5).to_string(),
             "abcdeXYZAfghijklmnopqrst".to_owned() + &"abcdefghijklmnopqrst".repeat(9) + "\n"

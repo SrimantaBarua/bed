@@ -126,6 +126,14 @@ impl<'a> RopeSlice<'a> {
             - self.chars_before
     }
 
+    pub fn line_to_char(&self, linum: usize) -> usize {
+        self.byte_to_char(self.line_to_byte(linum))
+    }
+
+    pub fn char_to_line(&self, index: usize) -> usize {
+        self.byte_to_line(self.char_to_byte(index))
+    }
+
     pub(crate) fn slice_bytes(&self, byte_range: Range<usize>) -> RopeSlice<'a> {
         assert!(
             byte_range.start <= byte_range.end,

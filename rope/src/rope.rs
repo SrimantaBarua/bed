@@ -108,6 +108,14 @@ impl Rope {
         self.whole_slice().byte_to_char(index)
     }
 
+    pub fn line_to_char(&self, linum: usize) -> usize {
+        self.whole_slice().line_to_char(linum)
+    }
+
+    pub fn char_to_line(&self, index: usize) -> usize {
+        self.whole_slice().char_to_line(index)
+    }
+
     pub(crate) fn root(&self) -> &Node {
         &*self.root
     }
