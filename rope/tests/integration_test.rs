@@ -62,6 +62,14 @@ fn byte_to_line(s: &str, bidx: usize) -> usize {
     s.bytes().take(bidx).filter(|b| *b == b'\n').count()
 }
 
+fn char_to_byte(s: &str, char_idx: usize) -> usize {
+    s.char_indices().nth(char_idx).unwrap().0
+}
+
+fn byte_to_char(s: &str, bidx: usize) -> usize {
+    s[..bidx].chars().count()
+}
+
 #[test]
 fn len_bytes() {
     let mut buf = String::new();
@@ -201,7 +209,7 @@ fn remove() {
             .eq(StrLines::new(&buf)));
         buf.clear();
     };
-    do_it("/res/test1.txt", 10..20);
+    do_it("/res/test1.txt", 350..600);
     do_it("/res/test2.txt", 0..4096);
     do_it("/res/test3.txt", 1000..8002);
 }
@@ -220,7 +228,7 @@ fn len_lines() {
         assert_eq!(rope.len_lines() - diff, buf.lines().count());
         buf.clear();
     };
-    do_it("/res/test1.txt", 10..20);
+    do_it("/res/test1.txt", 350..600);
     do_it("/res/test2.txt", 0..4096);
     do_it("/res/test3.txt", 1000..8002);
 }
@@ -243,7 +251,7 @@ fn slice_len_lines() {
         assert_eq!(ropeslice.len_lines() - diff, bufslice.lines().count());
         buf.clear();
     };
-    do_it("/res/test1.txt", 10..20, 5..200);
+    do_it("/res/test1.txt", 350..600, 5..200);
     do_it("/res/test2.txt", 0..4096, 0..5);
     do_it("/res/test3.txt", 1000..8002, 5..2006);
 }
@@ -264,7 +272,7 @@ fn line_indices() {
             .eq(StrLines::new(&buf)));
         buf.clear();
     };
-    do_it("/res/test1.txt", 10..20);
+    do_it("/res/test1.txt", 350..600);
     do_it("/res/test2.txt", 0..4096);
     do_it("/res/test3.txt", 1000..8002);
 }
@@ -289,7 +297,7 @@ fn slice_line_indices() {
             .eq(StrLines::new(bufslice)));
         buf.clear();
     };
-    do_it("/res/test1.txt", 10..20, 5..200);
+    do_it("/res/test1.txt", 350..600, 5..200);
     do_it("/res/test2.txt", 0..4096, 0..5);
     do_it("/res/test3.txt", 1000..8002, 5..2006);
 }
@@ -324,13 +332,13 @@ fn line_byte_indices() {
         }
         buf.clear();
     };
-    do_it("/res/test1.txt", 10..20, &[20, 100, 1000], &[2, 10]);
+    do_it("/res/test1.txt", 350..600, &[20, 100, 1000], &[2, 10]);
     do_it("/res/test2.txt", 0..4096, &[50, 100], &[5, 10]);
     do_it("/res/test3.txt", 1000..8002, &[300, 4000], &[10, 300, 500]);
 }
 
 #[test]
-fn slice_byte_indices() {
+fn slice_line_byte_indices() {
     let mut buf = String::new();
     let mut do_it = |path,
                      del_range: Range<usize>,
@@ -363,6 +371,96 @@ fn slice_byte_indices() {
         for &bi in byte_indices.iter() {
             if bi < ropeslice.len_bytes() {
                 assert_eq!(ropeslice.byte_to_line(bi), byte_to_line(&bufslice, bi));
+            }
+        }
+        buf.clear();
+    };
+    do_it(
+        "/res/test1.txt",
+        350..600,
+        5..200,
+        &[20, 100, 1000],
+        &[2, 10],
+    );
+    do_it("/res/test2.txt", 0..4096, 0..5, &[50, 100], &[5, 10]);
+    do_it(
+        "/res/test3.txt",
+        1000..8002,
+        6..2006,
+        &[20, 1000],
+        &[20, 100],
+    );
+}
+
+#[test]
+fn char_byte_indices() {
+    let mut buf = String::new();
+    let mut do_it = |path, range: Range<usize>, byte_indices: &[usize], char_indices: &[usize]| {
+        open_file(path).read_to_string(&mut buf).unwrap();
+        let mut rope = Rope::from_reader(open_file(path)).unwrap();
+        for &li in char_indices.iter() {
+            if li < rope.len_chars() {
+                assert_eq!(rope.char_to_byte(li), char_to_byte(&buf, li));
+            }
+        }
+        for &bi in byte_indices.iter() {
+            if bi < rope.len_bytes() {
+                assert_eq!(rope.byte_to_char(bi), byte_to_char(&buf, bi));
+            }
+        }
+        buf.replace_range(range.clone(), "");
+        rope.remove(range);
+        for &li in char_indices.iter() {
+            if li < rope.len_chars() {
+                assert_eq!(rope.char_to_byte(li), char_to_byte(&buf, li));
+            }
+        }
+        for &bi in byte_indices.iter() {
+            if bi < rope.len_bytes() {
+                assert_eq!(rope.byte_to_char(bi), byte_to_char(&buf, bi));
+            }
+        }
+        buf.clear();
+    };
+    do_it("/res/test1.txt", 10..20, &[20, 100, 1000], &[2, 10]);
+    do_it("/res/test2.txt", 0..4096, &[50, 100], &[5, 10]);
+    do_it("/res/test3.txt", 1000..8002, &[300, 4000], &[10, 300, 500]);
+}
+
+#[test]
+fn slice_char_byte_indices() {
+    let mut buf = String::new();
+    let mut do_it = |path,
+                     del_range: Range<usize>,
+                     slice_range: Range<usize>,
+                     byte_indices: &[usize],
+                     char_indices: &[usize]| {
+        open_file(path).read_to_string(&mut buf).unwrap();
+        let mut rope = Rope::from_reader(open_file(path)).unwrap();
+        let bufslice = &buf[slice_range.clone()];
+        let ropeslice = rope.slice(slice_range.clone());
+        for &li in char_indices.iter() {
+            if li < ropeslice.len_chars() {
+                assert_eq!(ropeslice.char_to_byte(li), char_to_byte(&bufslice, li));
+            }
+        }
+        for &bi in byte_indices.iter() {
+            if bi < ropeslice.len_bytes() {
+                assert_eq!(ropeslice.byte_to_char(bi), byte_to_char(&bufslice, bi));
+            }
+        }
+        buf.replace_range(del_range.clone(), "");
+        rope.remove(del_range);
+        let bufslice = &buf[slice_range.clone()];
+        let ropeslice = rope.slice(slice_range.clone());
+        for &li in char_indices.iter() {
+            if li < ropeslice.len_chars() {
+                assert_eq!(ropeslice.char_to_byte(li), char_to_byte(&bufslice, li));
+            }
+        }
+        for &bi in byte_indices.iter() {
+            if bi < ropeslice.len_bytes() {
+                assert_eq!(ropeslice.byte_to_char(bi), byte_to_char(&bufslice, bi));
             }
         }
         buf.clear();

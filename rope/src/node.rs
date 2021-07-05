@@ -175,6 +175,28 @@ impl Node {
         }
     }
 
+    pub(crate) fn offset_for_char(&self, char_idx: usize) -> usize {
+        assert!(
+            char_idx < self.num_chars,
+            "char_idx ({}) < self.num_chars ({})",
+            char_idx,
+            self.num_chars
+        );
+        match &self.typ {
+            NodeTyp::Leaf(leaf) => leaf.data.char_indices().nth(char_idx).unwrap().0,
+            NodeTyp::Inner(inner) => {
+                if char_idx < inner.left.num_chars {
+                    inner.left.offset_for_char(char_idx)
+                } else {
+                    inner.left.len_bytes()
+                        + inner
+                            .right
+                            .offset_for_newline(char_idx - inner.left.num_chars)
+                }
+            }
+        }
+    }
+
     fn update_metadata(&mut self) {
         match &mut self.typ {
             NodeTyp::Inner(inner) => {

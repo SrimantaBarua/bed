@@ -100,18 +100,20 @@ impl Rope {
         self.whole_slice().byte_to_line(index)
     }
 
+    pub fn char_to_byte(&self, index: usize) -> usize {
+        self.whole_slice().char_to_byte(index)
+    }
+
+    pub fn byte_to_char(&self, index: usize) -> usize {
+        self.whole_slice().byte_to_char(index)
+    }
+
     pub(crate) fn root(&self) -> &Node {
         &*self.root
     }
 
     fn whole_slice<'a>(&'a self) -> RopeSlice<'a> {
-        RopeSlice {
-            rope: self,
-            start_offset: 0,
-            end_offset: self.len_bytes(),
-            newlines_before: 0,
-            num_newlines: self.root.num_newlines(),
-        }
+        RopeSlice::whole_slice(self)
     }
 }
 
