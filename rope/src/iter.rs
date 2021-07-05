@@ -5,8 +5,8 @@ use super::{Rope, RopeSlice};
 pub struct Chunks<'a> {
     stack: Vec<&'a InnerNode>,
     next_leaf: Option<&'a LeafNode>,
-    start_offset: usize,
-    remaining: usize,
+    start_bidx: usize,
+    remaining_bytes: usize,
 }
 
 impl<'a> Chunks<'a> {
@@ -15,19 +15,19 @@ impl<'a> Chunks<'a> {
             return Chunks {
                 stack: vec![],
                 next_leaf: None,
-                start_offset: 0,
-                remaining: 0,
+                start_bidx: 0,
+                remaining_bytes: 0,
             };
         }
         let mut stack = Vec::new();
-        let mut start_offset = rope_slice.start_offset;
+        let mut start_bidx = rope_slice.start_bidx;
         let mut cur_node = &*rope_slice.rope.root();
         let next_leaf = loop {
             match &cur_node.typ {
                 NodeTyp::Inner(inner) => {
-                    let left_len = inner.left().len_bytes();
-                    if start_offset > left_len {
-                        start_offset -= left_len;
+                    let left_len = inner.left().num_bytes();
+                    if start_bidx > left_len {
+                        start_bidx -= left_len;
                         cur_node = inner.right();
                     } else {
                         cur_node = inner.left();
@@ -42,8 +42,8 @@ impl<'a> Chunks<'a> {
         Chunks {
             stack,
             next_leaf,
-            start_offset,
-            remaining: rope_slice.len_bytes(),
+            start_bidx,
+            remaining_bytes: rope_slice.len_bytes(),
         }
     }
 }
@@ -53,14 +53,14 @@ impl<'a> Iterator for Chunks<'a> {
 
     fn next(&mut self) -> Option<&'a str> {
         let next_leaf = self.next_leaf.take()?;
-        let ret = if self.start_offset + self.remaining < next_leaf.len_bytes() {
-            &next_leaf.data()[self.start_offset..self.start_offset + self.remaining]
+        let ret = if self.start_bidx + self.remaining_bytes < next_leaf.num_bytes() {
+            &next_leaf.data()[self.start_bidx..self.start_bidx + self.remaining_bytes]
         } else {
-            &next_leaf.data()[self.start_offset..]
+            &next_leaf.data()[self.start_bidx..]
         };
-        self.remaining -= ret.len();
-        self.start_offset = 0;
-        if self.remaining > 0 {
+        self.remaining_bytes -= ret.len();
+        self.start_bidx = 0;
+        if self.remaining_bytes > 0 {
             self.next_leaf = self.stack.pop().map(|inner| {
                 let mut cur_node = inner.right();
                 loop {
@@ -138,8 +138,8 @@ impl<'a> Iterator for CharIndices<'a> {
 pub struct Lines<'a> {
     rope: &'a Rope,
     char_indices: Option<CharIndices<'a>>,
-    start_offset: usize,
-    end_offset: usize,
+    start_bidx: usize,
+    end_bidx: usize,
 }
 
 impl<'a> Lines<'a> {
@@ -151,8 +151,8 @@ impl<'a> Lines<'a> {
             } else {
                 Some(slice.char_indices())
             },
-            start_offset: slice.start_offset,
-            end_offset: slice.end_offset,
+            start_bidx: slice.start_bidx,
+            end_bidx: slice.end_bidx,
         }
     }
 }
@@ -165,13 +165,13 @@ impl<'a> Iterator for Lines<'a> {
             Some(char_indices) => {
                 while let Some((i, c)) = char_indices.next() {
                     if c == '\n' {
-                        let ret = self.rope.slice(self.start_offset..i + 1);
-                        self.start_offset = i + 1;
+                        let ret = self.rope.slice_bytes(self.start_bidx..i + 1);
+                        self.start_bidx = i + 1;
                         return Some(ret);
                     }
                 }
                 self.char_indices = None;
-                Some(self.rope.slice(self.start_offset..self.end_offset))
+                Some(self.rope.slice_bytes(self.start_bidx..self.end_bidx))
             }
             None => None,
         }

@@ -1,5 +1,5 @@
 use std::io::{Read, Result as IOResult};
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound, Range, RangeBounds};
 
 use super::builder::RopeBuilder;
 use super::cow_box::CowBox;
@@ -23,29 +23,29 @@ impl Rope {
         RopeBuilder::from_reader(reader).map(|builder| builder.build())
     }
 
-    pub fn insert(&mut self, index: usize, data: &str) {
-        self.root.insert(index, data);
+    pub fn insert(&mut self, char_index: usize, data: &str) {
+        self.root.insert(char_index, data);
     }
 
-    pub fn insert_char(&mut self, index: usize, c: char) {
+    pub fn insert_char(&mut self, char_index: usize, c: char) {
         let mut buf = [0; 6];
-        self.insert(index, c.encode_utf8(&mut buf));
+        self.insert(char_index, c.encode_utf8(&mut buf));
     }
 
-    pub fn remove<R: RangeBounds<usize>>(&mut self, range: R) {
-        let start = match range.start_bound() {
+    pub fn remove<R: RangeBounds<usize>>(&mut self, char_range: R) {
+        let start = match char_range.start_bound() {
             Bound::Unbounded => 0,
             Bound::Included(start) => *start,
             Bound::Excluded(start) => start + 1,
         };
-        let end = match range.end_bound() {
-            Bound::Unbounded => self.len_bytes(),
+        let end = match char_range.end_bound() {
+            Bound::Unbounded => self.len_chars(),
             Bound::Included(end) => end + 1,
             Bound::Excluded(end) => *end,
         };
         assert!(start <= end, "start cannot be after end");
-        assert!(end <= self.len_bytes(), "index out of bounds");
-        if start == 0 && end == self.len_bytes() {
+        assert!(end <= self.len_chars(), "index out of bounds");
+        if start == 0 && end == self.len_chars() {
             self.root = CowBox::new(Node::new_leaf(String::new()));
         } else {
             self.root.remove(start..end);
@@ -53,19 +53,19 @@ impl Rope {
     }
 
     pub fn len_bytes(&self) -> usize {
-        self.root.len_bytes()
+        self.root.num_bytes()
     }
 
     pub fn len_chars(&self) -> usize {
-        self.root.num_chars()
+        self.root.num_bytes()
     }
 
     pub fn len_lines(&self) -> usize {
         self.root.num_newlines() + 1
     }
 
-    pub fn slice<'a, R: RangeBounds<usize>>(&'a self, range: R) -> RopeSlice<'a> {
-        self.whole_slice().slice(range)
+    pub fn slice<'a, R: RangeBounds<usize>>(&'a self, char_range: R) -> RopeSlice<'a> {
+        self.whole_slice().slice(char_range)
     }
 
     pub fn to_string(&self) -> String {
@@ -110,6 +110,10 @@ impl Rope {
 
     pub(crate) fn root(&self) -> &Node {
         &*self.root
+    }
+
+    pub(crate) fn slice_bytes<'a>(&'a self, byte_range: Range<usize>) -> RopeSlice<'a> {
+        self.whole_slice().slice_bytes(byte_range)
     }
 
     fn whole_slice<'a>(&'a self) -> RopeSlice<'a> {

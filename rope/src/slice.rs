@@ -1,4 +1,4 @@
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound, Range, RangeBounds};
 
 use super::iter;
 use super::rope::Rope;
@@ -6,8 +6,8 @@ use super::rope::Rope;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RopeSlice<'a> {
     pub(crate) rope: &'a Rope,
-    pub(crate) start_offset: usize,
-    pub(crate) end_offset: usize,
+    pub(crate) start_bidx: usize,
+    pub(crate) end_bidx: usize,
     newlines_before: usize,
     num_newlines: usize,
     chars_before: usize,
@@ -15,33 +15,18 @@ pub struct RopeSlice<'a> {
 }
 
 impl<'a> RopeSlice<'a> {
-    pub fn slice<R: RangeBounds<usize>>(&self, range: R) -> RopeSlice<'a> {
-        let start = match range.start_bound() {
+    pub fn slice<R: RangeBounds<usize>>(&self, char_range: R) -> RopeSlice<'a> {
+        let start = match char_range.start_bound() {
             Bound::Unbounded => 0,
             Bound::Included(start) => *start,
             Bound::Excluded(start) => start + 1,
         };
-        let end = match range.end_bound() {
-            Bound::Unbounded => self.len_bytes(),
+        let end = match char_range.end_bound() {
+            Bound::Unbounded => self.len_chars(),
             Bound::Included(end) => end + 1,
             Bound::Excluded(end) => *end,
         };
-        assert!(start <= end, "slice start cannot be after end");
-        assert!(end <= self.len_bytes(), "slice index out of bounds");
-        let (start_offset, end_offset) = (self.start_offset + start, self.start_offset + end);
-        let newlines_before = self.rope.root().num_newlines_upto(start_offset);
-        let num_newlines = self.rope.root().num_newlines_upto(end_offset) - newlines_before;
-        let chars_before = self.rope.root().num_chars_upto(start_offset);
-        let num_chars = self.rope.root().num_chars_upto(end_offset) - chars_before;
-        RopeSlice {
-            rope: self.rope,
-            start_offset: self.start_offset + start,
-            end_offset: self.start_offset + end,
-            newlines_before,
-            num_newlines,
-            chars_before,
-            num_chars,
-        }
+        self.slice_bytes(self.char_to_byte(start)..self.char_to_byte(end))
     }
 
     pub fn to_string(&self) -> String {
@@ -70,7 +55,7 @@ impl<'a> RopeSlice<'a> {
     }
 
     pub fn len_bytes(&self) -> usize {
-        self.end_offset - self.start_offset
+        self.end_bidx - self.start_bidx
     }
 
     pub fn len_chars(&self) -> usize {
@@ -88,38 +73,39 @@ impl<'a> RopeSlice<'a> {
         } else {
             self.rope
                 .root()
-                .offset_for_newline(self.newlines_before + index - 1)
+                .bidx_for_newline(self.newlines_before + index - 1)
                 + 1
-                - self.start_offset
+                - self.start_bidx
         };
         let end_offset = if index == self.len_lines() - 1 {
-            self.end_offset - self.start_offset
+            self.end_bidx - self.start_bidx
         } else {
             self.rope
                 .root()
-                .offset_for_newline(self.newlines_before + index)
+                .bidx_for_newline(self.newlines_before + index)
                 + 1
-                - self.start_offset
+                - self.start_bidx
         };
-        self.slice(start_offset..end_offset)
+        self.slice_bytes(start_offset..end_offset)
     }
 
     pub fn line_to_byte(&self, linum: usize) -> usize {
+        assert!(linum < self.len_lines(), "line index out of bounds");
         if linum == 0 {
             0
         } else {
             self.rope
                 .root()
-                .offset_for_newline(self.newlines_before + linum - 1)
+                .bidx_for_newline(self.newlines_before + linum - 1)
                 + 1
-                - self.start_offset
+                - self.start_bidx
         }
     }
 
     pub fn byte_to_line(&self, index: usize) -> usize {
         self.rope
             .root()
-            .num_newlines_upto(self.start_offset + index)
+            .num_newlines_upto_bidx(self.start_bidx + index)
             - self.newlines_before
     }
 
@@ -127,18 +113,52 @@ impl<'a> RopeSlice<'a> {
         if index == self.len_chars() {
             return self.len_bytes();
         }
-        self.rope.root().offset_for_char(self.chars_before + index) - self.start_offset
+        self.rope.root().bidx_for_char(self.chars_before + index) - self.start_bidx
     }
 
     pub fn byte_to_char(&self, index: usize) -> usize {
-        self.rope.root().num_chars_upto(self.start_offset + index) - self.chars_before
+        if index == self.len_bytes() {
+            return self.len_chars();
+        }
+        self.rope
+            .root()
+            .num_chars_upto_bidx(self.start_bidx + index)
+            - self.chars_before
+    }
+
+    pub(crate) fn slice_bytes(&self, byte_range: Range<usize>) -> RopeSlice<'a> {
+        assert!(
+            byte_range.start <= byte_range.end,
+            "slice start cannot be after end"
+        );
+        assert!(
+            byte_range.end <= self.len_bytes(),
+            "slice index out of bounds"
+        );
+        let (start_bidx, end_bidx) = (
+            self.start_bidx + byte_range.start,
+            self.start_bidx + byte_range.end,
+        );
+        let newlines_before = self.rope.root().num_newlines_upto_bidx(start_bidx);
+        let num_newlines = self.rope.root().num_newlines_upto_bidx(end_bidx) - newlines_before;
+        let chars_before = self.rope.root().num_chars_upto_bidx(start_bidx);
+        let num_chars = self.rope.root().num_chars_upto_bidx(end_bidx) - chars_before;
+        RopeSlice {
+            rope: self.rope,
+            start_bidx,
+            end_bidx,
+            newlines_before,
+            num_newlines,
+            chars_before,
+            num_chars,
+        }
     }
 
     pub(crate) fn whole_slice(rope: &'a Rope) -> RopeSlice<'a> {
         RopeSlice {
             rope,
-            start_offset: 0,
-            end_offset: rope.len_bytes(),
+            start_bidx: 0,
+            end_bidx: rope.len_bytes(),
             newlines_before: 0,
             num_newlines: rope.root().num_newlines(),
             chars_before: 0,

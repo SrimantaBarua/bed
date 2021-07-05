@@ -8,6 +8,7 @@ fn open_file(path: &str) -> File {
     File::open(env!("CARGO_MANIFEST_DIR").to_owned() + path).unwrap()
 }
 
+/*
 struct StrLines<'a> {
     lines: std::iter::Peekable<std::str::Lines<'a>>,
     has_last_line: bool,
@@ -475,3 +476,5 @@ fn slice_char_byte_indices() {
         &[20, 100],
     );
 }
+
+*/
