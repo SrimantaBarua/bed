@@ -394,28 +394,28 @@ mod tests {
     #[test]
     fn leaf_node() {
         let mut data = "abc\ndef ði ı\nntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn".to_owned();
-        let mut leaf = LeafNode::new(data.clone());
+        let mut leaf = Node::new_leaf(data.clone());
         assert_eq!(leaf.num_bytes(), data.len());
-        assert_eq!(leaf.num_chars, data.chars().count());
+        assert_eq!(leaf.num_chars(), data.chars().count());
         assert_eq!(
-            leaf.num_newlines,
+            leaf.num_newlines(),
             data.chars().filter(|c| *c == '\n').count()
         );
         let newstr = "XY\nZΣὲ γνωρ\nA";
         leaf.insert(10, newstr);
         data.insert_str(char_to_byte(&data, 10), newstr);
         assert_eq!(leaf.num_bytes(), data.len());
-        assert_eq!(leaf.num_chars, data.chars().count());
+        assert_eq!(leaf.num_chars(), data.chars().count());
         assert_eq!(
-            leaf.num_newlines,
+            leaf.num_newlines(),
             data.chars().filter(|c| *c == '\n').count()
         );
         leaf.remove(20..30);
         data.replace_range(char_to_byte(&data, 20)..char_to_byte(&data, 30), "");
         assert_eq!(leaf.num_bytes(), data.len());
-        assert_eq!(leaf.num_chars, data.chars().count());
+        assert_eq!(leaf.num_chars(), data.chars().count());
         assert_eq!(
-            leaf.num_newlines,
+            leaf.num_newlines(),
             data.chars().filter(|c| *c == '\n').count()
         );
     }
@@ -423,28 +423,28 @@ mod tests {
     #[test]
     fn inner_node() {
         let mut data = "abc\ndef ði ı\nntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn".repeat(1000);
-        let mut inner = InnerNode::new_from_str(&data);
-        assert_eq!(inner.num_bytes, data.len());
-        assert_eq!(inner.num_chars, data.chars().count());
+        let mut inner = Node::from(InnerNode::new_from_str(&data));
+        assert_eq!(inner.num_bytes(), data.len());
+        assert_eq!(inner.num_chars(), data.chars().count());
         assert_eq!(
-            inner.num_newlines,
+            inner.num_newlines(),
             data.chars().filter(|c| *c == '\n').count()
         );
         let newstr = "XY\nZΣὲ γνωρ\nA".repeat(1000);
         inner.insert(1000, &newstr);
         data.insert_str(char_to_byte(&data, 1000), &newstr);
-        assert_eq!(inner.num_bytes, data.len());
-        assert_eq!(inner.num_chars, data.chars().count());
+        assert_eq!(inner.num_bytes(), data.len());
+        assert_eq!(inner.num_chars(), data.chars().count());
         assert_eq!(
-            inner.num_newlines,
+            inner.num_newlines(),
             data.chars().filter(|c| *c == '\n').count()
         );
         inner.remove(2000..8000);
         data.replace_range(char_to_byte(&data, 2000)..char_to_byte(&data, 8000), "");
-        assert_eq!(inner.num_bytes, data.len());
-        assert_eq!(inner.num_chars, data.chars().count());
+        assert_eq!(inner.num_bytes(), data.len());
+        assert_eq!(inner.num_chars(), data.chars().count());
         assert_eq!(
-            inner.num_newlines,
+            inner.num_newlines(),
             data.chars().filter(|c| *c == '\n').count()
         );
     }

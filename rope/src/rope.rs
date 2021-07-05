@@ -57,7 +57,7 @@ impl Rope {
     }
 
     pub fn len_chars(&self) -> usize {
-        self.root.num_bytes()
+        self.root.num_chars()
     }
 
     pub fn len_lines(&self) -> usize {
