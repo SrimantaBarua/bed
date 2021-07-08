@@ -5,5 +5,5 @@ authors = ["Srimanta Barua <srimanta.barua1@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-ds = { path = "../ds" }
+util = { path = "../util" }
 rope = { path = "../rope" }

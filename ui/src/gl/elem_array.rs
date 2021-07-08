@@ -92,7 +92,7 @@ impl<E: Element> ElemArray<E> {
         let vbo_size = self.capacity * E::NUM_VERTICES * E::POINTS_PER_VERTEX;
         let vertex_buffer_len = self.vertex_buffer.len();
         self.bind();
-        for range in ds::util::range::split(0..vertex_buffer_len, vbo_size) {
+        for range in util::range::split(0..vertex_buffer_len, vbo_size) {
             let num_elems =
                 (range.len() * E::NUM_ELEMENTS) / (E::NUM_VERTICES * E::POINTS_PER_VERTEX);
             unsafe {
@@ -147,9 +147,9 @@ mod tests {
     use std::ffi::c_void;
     use std::slice;
 
-    use ds::hash::{FnvHashMap, FnvHashSet};
     use euclid::{point2, size2, Rect, UnknownUnit};
     use gl::types::*;
+    use util::hash::{FnvHashMap, FnvHashSet};
 
     use super::*;
     use crate::gl::shader::ShaderProgram;
@@ -392,20 +392,32 @@ mod tests {
     }
 
     #[test]
-    fn bind_unbind() {
+    fn bind_unbind_drop() {
         test_prologue();
-        let mut arr = ElemArray::<Square>::new(2);
-        assert_eq!(CUR_VAO.with(|vao| *vao.borrow()), 0);
-        assert_eq!(CUR_VBO.with(|vbo| *vbo.borrow()), 0);
-        assert_eq!(CUR_EBO.with(|ebo| *ebo.borrow()), 0);
-        arr.bind();
-        assert_eq!(CUR_VAO.with(|vao| *vao.borrow()), 1);
-        assert_eq!(CUR_VBO.with(|vbo| *vbo.borrow()), 2);
-        assert_eq!(CUR_EBO.with(|ebo| *ebo.borrow()), 3);
-        arr.unbind();
-        assert_eq!(CUR_VAO.with(|vao| *vao.borrow()), 0);
-        assert_eq!(CUR_VBO.with(|vbo| *vbo.borrow()), 0);
-        assert_eq!(CUR_EBO.with(|ebo| *ebo.borrow()), 0);
+        {
+            let mut arr = ElemArray::<Square>::new(2);
+            ALLOCED_OBJECTS.with(|alloced| {
+                let alloced = alloced.borrow();
+                assert!(alloced.contains(&1));
+                assert!(alloced.contains(&2));
+                assert!(alloced.contains(&3));
+            });
+            assert_eq!(CUR_VAO.with(|vao| *vao.borrow()), 0);
+            assert_eq!(CUR_VBO.with(|vbo| *vbo.borrow()), 0);
+            assert_eq!(CUR_EBO.with(|ebo| *ebo.borrow()), 0);
+            arr.bind();
+            assert_eq!(CUR_VAO.with(|vao| *vao.borrow()), 1);
+            assert_eq!(CUR_VBO.with(|vbo| *vbo.borrow()), 2);
+            assert_eq!(CUR_EBO.with(|ebo| *ebo.borrow()), 3);
+            arr.unbind();
+            assert_eq!(CUR_VAO.with(|vao| *vao.borrow()), 0);
+            assert_eq!(CUR_VBO.with(|vbo| *vbo.borrow()), 0);
+            assert_eq!(CUR_EBO.with(|ebo| *ebo.borrow()), 0);
+        }
+        ALLOCED_OBJECTS.with(|alloced| {
+            let alloced = alloced.borrow();
+            assert!(alloced.is_empty())
+        });
     }
 
     #[test]

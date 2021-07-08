@@ -1,8 +1,8 @@
 use std::io::{Read, Result as IOResult};
 use std::ops::{Bound, RangeBounds};
 
-use ds::hash::FnvHashMap;
 use rope::Rope;
+use util::hash::FnvHashMap;
 
 use super::point::Point;
 use super::view_state::ViewState;

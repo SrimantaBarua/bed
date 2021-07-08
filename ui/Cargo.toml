@@ -4,6 +4,6 @@ version = "0.0.1"
 edition = "2018"
 
 [dependencies]
-ds = { path = "../ds" }
+util = { path = "../util" }
 euclid = "0.22.6"
 gl = "0.14"

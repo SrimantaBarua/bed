@@ -3,10 +3,10 @@
 members = [
     "bed",
     "bed_core",
-    "ds",
     "edit",
     "rope",
     "utf8",
     "ui",
     "ui_types",
+    "util",
 ]
