@@ -1,6 +1,6 @@
 use gl::types::{GLenum, GLuint};
 
-pub(crate) struct ActiveShaderProgram<'a> {
+pub(in crate) struct ActiveShaderProgram<'a> {
     shader: &'a mut ShaderProgram,
 }
 
@@ -77,22 +77,5 @@ impl Shader {
 impl Drop for Shader {
     fn drop(&mut self) {
         unsafe { gl::DeleteShader(self.0) }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::gl::tests::DummyGlLoader;
-
-    #[test]
-    fn test_test() {
-        let loader = DummyGlLoader::default();
-        loader.load_all();
-        let mut shader_program =
-            ShaderProgram::new("vertex shader source", "fragment shader source").unwrap();
-        {
-            let _active = shader_program.use_program();
-        }
     }
 }
