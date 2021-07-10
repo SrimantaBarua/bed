@@ -1,4 +1,5 @@
 mod elem_array;
+mod mat4;
 mod shader;
 
 #[cfg(test)]

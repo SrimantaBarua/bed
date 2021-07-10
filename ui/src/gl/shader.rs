@@ -1,7 +1,29 @@
-use gl::types::{GLenum, GLuint};
+use std::ffi::CStr;
 
-pub(in crate) struct ActiveShaderProgram<'a> {
+use gl::types::{GLenum, GLint, GLuint};
+
+use super::mat4::Mat4;
+
+pub(crate) struct ActiveShaderProgram<'a> {
     shader: &'a mut ShaderProgram,
+}
+
+impl<'a> ActiveShaderProgram<'a> {
+    pub(crate) fn uniform_mat4f(&mut self, name: &CStr, mat: &Mat4) {
+        let loc = self.get_uniform_location(name);
+        unsafe { gl::UniformMatrix4fv(loc, 1, gl::FALSE, mat.as_ptr()) };
+    }
+
+    pub(crate) fn uniform_1f(&mut self, name: &CStr, i: GLint) {
+        let loc = self.get_uniform_location(name);
+        unsafe {
+            gl::Uniform1i(loc, i);
+        };
+    }
+
+    fn get_uniform_location(&self, name: &CStr) -> GLint {
+        unsafe { gl::GetUniformLocation(self.shader.program, name.as_ptr()) }
+    }
 }
 
 pub(crate) struct ShaderProgram {
