@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+/// Iterator over a series of ranges
 pub struct SplitRanges {
     remaining: Range<usize>,
     size: usize,
@@ -23,6 +24,8 @@ impl Iterator for SplitRanges {
     }
 }
 
+/// Split a range into a series of ranges of upto `size` elements. The last range might have a
+/// smaller length that `size` since it contains the remainder.
 pub fn split(range: Range<usize>, size: usize) -> SplitRanges {
     SplitRanges {
         remaining: range,
