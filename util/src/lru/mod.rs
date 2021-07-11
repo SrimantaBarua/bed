@@ -9,6 +9,20 @@ struct KV<K, V> {
     value: V,
 }
 
+enum Capacity {
+    Unbounded,
+    Bounded(usize),
+}
+
+impl Capacity {
+    fn bound(&self) -> Option<usize> {
+        match self {
+            Capacity::Unbounded => None,
+            Capacity::Bounded(bound) => Some(*bound),
+        }
+    }
+}
+
 /// A key-value hashmap with limited capacity, which implements LRU removal of elements. Each
 /// access of an element, including insertion, marks it as the most recently used. Once the
 /// map reaches capacity, the next insertion will evict the least recently used item from the
@@ -20,15 +34,19 @@ where
 {
     map: HashMap<K, ll::NodePtr<KV<K, V>>, S>,
     list: ll::List<KV<K, V>>,
-    capacity: usize,
+    capacity: Capacity,
 }
 
 impl<K, V> LruHashMap<K, V, RandomState>
 where
     K: Clone + Eq + Hash,
 {
-    pub fn new(capacity: usize) -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         Self::with_hasher(capacity, RandomState::default())
+    }
+
+    pub fn unbounded() -> Self {
+        Self::with_hasher_unbounded(RandomState::default())
     }
 }
 
@@ -41,7 +59,15 @@ where
         LruHashMap {
             map: HashMap::with_hasher(hash_builder),
             list: ll::List::new(),
-            capacity,
+            capacity: Capacity::Bounded(capacity),
+        }
+    }
+
+    pub fn with_hasher_unbounded(hash_builder: S) -> Self {
+        LruHashMap {
+            map: HashMap::with_hasher(hash_builder),
+            list: ll::List::new(),
+            capacity: Capacity::Unbounded,
         }
     }
 
@@ -50,19 +76,23 @@ where
     /// returned. Otherwise this function returns `None`.
     pub fn insert(&mut self, key: K, value: V) -> Option<(K, V)> {
         let mut ret = self.remove(&key).map(|v| (key.clone(), v));
-        if self.len() == self.capacity {
-            assert!(
-                ret.is_none(),
-                "if we've already removed something, we should be below capacity"
-            );
-            ret = self.pop_lru();
+        if let Some(bound) = self.capacity.bound() {
+            if self.len() == bound {
+                assert!(
+                    ret.is_none(),
+                    "if we've already removed something, we should be below capacity"
+                );
+                ret = self.pop_lru();
+            }
         }
         let node_ptr = self.list.push_back(KV {
             key: key.clone(),
             value,
         });
         self.map.insert(key, node_ptr);
-        assert!(self.len() <= self.capacity);
+        if let Some(bound) = self.capacity.bound() {
+            assert!(self.len() <= bound);
+        }
         ret
     }
 
@@ -112,8 +142,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_lru() {
-        let mut map = LruHashMap::new(5);
+    fn lru_bounded() {
+        let mut map = LruHashMap::with_capacity(5);
         assert!(map.insert(1, 10).is_none());
         assert_eq!(map.get(&1), Some(&10));
         assert!(map.insert(2, 20).is_none());
@@ -134,5 +164,19 @@ mod tests {
         assert_eq!(map.pop_lru(), Some((2, 20)));
         assert!(map.pop_lru().is_none());
         assert_eq!(map.len(), 0);
+    }
+
+    #[test]
+    fn lru_unbounded() {
+        let mut map = LruHashMap::unbounded();
+        assert!(map.insert(1, 10).is_none());
+        assert_eq!(map.get(&1), Some(&10));
+        assert!(map.insert(2, 20).is_none());
+        assert!(map.insert(3, 30).is_none());
+        assert!(map.insert(4, 40).is_none());
+        assert!(map.insert(5, 50).is_none());
+        assert_eq!(map.len(), 5);
+        assert!(map.insert(6, 60).is_none());
+        assert_eq!(map.len(), 6);
     }
 }
