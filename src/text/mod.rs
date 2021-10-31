@@ -13,11 +13,15 @@ use crate::common::{PixelSize, RopeOrStr, TextureSize};
 use crate::painter::WidgetCtx;
 use crate::style::{TextSize, TextStyle};
 
+#[cfg(target_os = "macos")]
+mod core_text;
 #[cfg(target_os = "windows")]
 mod directwrite;
 #[cfg(target_os = "linux")]
 mod fontconfig;
 
+#[cfg(target_os = "macos")]
+use self::core_text as font_source;
 #[cfg(target_os = "windows")]
 use self::directwrite as font_source;
 #[cfg(target_os = "linux")]

@@ -16,6 +16,8 @@ use super::DEFAULT_THEME;
 static DEFAULT_FONT: &'static str = "monospace";
 #[cfg(target_os = "windows")]
 static DEFAULT_FONT: &'static str = "Consolas";
+#[cfg(target_os = "macos")]
+static DEFAULT_FONT: &'static str = "SF Mono";
 
 static DEFAULT_FONT_SIZE: TextSize = TextSize(12);
 static DEFAULT_TAB_WIDTH: usize = 8;

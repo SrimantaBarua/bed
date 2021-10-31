@@ -22,6 +22,8 @@ extern "C" {
     fn tree_sitter_toml() -> TSLanguage;
 }
 
+const LANGUAGES: [&'static str; 0] = [];
+/*
 const LANGUAGES: [&'static str; 11] = [
     "bash",
     "c",
@@ -35,6 +37,7 @@ const LANGUAGES: [&'static str; 11] = [
     "rust",
     "toml",
 ];
+*/
 
 const QUERY_DIR: &'static str = concat!(env!("CARGO_MANIFEST_DIR"), "/res/tree-sitter/queries");
 
@@ -114,6 +117,7 @@ impl TsCore {
             })
             .collect();
         let mut exts = FnvHashMap::default();
+        /*
         exts.insert("sh", (Language::Bash, 0));
         exts.insert("c", (Language::C, 1));
         exts.insert("h", (Language::C, 1));
@@ -127,6 +131,7 @@ impl TsCore {
         exts.insert("py", (Language::Python, 8));
         exts.insert("rs", (Language::Rust, 9));
         exts.insert("toml", (Language::Toml, 10));
+        */
         TsCore {
             languages,
             exts,
@@ -137,6 +142,7 @@ impl TsCore {
     }
 
     pub(crate) fn parser_from_extension(&self, ext: &str) -> Option<(Language, TsLang)> {
+        /*
         self.exts.get(ext).map(|(ft, i)| {
             let mut parser = Parser::new();
             parser
@@ -155,5 +161,7 @@ impl TsCore {
                 },
             )
         })
+        */
+        None
     }
 }

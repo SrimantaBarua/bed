@@ -18,7 +18,7 @@ pub(super) struct FontSource {
     raw: *mut FcConfig,
 }
 
-// FreeType is thread-safe
+// Fontconfig is thread-safe
 unsafe impl Send for FontSource {}
 
 impl FontSource {

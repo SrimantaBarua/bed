@@ -29,6 +29,10 @@ use common::PixelSize;
 
 const TARGET_DELTA: time::Duration = time::Duration::from_nanos(1_000_000_000 / 60);
 const DEFAULT_THEME: &str = "default";
+
+#[cfg(target_os = "macos")]
+const WINDOW_SIZE: Size2D<u32, PixelSize> = size2(2048, 1536);
+#[cfg(not(target_os = "macos"))]
 const WINDOW_SIZE: Size2D<u32, PixelSize> = size2(1024, 768);
 
 struct Bed {
@@ -181,7 +185,14 @@ fn main() {
                     *control_flow = ControlFlow::WaitUntil(time::Instant::now() + TARGET_DELTA);
                     is_fps_boundary = true;
                 }
-                _ => unreachable!(),
+                //_ => unreachable!(),
+                e => {
+                    eprintln!(
+                        "Unexpected start cause: {:?}, controlflow: {:?}",
+                        e, control_flow
+                    );
+                    *control_flow = ControlFlow::Exit;
+                }
             },
             Event::LoopDestroyed => return,
             Event::WindowEvent { event, .. } => match event {
@@ -197,6 +208,15 @@ fn main() {
                 }
                 WindowEvent::ReceivedCharacter(c) => input_state.handle_char(c),
                 WindowEvent::KeyboardInput { input, .. } => input_state.handle_keypress(input),
+                WindowEvent::ScaleFactorChanged {
+                    scale_factor,
+                    new_inner_size,
+                } => {
+                    eprintln!(
+                        "Scale factor changed: {}, {:?}",
+                        scale_factor, new_inner_size
+                    );
+                }
                 _ => {}
             },
             Event::MainEventsCleared => {

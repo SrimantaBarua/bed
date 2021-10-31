@@ -135,10 +135,12 @@ impl InputState {
         };
         match &mut self.mode {
             Mode::Insert => match c as u32 {
-                8 /* backspace */ =>{ bed.edit_view().delete(MoveObj::Left(1)); },
-                9 | 10 | 13 /* tab, nl, cr */ => bed.edit_view().insert_char(c),
-                127 /* delete */  => {bed.edit_view().delete(MoveObj::Right(1)); },
-                _ => if !c.is_control() { bed.edit_view().insert_char(c) },
+                8 | 9 | 10 | 13 | 127 => {}
+                _ => {
+                    if !c.is_control() {
+                        bed.edit_view().insert_char(c)
+                    }
+                }
             },
             Mode::Normal { action_mul } => {
                 let act_rep = action_mul.unwrap_or(1);
@@ -510,20 +512,10 @@ impl InputState {
                 ctx.set_cursor_style(CursorStyle::Block);
                 self.mode = Mode::Normal { action_mul: None };
             }
-            Mode::Command => {
-                match c as u32 {
-                    8 /* backspace */ => bed.edit_prompt().delete_left(),
-                    127 /* delete */  => bed.edit_prompt().delete_right(),
-                    10 | 13 /* newline / carriage return */ => {
-                        if let Some(cmd) = bed.edit_prompt().get_command() {
-                            bed.run_command(&cmd);
-                            bed.edit_prompt().clear();
-                        }
-                        self.mode = Mode::Normal { action_mul: None };
-                    }
-                    _ => bed.edit_prompt().insert_char(c),
-                }
-            }
+            Mode::Command => match c as u32 {
+                8 | 10 | 13 | 127 => {}
+                _ => bed.edit_prompt().insert_char(c),
+            },
             Mode::PaneUpdate => {
                 let tree = bed.edit_text_tree();
                 let mut valid_input = true;
@@ -563,6 +555,10 @@ impl InputState {
                     bed.edit_view().update_text_size(1);
                     return;
                 }
+                VirtualKeyCode::Equals if self.modifiers.ctrl() && self.modifiers.shift() => {
+                    bed.edit_view().update_text_size(1);
+                    return;
+                }
                 VirtualKeyCode::Minus if self.modifiers.ctrl() => {
                     bed.edit_view().update_text_size(-1);
                     return;
@@ -572,6 +568,15 @@ impl InputState {
             // Handle mode-specific keys
             match &mut self.mode {
                 Mode::Insert => match vkey {
+                    // Editing
+                    VirtualKeyCode::Back => {
+                        bed.edit_view().delete(MoveObj::Left(1));
+                    }
+                    VirtualKeyCode::Return => bed.edit_view().insert_char('\n'),
+                    VirtualKeyCode::Tab => bed.edit_view().insert_char('\t'),
+                    VirtualKeyCode::Delete => {
+                        bed.edit_view().delete(MoveObj::Right(1));
+                    }
                     // Basic movement
                     VirtualKeyCode::Up => bed.edit_view().move_cursor(MoveObj::Up(1)),
                     VirtualKeyCode::Down => bed.edit_view().move_cursor(MoveObj::Down(1)),
@@ -713,20 +718,26 @@ impl InputState {
                     }
                     _ => {}
                 },
-                Mode::Command => {
-                    let cmd = bed.edit_prompt();
-                    match vkey {
-                        VirtualKeyCode::Left => cmd.move_left(),
-                        VirtualKeyCode::Right => cmd.move_right(),
-                        VirtualKeyCode::Home => cmd.move_start(),
-                        VirtualKeyCode::End => cmd.move_end(),
-                        VirtualKeyCode::Escape => {
-                            cmd.clear();
-                            self.mode = Mode::Normal { action_mul: None };
+                Mode::Command => match vkey {
+                    VirtualKeyCode::Back => bed.edit_prompt().delete_left(),
+                    VirtualKeyCode::Delete => bed.edit_prompt().delete_right(),
+                    VirtualKeyCode::Return => {
+                        if let Some(command) = bed.edit_prompt().get_command() {
+                            bed.run_command(&command);
+                            bed.edit_prompt().clear();
                         }
-                        _ => {}
+                        self.mode = Mode::Normal { action_mul: None };
                     }
-                }
+                    VirtualKeyCode::Left => bed.edit_prompt().move_left(),
+                    VirtualKeyCode::Right => bed.edit_prompt().move_right(),
+                    VirtualKeyCode::Home => bed.edit_prompt().move_start(),
+                    VirtualKeyCode::End => bed.edit_prompt().move_end(),
+                    VirtualKeyCode::Escape => {
+                        bed.edit_prompt().clear();
+                        self.mode = Mode::Normal { action_mul: None };
+                    }
+                    _ => {}
+                },
                 Mode::PaneUpdate => match vkey {
                     VirtualKeyCode::Escape => self.mode = Mode::Normal { action_mul: None },
                     VirtualKeyCode::W => {

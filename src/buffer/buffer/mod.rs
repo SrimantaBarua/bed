@@ -553,15 +553,17 @@ impl Buffer {
         let theme = self.bed_handle.theme();
         // Reset highlighting
         let crange = rope.byte_to_char(byte_range.start)..rope.byte_to_char(byte_range.end);
-        shared.styles.set_default(crange, theme.textview.foreground);
+        shared
+            .styles
+            .set_default(crange.clone(), theme.textview.foreground);
         // Add new highlighting
         let mut cursor = QueryCursor::new();
-        cursor.set_byte_range(byte_range.start, byte_range.end);
-        let iter = cursor.captures(&tslang.hl_query, tree.root_node(), |node| {
-            let range = node.byte_range();
-            let range = rope.byte_to_char(range.start)..rope.byte_to_char(range.end);
-            rope.slice(range).to_string()
-        });
+        cursor.set_byte_range(byte_range.start..byte_range.end);
+        let iter = cursor.captures(
+            &tslang.hl_query,
+            tree.root_node(),
+            BufferTextProvider(rope.slice(crange)),
+        );
         let mut buf = String::new();
         for (query_match, _) in iter {
             for capture in query_match.captures {
@@ -609,4 +611,25 @@ fn walk_recur(cursor: &mut tree_sitter::TreeCursor, indent: usize) {
         eprint!(")");
     }
     cursor.goto_parent();
+}
+
+// Text provider for tree-sitter
+struct BufferTextProvider<'a>(ropey::RopeSlice<'a>);
+struct ChunkBytesIter<'a>(ropey::iter::Chunks<'a>);
+
+impl<'a> Iterator for ChunkBytesIter<'a> {
+    type Item = &'a [u8];
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|s| s.as_bytes())
+    }
+}
+
+impl<'a> tree_sitter::TextProvider<'a> for BufferTextProvider<'a> {
+    type I = ChunkBytesIter<'a>;
+
+    fn text(&mut self, node: tree_sitter::Node<'_>) -> Self::I {
+        let brange = node.byte_range();
+        let crange = self.0.byte_to_char(brange.start)..self.0.byte_to_char(brange.end);
+        ChunkBytesIter(self.0.slice(crange).chunks())
+    }
 }
